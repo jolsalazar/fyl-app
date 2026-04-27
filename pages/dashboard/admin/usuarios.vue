@@ -40,6 +40,7 @@
               <th>Estado</th>
               <th>Rol</th>
               <th>Registro</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -49,6 +50,16 @@
               <td><span :class="['badge', u.plan_status === 'active' ? 'badge-active' : 'badge-inactive']">{{ u.plan_status }}</span></td>
               <td><span :class="['badge', u.role === 'admin' ? 'badge-admin' : 'badge-user']">{{ u.role }}</span></td>
               <td class="date-cell">{{ formatDate(u.created_at) }}</td>
+              <td class="action-cell">
+                <button
+                  v-if="u.id !== currentUserId"
+                  :class="['role-btn', u.role === 'admin' ? 'role-btn-demote' : 'role-btn-promote']"
+                  :disabled="togglingId === u.id"
+                  @click="toggleRole(u)"
+                >
+                  {{ togglingId === u.id ? '…' : u.role === 'admin' ? 'Quitar admin' : 'Hacer admin' }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -74,6 +85,8 @@ interface UserRow {
 const users = ref<UserRow[]>([])
 const loading = ref(true)
 const error = ref('')
+const togglingId = ref('')
+const currentUserId = ref('')
 
 const total = computed(() => users.value.length)
 const byPlan = computed(() => ({
@@ -86,7 +99,19 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+async function toggleRole(u: UserRow) {
+  togglingId.value = u.id
+  const newRole = u.role === 'admin' ? 'user' : 'admin'
+  const { error: err } = await supabase.rpc('admin_set_user_role', { target_id: u.id, new_role: newRole })
+  if (err) { error.value = err.message }
+  else { u.role = newRole }
+  togglingId.value = ''
+}
+
 onMounted(async () => {
+  const { data: { user } } = await supabase.auth.getUser()
+  currentUserId.value = user?.id ?? ''
+
   const { data, error: err } = await supabase.rpc('admin_get_users')
   if (err) { error.value = err.message }
   else { users.value = data ?? [] }
@@ -186,6 +211,39 @@ td {
 .badge-inactive{ background: #fef2f2; color: #b91c1c; }
 .badge-admin   { background: #fef3c7; color: #b45309; }
 .badge-user    { background: #f1f5f9; color: #475569; }
+
+.action-cell { text-align: right; }
+
+.role-btn {
+  padding: 0.3rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+}
+
+.role-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.role-btn-promote {
+  background: #fefce8;
+  border-color: #fbbf24;
+  color: #b45309;
+}
+.role-btn-promote:hover:not(:disabled) {
+  background: #fef3c7;
+}
+
+.role-btn-demote {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+.role-btn-demote:hover:not(:disabled) {
+  background: #e2e8f0;
+}
 
 .loading, .error {
   padding: 3rem;
