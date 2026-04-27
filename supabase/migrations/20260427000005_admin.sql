@@ -1,3 +1,8 @@
+-- Asegurar columnas en profiles por si la tabla existía antes de las migraciones
+alter table public.profiles add column if not exists role text not null default 'user';
+alter table public.profiles add column if not exists plan text not null default 'free';
+alter table public.profiles add column if not exists plan_status text not null default 'active';
+
 -- Tabla de configuración de fuentes del scrapper
 create table public.scraper_config (
   fuente      text primary key,
