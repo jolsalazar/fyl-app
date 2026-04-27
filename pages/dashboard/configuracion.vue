@@ -84,6 +84,33 @@
           </button>
         </div>
       </form>
+
+      <!-- Seguridad -->
+      <form class="form" style="margin-top:1.25rem;" @submit.prevent="cambiarPassword">
+        <section class="card">
+          <div class="card-header">
+            <h2>Seguridad</h2>
+            <p class="hint">Cambia tu contraseña de acceso.</p>
+          </div>
+          <div class="field">
+            <label>Nueva contraseña</label>
+            <input v-model="nuevaPassword" type="password" placeholder="Mínimo 8 caracteres" minlength="8" :disabled="cambiando" />
+          </div>
+          <div class="field" style="margin-top:1rem;">
+            <label>Confirmar nueva contraseña</label>
+            <input v-model="confirmarPassword" type="password" placeholder="Repite la contraseña" :disabled="cambiando" />
+          </div>
+          <div v-if="mensajePassword" :class="['mensaje', mensajePasswordError ? 'error' : 'ok']" style="margin-top:1rem;">
+            {{ mensajePassword }}
+          </div>
+        </section>
+        <div class="actions">
+          <button type="submit" :disabled="cambiando || !nuevaPassword">
+            <span v-if="cambiando" class="spinner"></span>
+            {{ cambiando ? 'Guardando...' : 'Cambiar contraseña' }}
+          </button>
+        </div>
+      </form>
     </div>
   </NuxtLayout>
 </template>
@@ -97,6 +124,30 @@ const guardando = ref(false)
 const mensaje = ref('')
 const mensajeError = ref(false)
 const tagInput = ref('')
+
+const cambiando = ref(false)
+const nuevaPassword = ref('')
+const confirmarPassword = ref('')
+const mensajePassword = ref('')
+const mensajePasswordError = ref(false)
+
+async function cambiarPassword() {
+  mensajePassword.value = ''
+  if (nuevaPassword.value !== confirmarPassword.value) {
+    mensajePasswordError.value = true
+    mensajePassword.value = 'Las contraseñas no coinciden'
+    return
+  }
+  cambiando.value = true
+  const { error } = await supabase.auth.updateUser({ password: nuevaPassword.value })
+  mensajePasswordError.value = !!error
+  mensajePassword.value = error ? 'Error al cambiar la contraseña. Intenta de nuevo.' : '✓ Contraseña actualizada'
+  if (!error) {
+    nuevaPassword.value = ''
+    confirmarPassword.value = ''
+  }
+  cambiando.value = false
+}
 
 const config = ref({
   categorias: [] as string[],
