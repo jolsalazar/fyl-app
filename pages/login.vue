@@ -4,26 +4,65 @@
       <div class="brand">
         <span class="dot"></span>Fondos y Licitaciones
       </div>
-      <h1>Bienvenido de vuelta</h1>
-      <p class="subtitle">Ingresa a tu cuenta para ver tus alertas</p>
+      <!-- Login -->
+      <template v-if="!modoReset">
+        <h1>Bienvenido de vuelta</h1>
+        <p class="subtitle">Ingresa a tu cuenta para ver tus alertas</p>
 
-      <form @submit.prevent="handleLogin">
-        <div class="field">
-          <label>Email</label>
-          <input v-model="email" type="email" required placeholder="tu@empresa.cl" :disabled="loading" />
+        <form @submit.prevent="handleLogin">
+          <div class="field">
+            <label>Email</label>
+            <input v-model="email" type="email" required placeholder="tu@empresa.cl" :disabled="loading" />
+          </div>
+          <div class="field">
+            <label>Contraseña</label>
+            <input v-model="password" type="password" required placeholder="••••••••" :disabled="loading" />
+          </div>
+
+          <div v-if="error" class="error-banner">{{ error }}</div>
+
+          <button type="submit" :disabled="loading">
+            <span v-if="loading" class="spinner"></span>
+            {{ loading ? 'Ingresando...' : 'Ingresar' }}
+          </button>
+        </form>
+
+        <p class="footer-link">
+          <button class="link-btn" @click="modoReset = true">¿Olvidaste tu contraseña?</button>
+        </p>
+      </template>
+
+      <!-- Recuperar contraseña -->
+      <template v-else>
+        <h1>Recuperar contraseña</h1>
+        <p class="subtitle">Te enviamos un link para crear una nueva contraseña</p>
+
+        <div v-if="resetEnviado" class="success-banner">
+          <div class="success-icon">✓</div>
+          <div>
+            <strong>¡Revisa tu email!</strong>
+            <p>Enviamos un link de recuperación a <strong>{{ email }}</strong>.</p>
+          </div>
         </div>
-        <div class="field">
-          <label>Contraseña</label>
-          <input v-model="password" type="password" required placeholder="••••••••" :disabled="loading" />
-        </div>
 
-        <div v-if="error" class="error-banner">{{ error }}</div>
+        <form v-else @submit.prevent="handleReset">
+          <div class="field">
+            <label>Email</label>
+            <input v-model="email" type="email" required placeholder="tu@empresa.cl" :disabled="loading" />
+          </div>
 
-        <button type="submit" :disabled="loading">
-          <span v-if="loading" class="spinner"></span>
-          {{ loading ? 'Ingresando...' : 'Ingresar' }}
-        </button>
-      </form>
+          <div v-if="error" class="error-banner">{{ error }}</div>
+
+          <button type="submit" :disabled="loading">
+            <span v-if="loading" class="spinner"></span>
+            {{ loading ? 'Enviando...' : 'Enviar link de recuperación' }}
+          </button>
+        </form>
+
+        <p class="footer-link">
+          <button class="link-btn" @click="modoReset = false; error = ''">← Volver al inicio de sesión</button>
+        </p>
+      </template>
     </div>
   </div>
 </template>
@@ -36,6 +75,8 @@ const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const error = ref('')
+const modoReset = ref(false)
+const resetEnviado = ref(false)
 
 async function handleLogin() {
   loading.value = true
@@ -48,6 +89,20 @@ async function handleLogin() {
     error.value = 'Email o contraseña incorrectos'
   } else {
     router.push('/dashboard')
+  }
+  loading.value = false
+}
+
+async function handleReset() {
+  loading.value = true
+  error.value = ''
+  const { error: authError } = await supabase.auth.resetPasswordForEmail(email.value, {
+    redirectTo: 'https://app.fondosylicitaciones.cl/reset-password',
+  })
+  if (authError) {
+    error.value = 'No se pudo enviar el email. Verifica la dirección.'
+  } else {
+    resetEnviado.value = true
   }
   loading.value = false
 }
@@ -168,4 +223,45 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   animation: spin 0.65s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.success-banner {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.success-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.success-banner strong { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; }
+.footer-link {
+  text-align: center;
+  margin-top: 1.5rem;
+  font-size: 0.875rem;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: #0ea5e9;
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 500;
+}
+.link-btn:hover { text-decoration: underline; }
 </style>
