@@ -90,7 +90,7 @@
             <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
           </div>
 
-          <h3>{{ item.titulo }}</h3>
+          <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="card-title-link"><h3>{{ item.titulo }}</h3></NuxtLink>
           <p class="desc">{{ item.descripcion_breve }}</p>
 
           <div class="card-meta">
@@ -117,9 +117,9 @@
                 Postular
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </a>
-              <a v-if="item.url_original" :href="item.url_original" target="_blank" class="ver-link">
-                Ver más
-              </a>
+              <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="ver-link">
+                Ver detalle
+              </NuxtLink>
             </div>
           </div>
         </div>
@@ -430,7 +430,9 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .badge-estado.cerrado  { background: #f1f5f9; color: #94a3b8; }
 .badge-estado.por_abrir { background: #fefce8; color: #a16207; }
 
-.card h3 { font-size: 0.9375rem; font-weight: 600; color: #0f172a; margin-bottom: 0.375rem; line-height: 1.4; }
+.card-title-link { text-decoration: none; }
+.card-title-link:hover h3 { color: #0ea5e9; }
+.card h3 { font-size: 0.9375rem; font-weight: 600; color: #0f172a; margin-bottom: 0.375rem; line-height: 1.4; transition: color 0.15s; }
 .desc { font-size: 0.875rem; color: #64748b; line-height: 1.55; }
 
 .card-meta {
