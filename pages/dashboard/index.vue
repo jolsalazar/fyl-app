@@ -8,6 +8,10 @@
           <h1>Oportunidades</h1>
           <p class="subtitle">{{ total !== null ? `${total} oportunidades encontradas` : 'Cargando...' }}</p>
         </div>
+        <button class="btn-config" @click="exportarCSV" :disabled="exportando">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          {{ exportando ? 'Exportando…' : 'Exportar CSV' }}
+        </button>
         <NuxtLink to="/dashboard/configuracion" class="btn-config">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Mis alertas
@@ -259,6 +263,30 @@ function esUrgente(f: string) {
   if (!f) return false
   const dias = (new Date(f).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   return dias >= 0 && dias <= 7
+}
+
+const exportando = ref(false)
+
+async function exportarCSV() {
+  exportando.value = true
+  const { data } = await buildQuery().range(0, 999).select('titulo, fuente, tipo, estado, monto_rango, fecha_cierre_postulacion, organizador, alcance, link_postulacion, url_original')
+  if (!data?.length) { exportando.value = false; return }
+
+  const cols = ['Título', 'Fuente', 'Tipo', 'Estado', 'Monto', 'Cierre', 'Organizador', 'Alcance', 'Link postulación', 'URL original']
+  const rows = data.map(r => [
+    r.titulo, fuenteLabel(r.fuente), r.tipo, r.estado,
+    montoLabel(r.monto_rango ?? ''), r.fecha_cierre_postulacion ?? '',
+    r.organizador ?? '', r.alcance ?? '',
+    r.link_postulacion ?? '', r.url_original ?? '',
+  ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+
+  const csv = [cols.join(','), ...rows].join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = `oportunidades-${new Date().toISOString().split('T')[0]}.csv`
+  a.click(); URL.revokeObjectURL(url)
+  exportando.value = false
 }
 
 async function toggleGuardado(id: string) {

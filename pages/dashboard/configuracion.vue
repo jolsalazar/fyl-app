@@ -9,55 +9,11 @@
       </div>
 
       <form class="form" @submit.prevent="guardar">
-        <section class="card">
-          <div class="card-header">
-            <h2>Categorías</h2>
-            <p class="hint">¿Qué tipos de fondos o licitaciones te interesan?</p>
-          </div>
-          <div class="checks">
-            <label v-for="cat in categorias" :key="cat.value" class="check-item">
-              <input type="checkbox" :value="cat.value" v-model="config.categorias" />
-              <span class="check-box"></span>
-              {{ cat.label }}
-            </label>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-header">
-            <h2>Regiones</h2>
-            <p class="hint">¿En qué regiones operas?</p>
-          </div>
-          <div class="checks">
-            <label v-for="r in regiones" :key="r.value" class="check-item">
-              <input type="checkbox" :value="r.value" v-model="config.regiones" />
-              <span class="check-box"></span>
-              {{ r.label }}
-            </label>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-header">
-            <h2>Rango de monto</h2>
-            <p class="hint">En CLP. Deja en 0 para sin límite.</p>
-          </div>
-          <div class="row">
-            <div class="field">
-              <label>Mínimo ($)</label>
-              <input type="number" v-model.number="config.monto_min" min="0" placeholder="0" />
-            </div>
-            <div class="field">
-              <label>Máximo ($)</label>
-              <input type="number" v-model.number="config.monto_max" min="0" placeholder="Sin límite" />
-            </div>
-          </div>
-        </section>
 
         <section class="card">
           <div class="card-header">
             <h2>Palabras clave</h2>
-            <p class="hint">Términos relevantes para tu actividad. Presiona Enter para agregar.</p>
+            <p class="hint">Busca en el título de las convocatorias. Presiona Enter para agregar.</p>
           </div>
           <div class="tags-input">
             <span v-for="(tag, i) in config.palabras_clave" :key="i" class="tag">
@@ -67,10 +23,57 @@
             <input
               v-model="tagInput"
               type="text"
-              placeholder="ej: tecnología, exportación..."
+              placeholder="ej: tecnología, exportación, innovación…"
               @keydown.enter.prevent="addTag"
               @keydown.comma.prevent="addTag"
             />
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Tipo de oportunidad</h2>
+            <p class="hint">Deja en blanco para recibir ambos tipos.</p>
+          </div>
+          <div class="checks">
+            <label class="check-item">
+              <input type="checkbox" value="fondo" v-model="config.tipos" />
+              <span class="check-box"></span>
+              Fondos concursables
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="licitacion" v-model="config.tipos" />
+              <span class="check-box"></span>
+              Licitaciones públicas
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Fuentes</h2>
+            <p class="hint">¿De qué organismos quieres recibir alertas?</p>
+          </div>
+          <div class="checks">
+            <label v-for="f in fuentes" :key="f.value" class="check-item">
+              <input type="checkbox" :value="f.value" v-model="config.fuentes" />
+              <span class="check-box"></span>
+              {{ f.label }}
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <h2>Rango de monto</h2>
+            <p class="hint">Selecciona los rangos que te interesan. Deja en blanco para cualquier monto.</p>
+          </div>
+          <div class="checks checks-grid">
+            <label v-for="m in montos" :key="m.value" class="check-item">
+              <input type="checkbox" :value="m.value" v-model="config.monto_rangos" />
+              <span class="check-box"></span>
+              {{ m.label }}
+            </label>
           </div>
         </section>
 
@@ -150,43 +153,42 @@ async function cambiarPassword() {
 }
 
 const config = ref({
-  categorias: [] as string[],
-  regiones: [] as string[],
-  monto_min: 0,
-  monto_max: 0,
   palabras_clave: [] as string[],
+  tipos:          [] as string[],
+  fuentes:        [] as string[],
+  monto_rangos:   [] as string[],
 })
 
-const categorias = [
-  { value: 'fondos_concursables', label: 'Fondos Concursables' },
-  { value: 'licitaciones', label: 'Licitaciones Públicas' },
-  { value: 'subsidios', label: 'Subsidios' },
-  { value: 'capital_semilla', label: 'Capital Semilla' },
-  { value: 'internacionalizacion', label: 'Internacionalización' },
+const fuentes = [
+  { value: 'corfo',          label: 'CORFO' },
+  { value: 'sercotec',       label: 'SERCOTEC' },
+  { value: 'anid',           label: 'ANID' },
+  { value: 'mercadopublico', label: 'Mercado Público' },
+  { value: 'fondos_gob',     label: 'Fondos.gob.cl' },
 ]
 
-const regiones = [
-  { value: 'RM', label: 'Región Metropolitana' },
-  { value: 'V', label: 'Valparaíso' },
-  { value: 'VIII', label: 'Biobío' },
-  { value: 'IX', label: 'La Araucanía' },
-  { value: 'nacional', label: 'Nacional (todas las regiones)' },
+const montos = [
+  { value: 'hasta_1M',   label: 'Hasta $1M' },
+  { value: '1M_10M',     label: '$1M – $10M' },
+  { value: '10M_30M',    label: '$10M – $30M' },
+  { value: '30M_60M',    label: '$30M – $60M' },
+  { value: '60M_100M',   label: '$60M – $100M' },
+  { value: 'sobre_100M', label: 'Más de $100M' },
 ]
 
 onMounted(async () => {
   const { data: { user } } = await supabase.auth.getUser()
   const { data } = await supabase
     .from('alert_configs')
-    .select('*')
+    .select('palabras_clave, tipos, fuentes, monto_rangos')
     .eq('user_id', user!.id)
     .maybeSingle()
   if (data) {
     config.value = {
-      categorias: data.categorias ?? [],
-      regiones: data.regiones ?? [],
-      monto_min: data.monto_min ?? 0,
-      monto_max: data.monto_max ?? 0,
       palabras_clave: data.palabras_clave ?? [],
+      tipos:          data.tipos ?? [],
+      fuentes:        data.fuentes ?? [],
+      monto_rangos:   data.monto_rangos ?? [],
     }
   }
 })
@@ -209,7 +211,14 @@ async function guardar() {
   const { data: { user } } = await supabase.auth.getUser()
   const { error } = await supabase
     .from('alert_configs')
-    .upsert({ user_id: user!.id, ...config.value }, { onConflict: 'user_id' })
+    .upsert({
+      user_id: user!.id,
+      palabras_clave: config.value.palabras_clave,
+      tipos:          config.value.tipos,
+      fuentes:        config.value.fuentes,
+      monto_rangos:   config.value.monto_rangos,
+      updated_at:     new Date().toISOString(),
+    }, { onConflict: 'user_id' })
   mensajeError.value = !!error
   mensaje.value = error ? 'Error al guardar. Intenta de nuevo.' : '✓ Configuración guardada'
   guardando.value = false
@@ -267,6 +276,11 @@ h1 {
 .checks {
   display: flex;
   flex-direction: column;
+  gap: 0.625rem;
+}
+.checks-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0.625rem;
 }
 .check-item {
