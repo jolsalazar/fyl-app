@@ -46,7 +46,19 @@
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td class="email-cell">{{ u.email }}</td>
-              <td><span :class="['badge', 'badge-' + u.plan]">{{ u.plan }}</span></td>
+              <td>
+                <select
+                  :value="u.plan"
+                  :disabled="changingPlan === u.id"
+                  class="plan-select"
+                  :class="u.plan"
+                  @change="changePlan(u, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="free">free</option>
+                  <option value="pro">pro</option>
+                  <option value="agencia">agencia</option>
+                </select>
+              </td>
               <td><span :class="['badge', u.plan_status === 'active' ? 'badge-active' : 'badge-inactive']">{{ u.plan_status }}</span></td>
               <td><span :class="['badge', u.role === 'admin' ? 'badge-admin' : 'badge-user']">{{ u.role }}</span></td>
               <td class="date-cell">{{ formatDate(u.created_at) }}</td>
@@ -86,6 +98,7 @@ const users = ref<UserRow[]>([])
 const loading = ref(true)
 const error = ref('')
 const togglingId = ref('')
+const changingPlan = ref('')
 const currentUserId = ref('')
 
 const total = computed(() => users.value.length)
@@ -97,6 +110,14 @@ const byPlan = computed(() => ({
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+async function changePlan(u: UserRow, newPlan: string) {
+  changingPlan.value = u.id
+  const { error: err } = await supabase.rpc('admin_set_user_plan', { target_id: u.id, new_plan: newPlan })
+  if (err) { error.value = err.message }
+  else { u.plan = newPlan }
+  changingPlan.value = ''
 }
 
 async function toggleRole(u: UserRow) {
@@ -211,6 +232,22 @@ td {
 .badge-inactive{ background: #fef2f2; color: #b91c1c; }
 .badge-admin   { background: #fef3c7; color: #b45309; }
 .badge-user    { background: #f1f5f9; color: #475569; }
+
+.plan-select {
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1.5px solid #e2e8f0;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.plan-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.plan-select.free    { background: #f1f5f9; color: #475569; }
+.plan-select.pro     { background: #ede9fe; color: #6d28d9; border-color: #c4b5fd; }
+.plan-select.agencia { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
 
 .action-cell { text-align: right; }
 
