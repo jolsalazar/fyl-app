@@ -87,7 +87,16 @@
               <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
               <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
             </div>
-            <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
+            <div class="card-top-right">
+              <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
+              <button
+                :class="['btn-guardar', guardadosSet.has(item.id) ? 'guardado' : '']"
+                @click.prevent="toggleGuardado(item.id)"
+                :title="guardadosSet.has(item.id) ? 'Quitar de guardados' : 'Guardar'"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" :fill="guardadosSet.has(item.id) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              </button>
+            </div>
           </div>
 
           <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="card-title-link"><h3>{{ item.titulo }}</h3></NuxtLink>
@@ -143,6 +152,7 @@ definePageMeta({ middleware: 'auth', layout: false })
 const supabase = useSupabaseClient()
 
 const PAGE_SIZE = 20
+const guardadosSet = ref<Set<string>>(new Set())
 
 const loading = ref(true)
 const loadingMas = ref(false)
@@ -251,7 +261,25 @@ function esUrgente(f: string) {
   return dias >= 0 && dias <= 7
 }
 
-onMounted(cargar)
+async function toggleGuardado(id: string) {
+  if (guardadosSet.value.has(id)) {
+    await supabase.from('guardados').delete().eq('convocatoria_id', id)
+    guardadosSet.value.delete(id)
+  } else {
+    await supabase.from('guardados').insert({ convocatoria_id: id })
+    guardadosSet.value.add(id)
+  }
+  guardadosSet.value = new Set(guardadosSet.value)
+}
+
+onMounted(async () => {
+  localStorage.setItem('fyl_last_visit', new Date().toISOString())
+
+  const { data: guardados } = await supabase.from('guardados').select('convocatoria_id')
+  guardadosSet.value = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
+
+  cargar()
+})
 </script>
 
 <style scoped>
@@ -409,6 +437,13 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   gap: 0.5rem;
 }
 .tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.card-top-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+.btn-guardar {
+  background: none; border: none; cursor: pointer; padding: 2px;
+  color: #cbd5e1; display: flex; align-items: center; transition: color 0.15s;
+}
+.btn-guardar:hover { color: #0ea5e9; }
+.btn-guardar.guardado { color: #0ea5e9; }
 .tag-fuente {
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.06em; color: #0ea5e9;

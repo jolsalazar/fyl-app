@@ -11,6 +11,16 @@
         <NuxtLink to="/dashboard" class="nav-item" exact-active-class="active">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           Oportunidades
+          <span v-if="nuevas > 0" class="nav-badge">{{ nuevas > 99 ? '99+' : nuevas }}</span>
+        </NuxtLink>
+        <NuxtLink to="/dashboard/guardados" class="nav-item" active-class="active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Guardados
+          <span v-if="totalGuardados > 0" class="nav-count">{{ totalGuardados }}</span>
+        </NuxtLink>
+        <NuxtLink to="/dashboard/calendario" class="nav-item" active-class="active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Calendario
         </NuxtLink>
         <NuxtLink to="/dashboard/alertas" class="nav-item" active-class="active">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"/></svg>
@@ -59,6 +69,8 @@ const router = useRouter()
 
 const email = ref('')
 const isAdmin = ref(false)
+const nuevas = ref(0)
+const totalGuardados = ref(0)
 const inicial = computed(() => email.value?.[0]?.toUpperCase() ?? '?')
 
 onMounted(async () => {
@@ -72,6 +84,23 @@ onMounted(async () => {
     .eq('id', user.id)
     .single()
   isAdmin.value = profile?.role === 'admin'
+
+  // Badge: nuevas convocatorias desde última visita
+  const lastVisit = localStorage.getItem('fyl_last_visit')
+  if (lastVisit) {
+    const { count } = await supabase
+      .from('convocatorias')
+      .select('id', { count: 'exact', head: true })
+      .gt('fecha_scrapeado', lastVisit)
+      .eq('estado', 'abierto')
+    nuevas.value = count ?? 0
+  }
+
+  // Contador de guardados
+  const { count: cGuardados } = await supabase
+    .from('guardados')
+    .select('id', { count: 'exact', head: true })
+  totalGuardados.value = cGuardados ?? 0
 })
 
 async function logout() {
@@ -159,6 +188,28 @@ async function logout() {
 
 .nav-item.active svg {
   color: #38bdf8;
+}
+
+.nav-badge {
+  margin-left: auto;
+  background: #0ea5e9;
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.nav-count {
+  margin-left: auto;
+  background: #1e293b;
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  line-height: 1.4;
 }
 
 .nav-divider {

@@ -49,6 +49,10 @@
             Fuente original
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           </a>
+          <button :class="['btn-secundario', 'btn-guardar-detalle', guardado ? 'guardado' : '']" @click="toggleGuardado">
+            <svg width="14" height="14" viewBox="0 0 24 24" :fill="guardado ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            {{ guardado ? 'Guardado' : 'Guardar' }}
+          </button>
         </div>
 
         <div class="grid">
@@ -191,6 +195,7 @@ const route = useRoute()
 
 const item = ref<any>(null)
 const loading = ref(true)
+const guardado = ref(false)
 
 const tienePerfilRequerido = computed(() =>
   item.value?.perfil_tipo_persona?.length ||
@@ -201,14 +206,27 @@ const tienePerfilRequerido = computed(() =>
 )
 
 onMounted(async () => {
-  const { data } = await supabase
-    .from('convocatorias')
-    .select('*')
-    .eq('id', route.params.id)
-    .single()
+  const id = route.params.id as string
+
+  const [{ data }, { data: g }] = await Promise.all([
+    supabase.from('convocatorias').select('*').eq('id', id).single(),
+    supabase.from('guardados').select('id').eq('convocatoria_id', id).maybeSingle(),
+  ])
   item.value = data
+  guardado.value = !!g
   loading.value = false
 })
+
+async function toggleGuardado() {
+  const id = route.params.id as string
+  if (guardado.value) {
+    await supabase.from('guardados').delete().eq('convocatoria_id', id)
+    guardado.value = false
+  } else {
+    await supabase.from('guardados').insert({ convocatoria_id: id })
+    guardado.value = true
+  }
+}
 
 function fuenteLabel(f: string) {
   const map: Record<string, string> = {
@@ -356,6 +374,9 @@ h1 {
   font-family: 'Inter', sans-serif;
 }
 .btn-postular:hover { background: #0284c7; }
+
+.btn-guardar-detalle { cursor: pointer; font-family: 'Inter', sans-serif; }
+.btn-guardar-detalle.guardado { border-color: #0ea5e9; color: #0ea5e9; background: #f0f9ff; }
 
 .btn-secundario {
   display: inline-flex;
