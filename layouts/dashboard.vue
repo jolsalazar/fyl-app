@@ -34,29 +34,33 @@
 
         <template v-if="isAdmin">
           <div class="nav-divider"></div>
-          <span class="nav-section">Admin</span>
-          <NuxtLink to="/dashboard/admin/usuarios" class="nav-item" active-class="active">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Usuarios
-          </NuxtLink>
-          <NuxtLink to="/dashboard/admin/fuentes" class="nav-item" active-class="active">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-            Fuentes
-          </NuxtLink>
-          <NuxtLink to="/dashboard/admin/metricas" class="nav-item" active-class="active">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            Métricas
-          </NuxtLink>
+          <button class="nav-admin-toggle" @click="adminExpanded = !adminExpanded">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Admin
+            <svg class="chevron" :class="{ open: adminExpanded }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <template v-if="adminExpanded">
+            <NuxtLink to="/dashboard/admin/usuarios" class="nav-item nav-sub" active-class="active">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Usuarios
+            </NuxtLink>
+            <NuxtLink to="/dashboard/admin/fuentes" class="nav-item nav-sub" active-class="active">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+              Fuentes
+            </NuxtLink>
+            <NuxtLink to="/dashboard/admin/metricas" class="nav-item nav-sub" active-class="active">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              Métricas
+            </NuxtLink>
+          </template>
         </template>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="avatar">{{ inicial }}</div>
-          <span class="user-email">{{ email }}</span>
-        </div>
+        <div class="avatar">{{ inicial }}</div>
+        <span class="user-email">{{ email }}</span>
         <button class="logout-btn" @click="logout" title="Cerrar sesión">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </button>
       </div>
     </aside>
@@ -74,6 +78,7 @@ const router = useRouter()
 
 const email = ref('')
 const isAdmin = ref(false)
+const adminExpanded = ref(false)
 const nuevas = ref(0)
 const totalGuardados = ref(0)
 const alertasNuevas = ref(0)
@@ -251,42 +256,62 @@ async function logout() {
   margin: 0.5rem 0.75rem;
 }
 
-.nav-section {
-  padding: 0.25rem 0.75rem;
+/* Admin toggle */
+.nav-admin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: #475569;
   font-size: 0.6875rem;
   font-weight: 700;
-  color: #475569;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: 'Inter', sans-serif;
+}
+.nav-admin-toggle:hover { background: #1e293b; color: #94a3b8; }
+
+.chevron { margin-left: auto; transition: transform 0.2s; }
+.chevron.open { transform: rotate(180deg); }
+
+.nav-sub {
+  padding-left: 1.75rem;
+  font-size: 0.85rem;
 }
 
-/* Footer del sidebar */
+/* Footer */
 .sidebar-footer {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.75rem;
-  background: #1e293b;
-  border-radius: 10px;
+  padding: 0.625rem 0.75rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid #1e293b;
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   background: linear-gradient(135deg, #0ea5e9, #6366f1);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8125rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: white;
   flex-shrink: 0;
 }
 
 .user-email {
-  font-size: 0.75rem;
-  color: #64748b;
+  font-size: 0.72rem;
+  color: #475569;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -296,19 +321,16 @@ async function logout() {
 .logout-btn {
   background: none;
   border: none;
-  color: #475569;
+  color: #334155;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+  padding: 3px;
+  border-radius: 5px;
   display: flex;
   align-items: center;
   transition: color 0.15s;
   flex-shrink: 0;
 }
-
-.logout-btn:hover {
-  color: #ef4444;
-}
+.logout-btn:hover { color: #ef4444; }
 
 /* Main content */
 .main {
