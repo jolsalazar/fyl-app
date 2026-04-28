@@ -105,14 +105,9 @@ async function handleRegistro() {
 
   // Enviar email de bienvenida (fire & forget — no bloqueamos el flujo)
   if (data.user) {
-    fetch('https://qumfnywynqgojmepuffx.supabase.co/functions/v1/send-welcome-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer sb_publishable_1UErN4XzIgBbDABCL4Kn2g_edjQGadf`,
-      },
-      body: JSON.stringify({ record: { id: data.user.id } }),
-    }).catch(() => {}) // silenciar errores — el usuario igual pasa al siguiente paso
+    supabase.functions.invoke('send-welcome-email', {
+      body: { record: { id: data.user.id } },
+    }).catch(() => {})
   }
 
   // Si Supabase no requiere confirmación de email, redirige al onboarding
