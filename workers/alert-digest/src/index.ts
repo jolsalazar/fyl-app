@@ -219,7 +219,7 @@ function buildEmail(
 }
 
 function buildSeccion(env: Env, alerta: any, items: any[]): string {
-  const cards  = items.map(item => buildCard(env, item)).join('<tr><td height="8"></td></tr>')
+  const cards  = items.map(item => buildCard(env, item, alerta)).join('<tr><td height="8"></td></tr>')
   const hayMas = items.length >= 5
 
   return `
@@ -240,14 +240,15 @@ function buildSeccion(env: Env, alerta: any, items: any[]): string {
 </table>`
 }
 
-function buildCard(env: Env, item: any): string {
+function buildCard(env: Env, item: any, alerta: any): string {
   const fuente = FUENTE_LABELS[item.fuente] ?? item.fuente ?? ''
   const monto  = item.monto_rango ? (MONTO_LABELS[item.monto_rango] ?? '') : ''
   const cierre = item.fecha_cierre_postulacion
     ? `Cierra ${new Date(item.fecha_cierre_postulacion).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })}`
     : ''
-  const detalle = `${env.APP_URL}/dashboard/oportunidades/${item.id}`
-  const link    = item.link_postulacion || detalle
+  const alertaId = alerta.id ?? ''
+  const detalle  = `${env.APP_URL}/r?to=${encodeURIComponent(`/dashboard/oportunidades/${item.id}`)}&conv=${item.id}&alerta=${alertaId}`
+  const link     = item.link_postulacion || detalle
   const focos  = ((item.foco ?? []) as string[]).slice(0, 3).join(' · ')
   const tipoBadge = item.tipo === 'fondo'
     ? '<span style="font-size:10px;font-weight:600;background:#f0fdf4;color:#16a34a;padding:2px 7px;border-radius:999px;margin-left:6px;">Fondo</span>'
