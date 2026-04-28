@@ -1,93 +1,248 @@
 <template>
   <NuxtLayout name="dashboard">
     <div class="content">
-      <div class="header">
-        <div>
-          <h1>Mis Alertas</h1>
-          <p class="subtitle">
-            <template v-if="total !== null">{{ total }} oportunidades coinciden con tu perfil</template>
-            <template v-else>Cargando…</template>
-          </p>
+
+      <!-- ── VISTA: FORMULARIO ─────────────────────────────────── -->
+      <template v-if="view === 'form'">
+        <div class="form-page">
+          <button class="back-btn" @click="cancelarForm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            Volver a alertas
+          </button>
+          <h1>{{ editingAlerta ? `Editar "${editingAlerta.nombre || 'Alerta'}"` : 'Nueva alerta' }}</h1>
+          <p class="form-desc">Define los criterios para esta alerta. Te notificaremos cuando aparezcan oportunidades que coincidan.</p>
+
+          <div class="form-grid">
+            <!-- Nombre -->
+            <section class="card full-width">
+              <div class="card-header"><h2>Nombre de la alerta</h2></div>
+              <input v-model="form.nombre" type="text" class="text-input" placeholder="ej: Fondos Tech CORFO, Licitaciones Norte…" required />
+            </section>
+
+            <!-- Foco -->
+            <section class="card full-width">
+              <div class="card-header">
+                <h2>Foco del proyecto</h2>
+                <p class="hint">Selecciona los focos que quieres monitorear.</p>
+              </div>
+              <div class="checks-grid-3">
+                <label v-for="f in FOCOS" :key="f" class="check-item">
+                  <input type="checkbox" :value="f" v-model="form.foco" />
+                  <span class="check-box"></span>
+                  {{ f }}
+                </label>
+              </div>
+            </section>
+
+            <!-- Palabras clave -->
+            <section class="card">
+              <div class="card-header">
+                <h2>Palabras clave</h2>
+                <p class="hint">Busca en títulos. Enter para agregar.</p>
+              </div>
+              <div class="tags-input">
+                <span v-for="(tag, i) in form.palabras_clave" :key="i" class="tag">
+                  {{ tag }}<button type="button" @click="removeTag(i)">×</button>
+                </span>
+                <input v-model="tagInput" type="text" placeholder="ej: innovación, exportación…"
+                  @keydown.enter.prevent="addTag" @keydown.comma.prevent="addTag" />
+              </div>
+            </section>
+
+            <!-- Tipo -->
+            <section class="card">
+              <div class="card-header">
+                <h2>Tipo de oportunidad</h2>
+                <p class="hint">Vacío = ambos.</p>
+              </div>
+              <div class="checks">
+                <label class="check-item">
+                  <input type="checkbox" value="fondo" v-model="form.tipos" /><span class="check-box"></span>Fondos concursables
+                </label>
+                <label class="check-item">
+                  <input type="checkbox" value="licitacion" v-model="form.tipos" /><span class="check-box"></span>Licitaciones
+                </label>
+              </div>
+            </section>
+
+            <!-- Fuentes -->
+            <section class="card">
+              <div class="card-header">
+                <h2>Fuentes</h2>
+                <p class="hint">Vacío = todas.</p>
+              </div>
+              <div class="checks">
+                <label v-for="f in FUENTES" :key="f.value" class="check-item">
+                  <input type="checkbox" :value="f.value" v-model="form.fuentes" /><span class="check-box"></span>{{ f.label }}
+                </label>
+              </div>
+            </section>
+
+            <!-- Alcance + Monto -->
+            <section class="card">
+              <div class="card-header"><h2>Alcance</h2></div>
+              <div class="checks">
+                <label v-for="a in ALCANCES" :key="a.value" class="check-item">
+                  <input type="checkbox" :value="a.value" v-model="form.alcance_interes" /><span class="check-box"></span>{{ a.label }}
+                </label>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-header">
+                <h2>Monto mínimo</h2>
+                <p class="hint">Muestra desde este monto en adelante.</p>
+              </div>
+              <select v-model="form.monto_minimo" class="select-input">
+                <option value="">Sin límite</option>
+                <option v-for="m in MONTOS" :key="m.value" :value="m.value">{{ m.label }}</option>
+              </select>
+            </section>
+          </div>
+
+          <div class="form-actions">
+            <div v-if="formMsg" :class="['mensaje', formError ? 'error' : 'ok']">{{ formMsg }}</div>
+            <button class="btn-save" @click="guardarAlerta" :disabled="guardando || !form.nombre.trim()">
+              <span v-if="guardando" class="spinner-btn"></span>
+              {{ guardando ? 'Guardando...' : (editingAlerta ? 'Guardar cambios' : 'Crear alerta') }}
+            </button>
+            <button class="btn-cancel" @click="cancelarForm">Cancelar</button>
+          </div>
         </div>
-        <NuxtLink to="/dashboard/configuracion" class="btn-config">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Editar perfil
-        </NuxtLink>
-      </div>
+      </template>
 
-      <!-- Sin config -->
-      <div v-if="!loading && !tieneConfig" class="empty">
-        <div class="empty-icon">🔔</div>
-        <p class="empty-title">Configura tu perfil de alertas</p>
-        <p class="empty-desc">Completa tu perfil de postulante o agrega palabras clave para ver las oportunidades que calzan contigo.</p>
-        <NuxtLink to="/dashboard/configuracion" class="btn-primary">Configurar ahora</NuxtLink>
-      </div>
-
-      <!-- Loading -->
-      <div v-else-if="loading" class="empty"><div class="spinner"></div></div>
-
-      <!-- Sin resultados -->
-      <div v-else-if="items.length === 0" class="empty">
-        <div class="empty-icon-wrap">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        </div>
-        <p class="empty-title">Sin resultados por ahora</p>
-        <p class="empty-desc">No encontramos oportunidades abiertas que coincidan con tu perfil actual. Puedes ampliar los criterios en configuración.</p>
-        <NuxtLink to="/dashboard/configuracion" class="btn-primary">Ajustar perfil</NuxtLink>
-      </div>
-
-      <!-- Resultados -->
+      <!-- ── VISTA: LISTA + RESULTADOS ─────────────────────────── -->
       <template v-else>
-        <div class="filtros-activos">
-          <span v-for="f in filtrosActivos" :key="f" class="filtro-chip">{{ f }}</span>
+
+        <!-- Loading inicial -->
+        <div v-if="loading" class="empty"><div class="spinner"></div></div>
+
+        <!-- Sin alertas -->
+        <div v-else-if="alertas.length === 0" class="empty-full">
+          <div class="empty-icon">🔔</div>
+          <p class="empty-title">Aún no tienes alertas</p>
+          <p class="empty-desc">Crea tu primera alerta para recibir oportunidades que coincidan con lo que buscas.</p>
+          <button class="btn-primary" @click="nuevaAlerta">Crear primera alerta</button>
         </div>
 
-        <div class="lista">
-          <div v-for="item in items" :key="item.id" class="card" :class="{ nueva: esNueva(item.fecha_scrapeado) }">
-            <div v-if="esNueva(item.fecha_scrapeado)" class="nueva-chip">Nueva</div>
-            <div class="card-top">
-              <div class="tags">
-                <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
-                <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
-              </div>
-              <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
+        <!-- Split layout -->
+        <div v-else class="split">
+
+          <!-- Panel izquierdo: reglas -->
+          <div class="panel-left">
+            <div class="panel-header">
+              <span class="panel-title">Mis alertas</span>
+              <button class="btn-new" @click="nuevaAlerta" title="Nueva alerta">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
             </div>
 
-            <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="card-title-link">
-              <h3>{{ item.titulo }}</h3>
-            </NuxtLink>
-            <p class="desc">{{ item.descripcion_breve }}</p>
-
-            <div class="card-meta">
-              <span v-if="item.monto_rango" class="meta-item">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                {{ montoLabel(item.monto_rango) }}
-              </span>
-              <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Cierra {{ formatFecha(item.fecha_cierre_postulacion) }}
-              </span>
-            </div>
-
-            <div class="card-footer">
-              <div class="focos">
-                <span v-for="f in (item.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
-              </div>
-              <div class="card-links">
-                <a v-if="item.link_postulacion" :href="item.link_postulacion" target="_blank" class="ver-link primary">
-                  Postular
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                </a>
-                <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="ver-link">Ver detalle</NuxtLink>
+            <div class="alertas-nav">
+              <div
+                v-for="alerta in alertas"
+                :key="alerta.id"
+                class="alerta-row"
+                :class="{ selected: selectedId === alerta.id, inactive: !alerta.activo }"
+                @click="selectAlerta(alerta.id)"
+              >
+                <div class="alerta-row-main">
+                  <span class="alerta-name">{{ alerta.nombre || 'Sin nombre' }}</span>
+                  <span class="alerta-summary">{{ resumenAlerta(alerta) }}</span>
+                </div>
+                <div class="alerta-row-actions">
+                  <button class="pill" :class="{ active: alerta.activo }" @click.stop="toggleAlerta(alerta)">
+                    {{ alerta.activo ? 'activa' : 'inactiva' }}
+                  </button>
+                  <button class="icon-btn" @click.stop="editarAlerta(alerta)" title="Editar">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                  <button class="icon-btn danger" @click.stop="borrarAlerta(alerta.id)" title="Eliminar">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div v-if="items.length < (total ?? 0)" class="load-more">
-          <button @click="cargarMas" :disabled="loadingMas" class="btn-more">
-            {{ loadingMas ? 'Cargando...' : `Ver más (${(total ?? 0) - items.length} restantes)` }}
-          </button>
+          <!-- Panel derecho: resultados -->
+          <div class="panel-right">
+            <template v-if="!selectedId">
+              <div class="empty-results">
+                <p>Selecciona una alerta para ver sus resultados</p>
+              </div>
+            </template>
+            <template v-else>
+              <div class="results-head">
+                <div>
+                  <h2 class="results-title">{{ selectedAlerta?.nombre }}</h2>
+                  <p class="results-subtitle">
+                    <template v-if="loadingResults">Cargando…</template>
+                    <template v-else>{{ resultsTotal ?? 0 }} oportunidades coinciden</template>
+                  </p>
+                </div>
+                <div class="chips-row">
+                  <span v-for="c in criteriaChips" :key="c" class="filtro-chip">{{ c }}</span>
+                </div>
+              </div>
+
+              <div v-if="loadingResults" class="empty"><div class="spinner"></div></div>
+
+              <div v-else-if="results.length === 0" class="empty-results">
+                <div class="empty-icon-wrap">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <p class="empty-title">Sin resultados</p>
+                <p class="empty-desc">No hay oportunidades abiertas que coincidan con esta alerta.</p>
+              </div>
+
+              <template v-else>
+                <div class="lista">
+                  <div v-for="item in results" :key="item.id" class="card" :class="{ nueva: esNueva(item.fecha_scrapeado) }">
+                    <div v-if="esNueva(item.fecha_scrapeado)" class="nueva-chip">Nueva</div>
+                    <div class="card-top">
+                      <div class="tags">
+                        <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
+                        <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                      </div>
+                      <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
+                    </div>
+                    <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="card-title-link">
+                      <h3>{{ item.titulo }}</h3>
+                    </NuxtLink>
+                    <p class="desc">{{ item.descripcion_breve }}</p>
+                    <div class="card-meta">
+                      <span v-if="item.monto_rango" class="meta-item">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        {{ montoLabel(item.monto_rango) }}
+                      </span>
+                      <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        Cierra {{ formatFecha(item.fecha_cierre_postulacion) }}
+                      </span>
+                    </div>
+                    <div class="card-footer">
+                      <div class="focos">
+                        <span v-for="f in (item.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
+                      </div>
+                      <div class="card-links">
+                        <a v-if="item.link_postulacion" :href="item.link_postulacion" target="_blank" class="ver-link primary">
+                          Postular
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                        </a>
+                        <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="ver-link">Ver detalle</NuxtLink>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="results.length < (resultsTotal ?? 0)" class="load-more">
+                  <button @click="cargarMas" :disabled="loadingMas" class="btn-more">
+                    {{ loadingMas ? 'Cargando...' : `Ver más (${(resultsTotal ?? 0) - results.length} restantes)` }}
+                  </button>
+                </div>
+              </template>
+            </template>
+          </div>
         </div>
       </template>
 
@@ -98,174 +253,298 @@
 <script setup lang="ts">
 definePageMeta({ middleware: 'auth', layout: false })
 
-const supabase = useSupabaseClient()
+const supabase  = useSupabaseClient()
 const PAGE_SIZE = 20
 
-const loading    = ref(true)
-const loadingMas = ref(false)
-const items      = ref<any[]>([])
-const total      = ref<number | null>(null)
-const offset     = ref(0)
-const lastVisit  = ref('')
+// ── Constantes ───────────────────────────────────────────────────
+const FOCOS = [
+  'Agroindustrias', 'Banca y Fintech', 'Climatech', 'Descarbonización',
+  'Digitalización', 'Educación', 'Economía Verde', 'I+D+i',
+  'Industrial', 'Innovación Social', 'Mujeres', 'Multisectorial',
+  'Recursos Forestales', 'Recursos Hídricos', 'Tech',
+]
+const FUENTES = [
+  { value: 'corfo',          label: 'CORFO' },
+  { value: 'sercotec',       label: 'SERCOTEC' },
+  { value: 'anid',           label: 'ANID' },
+  { value: 'mercadopublico', label: 'Mercado Público' },
+  { value: 'fondos_gob',     label: 'Fondos.gob.cl' },
+]
+const ALCANCES = [
+  { value: 'regional',      label: 'Regional' },
+  { value: 'nacional',      label: 'Nacional' },
+  { value: 'internacional', label: 'Internacional' },
+]
+const MONTOS = [
+  { value: 'hasta_1M',   label: 'Hasta $1M' },
+  { value: '1M_10M',     label: '$1M – $10M' },
+  { value: '10M_30M',    label: '$10M – $30M' },
+  { value: '30M_60M',    label: '$30M – $60M' },
+  { value: '60M_100M',   label: '$60M – $100M' },
+  { value: 'sobre_100M', label: 'Más de $100M' },
+]
+const MONTO_ORDER = MONTOS.map(m => m.value)
 
-interface AlertConfig {
-  palabras_clave: string[]
-  tipos:          string[]
-  fuentes:        string[]
-  monto_rangos:   string[]
-}
+// ── Estado ───────────────────────────────────────────────────────
+const view    = ref<'list' | 'form'>('list')
+const loading = ref(true)
 
-interface PerfilPostulante {
-  tipo_persona:    string | null
-  estado_proyecto: string | null
-  foco_proyecto:   string[]
-  palabras_clave:  string[]
-  alcance_interes: string[]
-  monto_minimo:    string | null
-}
+const alertas    = ref<any[]>([])
+const selectedId = ref<string | null>(null)
 
-const alertConfig = ref<AlertConfig | null>(null)
-const perfil      = ref<PerfilPostulante | null>(null)
+const loadingResults = ref(false)
+const loadingMas     = ref(false)
+const results        = ref<any[]>([])
+const resultsTotal   = ref<number | null>(null)
+const offset         = ref(0)
+const lastVisit      = ref('')
 
-const MONTO_ORDER = ['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M']
+// Form
+const editingAlerta = ref<any>(null)
+const guardando     = ref(false)
+const formMsg       = ref('')
+const formError     = ref(false)
+const tagInput      = ref('')
 
-const tieneConfig = computed(() => {
-  const a = alertConfig.value
-  const p = perfil.value
-  const tieneAlerta = !!(a && (a.palabras_clave.length || a.tipos.length || a.fuentes.length || a.monto_rangos.length))
-  const tienePerfil = !!(p && (p.foco_proyecto.length || p.palabras_clave.length || p.tipo_persona || p.estado_proyecto || p.alcance_interes.length || p.monto_minimo))
-  return tieneAlerta || tienePerfil
+const form = ref({
+  nombre:         '',
+  foco:           [] as string[],
+  palabras_clave: [] as string[],
+  tipos:          [] as string[],
+  fuentes:        [] as string[],
+  alcance_interes:[] as string[],
+  monto_minimo:   '',
+  monto_rangos:   [] as string[],
 })
 
-const filtrosActivos = computed(() => {
-  const labels: string[] = []
-  if (alertConfig.value) {
-    for (const k of alertConfig.value.palabras_clave) labels.push(`"${k}"`)
-    for (const t of alertConfig.value.tipos) labels.push(t === 'fondo' ? 'Fondos' : 'Licitaciones')
-    for (const f of alertConfig.value.fuentes) labels.push(fuenteLabel(f))
-    for (const m of alertConfig.value.monto_rangos) labels.push(montoLabel(m))
-  }
-  if (perfil.value) {
-    for (const f of perfil.value.foco_proyecto) labels.push(f)
-    for (const k of perfil.value.palabras_clave) labels.push(`"${k}"`)
-    for (const a of perfil.value.alcance_interes) labels.push(alcanceLabel(a))
-    if (perfil.value.monto_minimo) labels.push(`Desde ${montoLabel(perfil.value.monto_minimo)}`)
-    if (perfil.value.tipo_persona) labels.push(perfil.value.tipo_persona === 'natural' ? 'Persona Natural' : 'Persona Jurídica')
-  }
-  return labels
+// ── Computed ─────────────────────────────────────────────────────
+const selectedAlerta = computed(() => alertas.value.find(a => a.id === selectedId.value) ?? null)
+
+const criteriaChips = computed(() => {
+  const a = selectedAlerta.value
+  if (!a) return []
+  const chips: string[] = []
+  for (const f of (a.foco ?? []).slice(0, 4)) chips.push(f)
+  for (const k of (a.palabras_clave ?? []).slice(0, 3)) chips.push(`"${k}"`)
+  if (a.tipos?.includes('fondo')) chips.push('Fondos')
+  if (a.tipos?.includes('licitacion')) chips.push('Licitaciones')
+  for (const f of (a.fuentes ?? [])) chips.push(fuenteLabel(f))
+  for (const al of (a.alcance_interes ?? [])) chips.push(al === 'regional' ? 'Regional' : al === 'nacional' ? 'Nacional' : 'Internacional')
+  if (a.monto_minimo) chips.push(`Desde ${montoLabel(a.monto_minimo)}`)
+  return chips
 })
 
-function buildQuery() {
-  let q = supabase.from('convocatorias').select('*', { count: 'exact' }).eq('estado', 'abierto')
-
-  // Keywords: merge both sources, OR among all terms
-  const allKeywords = [
-    ...(alertConfig.value?.palabras_clave ?? []),
-    ...(perfil.value?.palabras_clave ?? []),
-  ]
-  if (allKeywords.length) {
-    const terms = allKeywords
-      .flatMap(k => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
-      .join(',')
-    q = q.or(terms)
-  }
-
-  // Alert config filters
-  if (alertConfig.value?.tipos?.length)        q = q.in('tipo', alertConfig.value.tipos)
-  if (alertConfig.value?.fuentes?.length)      q = q.in('fuente', alertConfig.value.fuentes)
-
-  // Monto: alert_config specific ranges take priority over perfil floor
-  if (alertConfig.value?.monto_rangos?.length) {
-    q = q.in('monto_rango', alertConfig.value.monto_rangos)
-  } else if (perfil.value?.monto_minimo) {
-    const idx = MONTO_ORDER.indexOf(perfil.value.monto_minimo)
-    if (idx >= 0) q = q.in('monto_rango', MONTO_ORDER.slice(idx))
-  }
-
-  // Perfil filters
-  if (perfil.value?.foco_proyecto?.length)   q = (q as any).overlaps('foco', perfil.value.foco_proyecto)
-  if (perfil.value?.alcance_interes?.length) q = q.in('alcance', perfil.value.alcance_interes)
-
-  return q.order('fecha_scrapeado', { ascending: false })
-}
-
-async function cargar() {
-  loading.value = true
-  offset.value  = 0
-  const { data, count } = await buildQuery().range(0, PAGE_SIZE - 1)
-  items.value  = data ?? []
-  total.value  = count ?? 0
-  offset.value = items.value.length
-  loading.value = false
-}
-
-async function cargarMas() {
-  loadingMas.value = true
-  const { data } = await buildQuery().range(offset.value, offset.value + PAGE_SIZE - 1)
-  items.value  = [...items.value, ...(data ?? [])]
-  offset.value = items.value.length
-  loadingMas.value = false
-}
-
+// ── Lifecycle ────────────────────────────────────────────────────
 onMounted(async () => {
   lastVisit.value = localStorage.getItem('fyl_last_alertas') ?? ''
   localStorage.setItem('fyl_last_alertas', new Date().toISOString())
 
   const { data: { user } } = await supabase.auth.getUser()
+  const { data } = await supabase
+    .from('alert_configs')
+    .select('*')
+    .eq('user_id', user!.id)
+    .order('created_at', { ascending: true })
 
-  const [{ data: aData }, { data: pData }] = await Promise.all([
-    supabase.from('alert_configs')
-      .select('palabras_clave, tipos, fuentes, monto_rangos, regiones')
-      .eq('user_id', user!.id)
-      .maybeSingle(),
-    supabase.from('perfil_postulante')
-      .select('tipo_persona, estado_proyecto, foco_proyecto, palabras_clave, alcance_interes, monto_minimo')
-      .eq('user_id', user!.id)
-      .maybeSingle(),
-  ])
+  alertas.value = data ?? []
+  loading.value = false
 
-  alertConfig.value = aData ? {
-    palabras_clave: aData.palabras_clave ?? [],
-    tipos:          aData.tipos ?? [],
-    fuentes:        aData.fuentes ?? [],
-    monto_rangos:   aData.monto_rangos ?? [],
-  } : null
-
-  perfil.value = pData ? {
-    tipo_persona:    pData.tipo_persona ?? null,
-    estado_proyecto: pData.estado_proyecto ?? null,
-    foco_proyecto:   pData.foco_proyecto ?? [],
-    palabras_clave:  pData.palabras_clave ?? [],
-    alcance_interes: pData.alcance_interes ?? [],
-    monto_minimo:    pData.monto_minimo ?? null,
-  } : null
-
-  if (tieneConfig.value) await cargar()
-  else loading.value = false
+  // Auto-seleccionar la primera alerta activa
+  const primera = alertas.value.find(a => a.activo)
+  if (primera) selectAlerta(primera.id)
 })
 
-function esNueva(fechaScrapeado: string) {
-  if (!lastVisit.value || !fechaScrapeado) return false
-  return new Date(fechaScrapeado) > new Date(lastVisit.value)
+// ── Alert CRUD ───────────────────────────────────────────────────
+function nuevaAlerta() {
+  editingAlerta.value = null
+  form.value = { nombre: '', foco: [], palabras_clave: [], tipos: [], fuentes: [], alcance_interes: [], monto_minimo: '', monto_rangos: [] }
+  tagInput.value = ''
+  formMsg.value  = ''
+  view.value     = 'form'
 }
 
+function editarAlerta(alerta: any) {
+  editingAlerta.value = alerta
+  form.value = {
+    nombre:          alerta.nombre ?? '',
+    foco:            [...(alerta.foco ?? [])],
+    palabras_clave:  [...(alerta.palabras_clave ?? [])],
+    tipos:           [...(alerta.tipos ?? [])],
+    fuentes:         [...(alerta.fuentes ?? [])],
+    alcance_interes: [...(alerta.alcance_interes ?? [])],
+    monto_minimo:    alerta.monto_minimo ?? '',
+    monto_rangos:    [...(alerta.monto_rangos ?? [])],
+  }
+  tagInput.value = ''
+  formMsg.value  = ''
+  view.value     = 'form'
+}
+
+function cancelarForm() {
+  view.value = 'list'
+  editingAlerta.value = null
+}
+
+async function guardarAlerta() {
+  if (!form.value.nombre.trim()) return
+  guardando.value = true
+  formMsg.value   = ''
+
+  const { data: { user } } = await supabase.auth.getUser()
+  const payload = {
+    user_id:         user!.id,
+    nombre:          form.value.nombre.trim(),
+    foco:            form.value.foco,
+    palabras_clave:  form.value.palabras_clave,
+    tipos:           form.value.tipos,
+    fuentes:         form.value.fuentes,
+    alcance_interes: form.value.alcance_interes,
+    monto_minimo:    form.value.monto_minimo || null,
+    monto_rangos:    form.value.monto_rangos,
+    activo:          true,
+    updated_at:      new Date().toISOString(),
+  }
+
+  let err: any = null
+  if (editingAlerta.value) {
+    const { error } = await supabase.from('alert_configs').update(payload).eq('id', editingAlerta.value.id)
+    err = error
+    if (!error) {
+      const idx = alertas.value.findIndex(a => a.id === editingAlerta.value!.id)
+      if (idx >= 0) alertas.value[idx] = { ...alertas.value[idx], ...payload }
+    }
+  } else {
+    const { data, error } = await supabase.from('alert_configs').insert(payload).select().single()
+    err = error
+    if (!error && data) {
+      alertas.value.push(data)
+      selectAlerta(data.id)
+    }
+  }
+
+  formError.value = !!err
+  if (err) {
+    formMsg.value = 'Error al guardar.'
+  } else {
+    view.value = 'list'
+    if (editingAlerta.value) {
+      // Recargar resultados si la alerta editada estaba seleccionada
+      if (selectedId.value === editingAlerta.value.id) await loadResults()
+    }
+  }
+  guardando.value = false
+}
+
+async function borrarAlerta(id: string) {
+  if (!confirm('¿Eliminar esta alerta?')) return
+  await supabase.from('alert_configs').delete().eq('id', id)
+  alertas.value = alertas.value.filter(a => a.id !== id)
+  if (selectedId.value === id) {
+    selectedId.value = null
+    results.value    = []
+    resultsTotal.value = null
+    const otra = alertas.value.find(a => a.activo)
+    if (otra) selectAlerta(otra.id)
+  }
+}
+
+async function toggleAlerta(alerta: any) {
+  const nuevoEstado = !alerta.activo
+  await supabase.from('alert_configs').update({ activo: nuevoEstado }).eq('id', alerta.id)
+  alerta.activo = nuevoEstado
+  if (selectedId.value === alerta.id && !nuevoEstado) {
+    results.value = []; resultsTotal.value = 0
+  }
+  if (selectedId.value === alerta.id && nuevoEstado) await loadResults()
+}
+
+// ── Selección y resultados ───────────────────────────────────────
+async function selectAlerta(id: string) {
+  if (selectedId.value === id) return
+  selectedId.value = id
+  results.value = []; resultsTotal.value = null; offset.value = 0
+  await loadResults()
+}
+
+function buildQuery(alerta: any) {
+  let q = supabase.from('convocatorias').select('*', { count: 'exact' }).eq('estado', 'abierto')
+
+  if (alerta.palabras_clave?.length) {
+    const terms = alerta.palabras_clave
+      .flatMap((k: string) => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
+      .join(',')
+    q = q.or(terms)
+  }
+  if (alerta.tipos?.length)          q = q.in('tipo', alerta.tipos)
+  if (alerta.fuentes?.length)        q = q.in('fuente', alerta.fuentes)
+  if (alerta.foco?.length)           q = (q as any).overlaps('foco', alerta.foco)
+  if (alerta.alcance_interes?.length) q = q.in('alcance', alerta.alcance_interes)
+
+  if (alerta.monto_rangos?.length) {
+    q = q.in('monto_rango', alerta.monto_rangos)
+  } else if (alerta.monto_minimo) {
+    const idx = MONTO_ORDER.indexOf(alerta.monto_minimo)
+    if (idx >= 0) q = q.in('monto_rango', MONTO_ORDER.slice(idx))
+  }
+
+  return q.order('fecha_scrapeado', { ascending: false })
+}
+
+async function loadResults() {
+  const alerta = selectedAlerta.value
+  if (!alerta?.activo) { results.value = []; resultsTotal.value = 0; return }
+  loadingResults.value = true
+  offset.value = 0
+  const { data, count } = await buildQuery(alerta).range(0, PAGE_SIZE - 1)
+  results.value      = data ?? []
+  resultsTotal.value = count ?? 0
+  offset.value       = results.value.length
+  loadingResults.value = false
+}
+
+async function cargarMas() {
+  const alerta = selectedAlerta.value
+  if (!alerta) return
+  loadingMas.value = true
+  const { data } = await buildQuery(alerta).range(offset.value, offset.value + PAGE_SIZE - 1)
+  results.value = [...results.value, ...(data ?? [])]
+  offset.value  = results.value.length
+  loadingMas.value = false
+}
+
+// ── Helpers form ─────────────────────────────────────────────────
+function addTag() {
+  const val = tagInput.value.trim().replace(',', '')
+  if (val && !form.value.palabras_clave.includes(val)) form.value.palabras_clave.push(val)
+  tagInput.value = ''
+}
+function removeTag(i: number) { form.value.palabras_clave.splice(i, 1) }
+
+function resumenAlerta(a: any): string {
+  const parts: string[] = []
+  if (a.foco?.length)          parts.push(a.foco.slice(0, 2).join(', ') + (a.foco.length > 2 ? '…' : ''))
+  if (a.palabras_clave?.length) parts.push(a.palabras_clave.slice(0, 1).map((k: string) => `"${k}"`).join(''))
+  if (!parts.length)           return 'Sin criterios'
+  return parts.join(' · ')
+}
+
+// ── Label helpers ────────────────────────────────────────────────
 function fuenteLabel(f: string) {
-  const map: Record<string, string> = { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl' }
-  return map[f] ?? f
+  return { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl' }[f] ?? f
 }
 function estadoLabel(e: string) {
   return { abierto: 'Abierto', cerrado: 'Cerrado', por_abrir: 'Por abrir' }[e] ?? e
 }
 function montoLabel(m: string) {
-  const map: Record<string, string> = { hasta_1M: 'Hasta $1M', '1M_10M': '$1M – $10M', '10M_30M': '$10M – $30M', '30M_60M': '$30M – $60M', '60M_100M': '$60M – $100M', sobre_100M: 'Más de $100M' }
-  return map[m] ?? m
-}
-function alcanceLabel(a: string) {
-  return { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }[a] ?? a
+  return { hasta_1M: 'Hasta $1M', '1M_10M': '$1M – $10M', '10M_30M': '$10M – $30M', '30M_60M': '$30M – $60M', '60M_100M': '$60M – $100M', sobre_100M: 'Más de $100M' }[m] ?? m
 }
 function formatFecha(f: string) {
   if (!f) return '—'
   return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+function esNueva(f: string) {
+  if (!lastVisit.value || !f) return false
+  return new Date(f) > new Date(lastVisit.value)
 }
 function esUrgente(f: string) {
   const dias = (new Date(f).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
@@ -277,47 +556,156 @@ function esUrgente(f: string) {
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-.content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; }
+.content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; height: 100%; }
 
-.header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.75rem; gap: 1rem; }
-h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
-.subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
-
-.btn-config {
+/* ── Form view ──────────────────────────────────────────────────── */
+.form-page { max-width: 680px; }
+.back-btn {
   display: inline-flex; align-items: center; gap: 0.4rem;
-  padding: 0.5rem 1rem; background: white; border: 1.5px solid #e2e8f0;
-  border-radius: 10px; font-size: 0.875rem; font-weight: 500; color: #475569;
-  text-decoration: none; transition: all 0.15s; white-space: nowrap; font-family: 'Inter', sans-serif;
+  font-size: 0.8125rem; font-weight: 500; color: #64748b;
+  background: none; border: none; cursor: pointer; padding: 0; margin-bottom: 1.25rem;
+  transition: color 0.15s; font-family: inherit;
 }
-.btn-config:hover { border-color: #0ea5e9; color: #0ea5e9; }
+.back-btn:hover { color: #0f172a; }
+.form-page h1 { font-size: 1.375rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
+.form-desc { font-size: 0.875rem; color: #64748b; margin-top: 0.25rem; margin-bottom: 1.75rem; }
 
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.full-width { grid-column: 1 / -1; }
+.card { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.25rem 1.5rem; }
+.card-header { margin-bottom: 1rem; }
+.card-header h2 { font-size: 0.875rem; font-weight: 700; color: #0f172a; margin-bottom: 0.15rem; }
+.hint { font-size: 0.75rem; color: #94a3b8; }
+
+.text-input {
+  width: 100%; padding: 0.65rem 0.875rem; border: 1.5px solid #e2e8f0;
+  border-radius: 9px; font-size: 0.9375rem; font-family: inherit; outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s; color: #0f172a;
+}
+.text-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.1); }
+
+.checks { display: flex; flex-direction: column; gap: 0.5rem; }
+.checks-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
+.check-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: #374151; cursor: pointer; user-select: none; }
+.check-item input[type="checkbox"] { display: none; }
+.check-box { width: 16px; height: 16px; border: 1.5px solid #cbd5e1; border-radius: 4px; flex-shrink: 0; transition: all 0.15s; position: relative; background: white; }
+.check-item input:checked + .check-box { background: #0ea5e9; border-color: #0ea5e9; }
+.check-item input:checked + .check-box::after { content: ''; position: absolute; left: 3px; top: 1px; width: 6px; height: 9px; border: 2px solid white; border-top: none; border-left: none; transform: rotate(45deg); }
+
+.tags-input { display: flex; flex-wrap: wrap; gap: 0.4rem; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.5rem; background: #fafafa; transition: all 0.15s; }
+.tags-input:focus-within { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.1); background: white; }
+.tags-input input { border: none; background: transparent; padding: 0.15rem 0.2rem; flex: 1; min-width: 100px; font-size: 0.875rem; font-family: inherit; outline: none; color: #0f172a; }
+.tag { display: flex; align-items: center; gap: 0.25rem; background: #e0f2fe; color: #0284c7; font-size: 0.775rem; font-weight: 600; padding: 0.15rem 0.45rem 0.15rem 0.6rem; border-radius: 999px; }
+.tag button { background: none; border: none; color: #7dd3fc; cursor: pointer; font-size: 1rem; padding: 0; line-height: 1; transition: color 0.15s; }
+.tag button:hover { color: #0284c7; }
+
+.select-input {
+  width: 100%; padding: 0.6rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 9px;
+  font-size: 0.875rem; font-family: inherit; outline: none; background: white; color: #0f172a;
+  cursor: pointer; appearance: none; transition: border-color 0.15s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2.25rem;
+}
+.select-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.1); }
+
+.form-actions { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.5rem; }
+.btn-save {
+  padding: 0.65rem 1.5rem; background: #0ea5e9; color: white; font-size: 0.9rem;
+  font-weight: 600; font-family: inherit; border: none; border-radius: 10px;
+  cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 0.4rem;
+}
+.btn-save:hover:not(:disabled) { background: #0284c7; }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-cancel { padding: 0.65rem 1.25rem; background: white; border: 1.5px solid #e2e8f0; color: #64748b; font-size: 0.9rem; font-weight: 500; font-family: inherit; border-radius: 10px; cursor: pointer; transition: all 0.15s; }
+.btn-cancel:hover { border-color: #cbd5e1; color: #475569; }
+.mensaje { font-size: 0.875rem; font-weight: 500; padding: 0.5rem 0.875rem; border-radius: 8px; }
+.mensaje.ok    { background: #f0fdf4; color: #16a34a; }
+.mensaje.error { background: #fef2f2; color: #dc2626; }
+.spinner-btn { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.65s linear infinite; }
+
+/* ── List view ──────────────────────────────────────────────────── */
+.split { display: grid; grid-template-columns: 260px 1fr; gap: 0; height: calc(100vh - 4rem); }
+
+.panel-left {
+  border-right: 1px solid #e2e8f0; display: flex; flex-direction: column;
+  overflow-y: auto; background: white;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem; border-bottom: 1px solid #f1f5f9; flex-shrink: 0;
+}
+.panel-title { font-size: 0.8125rem; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.06em; }
+.btn-new {
+  width: 26px; height: 26px; background: #0ea5e9; color: white; border: none;
+  border-radius: 7px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.btn-new:hover { background: #0284c7; }
+
+.alertas-nav { display: flex; flex-direction: column; flex: 1; overflow-y: auto; }
+
+.alerta-row {
+  padding: 0.875rem 1.25rem; cursor: pointer; border-bottom: 1px solid #f8fafc;
+  transition: background 0.1s;
+}
+.alerta-row:hover { background: #f8fafc; }
+.alerta-row.selected { background: #f0f9ff; border-left: 3px solid #0ea5e9; padding-left: calc(1.25rem - 3px); }
+.alerta-row.inactive { opacity: 0.5; }
+
+.alerta-row-main { margin-bottom: 0.5rem; }
+.alerta-name { display: block; font-size: 0.875rem; font-weight: 600; color: #0f172a; margin-bottom: 0.2rem; }
+.alerta-summary { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+.alerta-row-actions { display: flex; align-items: center; gap: 0.4rem; }
+.pill {
+  font-size: 0.65rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px;
+  background: #f1f5f9; color: #94a3b8; border: none; cursor: pointer; transition: all 0.15s;
+  font-family: inherit; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.pill.active { background: #f0fdf4; color: #16a34a; }
+.icon-btn {
+  width: 24px; height: 24px; background: none; border: none; cursor: pointer;
+  color: #94a3b8; border-radius: 5px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.icon-btn:hover { background: #f1f5f9; color: #475569; }
+.icon-btn.danger:hover { background: #fef2f2; color: #ef4444; }
+
+.panel-right { overflow-y: auto; padding: 1.75rem 2rem; }
+
+.results-head { margin-bottom: 1.25rem; }
+.results-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
+.results-subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
+.chips-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
+.filtro-chip { font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.6rem; background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; border-radius: 999px; }
+
+/* Empty states */
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5rem 2rem; text-align: center; gap: 0.75rem; }
-.empty-icon { font-size: 2.5rem; margin-bottom: 0.25rem; }
-.empty-icon-wrap { width: 56px; height: 56px; background: #f1f5f9; border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+.empty-full { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center; gap: 0.75rem; }
+.empty-results { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 40vh; text-align: center; gap: 0.5rem; color: #94a3b8; font-size: 0.9rem; }
+.empty-icon { font-size: 2.5rem; }
+.empty-icon-wrap { width: 52px; height: 52px; background: #f1f5f9; border-radius: 14px; display: flex; align-items: center; justify-content: center; }
 .empty-title { font-size: 1rem; font-weight: 600; color: #0f172a; }
-.empty-desc { font-size: 0.875rem; color: #64748b; max-width: 400px; line-height: 1.6; }
-.btn-primary { margin-top: 0.5rem; padding: 0.625rem 1.25rem; background: #0ea5e9; color: white; font-size: 0.9rem; font-weight: 600; border-radius: 10px; text-decoration: none; transition: background 0.15s; }
+.empty-desc { font-size: 0.875rem; color: #64748b; max-width: 360px; line-height: 1.6; }
+.btn-primary { margin-top: 0.5rem; padding: 0.625rem 1.25rem; background: #0ea5e9; color: white; font-size: 0.9rem; font-weight: 600; border-radius: 10px; border: none; cursor: pointer; transition: background 0.15s; font-family: inherit; }
 .btn-primary:hover { background: #0284c7; }
 
-.filtros-activos { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem; }
-.filtro-chip { font-size: 0.75rem; font-weight: 600; padding: 0.25rem 0.65rem; background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; border-radius: 999px; }
-
+/* Result cards */
 .lista { display: flex; flex-direction: column; gap: 0.75rem; }
-.card { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.25rem 1.5rem; transition: box-shadow 0.15s, border-color 0.15s; position: relative; }
-.card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-color: #cbd5e1; }
 .card.nueva { border-left: 3px solid #0ea5e9; }
-
-.nueva-chip { position: absolute; top: 1rem; right: 1rem; font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; background: #0ea5e9; color: white; padding: 0.15rem 0.5rem; border-radius: 999px; }
+.nueva-chip { position: absolute; top: 1rem; right: 1rem; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; background: #0ea5e9; color: white; padding: 0.15rem 0.45rem; border-radius: 999px; }
+.card { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.25rem 1.5rem; position: relative; transition: box-shadow 0.15s, border-color 0.15s; }
+.card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-color: #cbd5e1; }
 
 .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.625rem; gap: 0.5rem; }
 .tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.tag-fuente { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
-.tag-tipo { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; }
+.tag-fuente { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
+.tag-tipo { font-size: 0.68rem; font-weight: 600; padding: 0.12rem 0.45rem; border-radius: 999px; }
 .tag-tipo.fondo { background: #f0fdf4; color: #16a34a; }
 .tag-tipo.licitacion { background: #eef2ff; color: #4338ca; }
-.badge-estado { font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; }
-.badge-estado.abierto  { background: #f0fdf4; color: #16a34a; }
-.badge-estado.cerrado  { background: #f1f5f9; color: #94a3b8; }
+.badge-estado { font-size: 0.68rem; font-weight: 700; padding: 0.18rem 0.55rem; border-radius: 999px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; }
+.badge-estado.abierto   { background: #f0fdf4; color: #16a34a; }
+.badge-estado.cerrado   { background: #f1f5f9; color: #94a3b8; }
 .badge-estado.por_abrir { background: #fefce8; color: #a16207; }
 
 .card-title-link { text-decoration: none; }
@@ -326,23 +714,30 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .desc { font-size: 0.875rem; color: #64748b; line-height: 1.55; }
 
 .card-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.875rem; }
-.meta-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; }
+.meta-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: #94a3b8; font-weight: 500; }
 .meta-item.urgente { color: #f59e0b; font-weight: 600; }
 
 .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.875rem; border-top: 1px solid #f1f5f9; gap: 0.75rem; flex-wrap: wrap; }
-.focos { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-.foco-tag { font-size: 0.7rem; font-weight: 500; padding: 0.2rem 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; color: #64748b; }
+.focos { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.foco-tag { font-size: 0.68rem; font-weight: 500; padding: 0.18rem 0.45rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; color: #64748b; }
 .card-links { display: flex; gap: 0.75rem; align-items: center; }
-.ver-link { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8125rem; font-weight: 600; color: #94a3b8; text-decoration: none; transition: color 0.15s; }
+.ver-link { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; font-weight: 600; color: #94a3b8; text-decoration: none; transition: color 0.15s; }
 .ver-link:hover { color: #64748b; }
-.ver-link.primary { color: #0ea5e9; background: #f0f9ff; padding: 0.35rem 0.75rem; border-radius: 8px; border: 1px solid #bae6fd; }
+.ver-link.primary { color: #0ea5e9; background: #f0f9ff; padding: 0.3rem 0.7rem; border-radius: 7px; border: 1px solid #bae6fd; }
 .ver-link.primary:hover { background: #e0f2fe; }
 
 .load-more { text-align: center; margin-top: 1.5rem; }
-.btn-more { padding: 0.625rem 1.5rem; background: white; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.875rem; font-weight: 500; font-family: inherit; color: #475569; cursor: pointer; transition: all 0.15s; }
+.btn-more { padding: 0.6rem 1.5rem; background: white; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 0.875rem; font-weight: 500; font-family: inherit; color: #475569; cursor: pointer; transition: all 0.15s; }
 .btn-more:hover { border-color: #0ea5e9; color: #0ea5e9; }
 .btn-more:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; height: auto; }
+  .panel-left { border-right: none; border-bottom: 1px solid #e2e8f0; max-height: 280px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .content { padding: 1.5rem 1rem; }
+}
 </style>
