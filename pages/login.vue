@@ -70,6 +70,7 @@
 <script setup lang="ts">
 const supabase = useSupabaseClient()
 const router = useRouter()
+const route = useRoute()
 
 const email = ref('')
 const password = ref('')
@@ -88,7 +89,8 @@ async function handleLogin() {
   if (authError) {
     error.value = 'Email o contraseña incorrectos'
   } else {
-    router.push('/dashboard')
+    const next = route.query.next as string
+    router.push(next && next.startsWith('/') ? next : '/dashboard')
   }
   loading.value = false
 }
