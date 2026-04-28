@@ -9,7 +9,6 @@
       <div v-if="plan" class="plan-badge" :class="plan">
         <span class="plan-icon">{{ planInfo.icon }}</span>
         Plan {{ planInfo.nombre }}
-        <span v-if="plan !== 'free'" class="plan-trial">· 14 días gratis</span>
       </div>
 
       <h1>Crea tu cuenta</h1>
@@ -60,14 +59,15 @@ const route = useRoute()
 
 const plan = computed(() => {
   const p = route.query.plan as string
-  return ['free', 'pro', 'agencia'].includes(p) ? p : null
+  return ['free', 'starter', 'pro', 'agencia'].includes(p) ? p : null
 })
 
 const planInfo = computed(() => {
   const planes: Record<string, { nombre: string; icon: string }> = {
-    free:    { nombre: 'Explorador',        icon: '🌱' },
-    pro:     { nombre: 'Profesional',       icon: '⭐' },
-    agencia: { nombre: 'Agencia/Consultora', icon: '🏢' },
+    free:    { nombre: 'Gratuito',  icon: '🌱' },
+    starter: { nombre: 'Starter',  icon: '🚀' },
+    pro:     { nombre: 'Pro',      icon: '⭐' },
+    agencia: { nombre: 'Agencia',  icon: '🏢' },
   }
   return planes[plan.value ?? 'free']
 })
@@ -103,9 +103,21 @@ async function handleRegistro() {
     return
   }
 
-  // Si Supabase no requiere confirmación de email, redirige directo
+  // Enviar email de bienvenida (fire & forget — no bloqueamos el flujo)
+  if (data.user) {
+    fetch('https://qumfnywynqgojmepuffx.supabase.co/functions/v1/send-welcome-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer sb_publishable_1UErN4XzIgBbDABCL4Kn2g_edjQGadf`,
+      },
+      body: JSON.stringify({ record: { id: data.user.id } }),
+    }).catch(() => {}) // silenciar errores — el usuario igual pasa al siguiente paso
+  }
+
+  // Si Supabase no requiere confirmación de email, redirige al onboarding
   if (data.session) {
-    router.push('/dashboard/configuracion?bienvenido=1')
+    router.push('/onboarding')
   } else {
     success.value = true
   }
