@@ -53,6 +53,10 @@
             <svg width="14" height="14" viewBox="0 0 24 24" :fill="guardado ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
             {{ guardado ? 'Guardado' : 'Guardar' }}
           </button>
+          <button :class="['btn-secundario', 'btn-postule', postulado ? 'postulado' : '']" @click="togglePostulado">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            {{ postulado ? 'Ya postulé' : 'Marcar como postulado' }}
+          </button>
         </div>
 
         <div class="grid">
@@ -193,9 +197,10 @@ definePageMeta({ middleware: 'auth', layout: false })
 const supabase = useSupabaseClient()
 const route = useRoute()
 
-const item = ref<any>(null)
-const loading = ref(true)
-const guardado = ref(false)
+const item       = ref<any>(null)
+const loading    = ref(true)
+const guardado   = ref(false)
+const postulado  = ref(false)
 
 const tienePerfilRequerido = computed(() =>
   item.value?.perfil_tipo_persona?.length ||
@@ -208,13 +213,15 @@ const tienePerfilRequerido = computed(() =>
 onMounted(async () => {
   const id = route.params.id as string
 
-  const [{ data }, { data: g }] = await Promise.all([
+  const [{ data }, { data: g }, { data: p }] = await Promise.all([
     supabase.from('convocatorias').select('*').eq('id', id).single(),
     supabase.from('guardados').select('id').eq('convocatoria_id', id).maybeSingle(),
+    supabase.from('postulaciones').select('id').eq('convocatoria_id', id).maybeSingle(),
   ])
-  item.value = data
+  item.value     = data
   guardado.value = !!g
-  loading.value = false
+  postulado.value = !!p
+  loading.value  = false
 })
 
 async function toggleGuardado() {
@@ -225,6 +232,17 @@ async function toggleGuardado() {
   } else {
     await supabase.from('guardados').insert({ convocatoria_id: id })
     guardado.value = true
+  }
+}
+
+async function togglePostulado() {
+  const id = route.params.id as string
+  if (postulado.value) {
+    await supabase.from('postulaciones').delete().eq('convocatoria_id', id)
+    postulado.value = false
+  } else {
+    await supabase.from('postulaciones').insert({ convocatoria_id: id })
+    postulado.value = true
   }
 }
 
@@ -377,6 +395,8 @@ h1 {
 
 .btn-guardar-detalle { cursor: pointer; font-family: 'Inter', sans-serif; }
 .btn-guardar-detalle.guardado { border-color: #0ea5e9; color: #0ea5e9; background: #f0f9ff; }
+.btn-postule { cursor: pointer; font-family: 'Inter', sans-serif; }
+.btn-postule.postulado { border-color: #22c55e; color: #16a34a; background: #f0fdf4; }
 
 .btn-secundario {
   display: inline-flex;
