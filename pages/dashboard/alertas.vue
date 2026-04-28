@@ -12,41 +12,17 @@
           <h1>{{ editingAlerta ? `Editar "${editingAlerta.nombre || 'Alerta'}"` : 'Nueva alerta' }}</h1>
           <p class="form-desc">Define los criterios para esta alerta. Te notificaremos cuando aparezcan oportunidades que coincidan.</p>
 
+          <div class="form-info" v-if="perfilFoco.length || perfilKeywords.length">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Esta alerta usa el foco y palabras clave de tu perfil como base.
+            <NuxtLink to="/dashboard/mi-perfil">Editar perfil</NuxtLink>
+          </div>
+
           <div class="form-grid">
             <!-- Nombre -->
             <section class="card full-width">
               <div class="card-header"><h2>Nombre de la alerta</h2></div>
-              <input v-model="form.nombre" type="text" class="text-input" placeholder="ej: Fondos Tech CORFO, Licitaciones Norte…" required />
-            </section>
-
-            <!-- Foco -->
-            <section class="card full-width">
-              <div class="card-header">
-                <h2>Foco del proyecto</h2>
-                <p class="hint">Selecciona los focos que quieres monitorear.</p>
-              </div>
-              <div class="checks-grid-3">
-                <label v-for="f in FOCOS" :key="f" class="check-item">
-                  <input type="checkbox" :value="f" v-model="form.foco" />
-                  <span class="check-box"></span>
-                  {{ f }}
-                </label>
-              </div>
-            </section>
-
-            <!-- Palabras clave -->
-            <section class="card">
-              <div class="card-header">
-                <h2>Palabras clave</h2>
-                <p class="hint">Busca en títulos. Enter para agregar.</p>
-              </div>
-              <div class="tags-input">
-                <span v-for="(tag, i) in form.palabras_clave" :key="i" class="tag">
-                  {{ tag }}<button type="button" @click="removeTag(i)">×</button>
-                </span>
-                <input v-model="tagInput" type="text" placeholder="ej: innovación, exportación…"
-                  @keydown.enter.prevent="addTag" @keydown.comma.prevent="addTag" />
-              </div>
+              <input v-model="form.nombre" type="text" class="text-input" placeholder="ej: Fondos CORFO, Licitaciones Norte…" required />
             </section>
 
             <!-- Tipo -->
@@ -257,12 +233,6 @@ const supabase  = useSupabaseClient()
 const PAGE_SIZE = 20
 
 // ── Constantes ───────────────────────────────────────────────────
-const FOCOS = [
-  'Agroindustrias', 'Banca y Fintech', 'Climatech', 'Descarbonización',
-  'Digitalización', 'Educación', 'Economía Verde', 'I+D+i',
-  'Industrial', 'Innovación Social', 'Mujeres', 'Multisectorial',
-  'Recursos Forestales', 'Recursos Hídricos', 'Tech',
-]
 const FUENTES = [
   { value: 'corfo',          label: 'CORFO' },
   { value: 'sercotec',       label: 'SERCOTEC' },
@@ -299,22 +269,23 @@ const resultsTotal   = ref<number | null>(null)
 const offset         = ref(0)
 const lastVisit      = ref('')
 
+// Perfil del usuario (foco y keywords vienen del perfil, no de las alertas)
+const perfilFoco     = ref<string[]>([])
+const perfilKeywords = ref<string[]>([])
+
 // Form
 const editingAlerta = ref<any>(null)
 const guardando     = ref(false)
 const formMsg       = ref('')
 const formError     = ref(false)
-const tagInput      = ref('')
 
 const form = ref({
-  nombre:         '',
-  foco:           [] as string[],
-  palabras_clave: [] as string[],
-  tipos:          [] as string[],
-  fuentes:        [] as string[],
-  alcance_interes:[] as string[],
-  monto_minimo:   '',
-  monto_rangos:   [] as string[],
+  nombre:          '',
+  tipos:           [] as string[],
+  fuentes:         [] as string[],
+  alcance_interes: [] as string[],
+  monto_minimo:    '',
+  monto_rangos:    [] as string[],
 })
 
 // ── Computed ─────────────────────────────────────────────────────
@@ -324,8 +295,9 @@ const criteriaChips = computed(() => {
   const a = selectedAlerta.value
   if (!a) return []
   const chips: string[] = []
-  for (const f of (a.foco ?? []).slice(0, 4)) chips.push(f)
-  for (const k of (a.palabras_clave ?? []).slice(0, 3)) chips.push(`"${k}"`)
+  // Foco viene del perfil, no de la alerta
+  for (const f of perfilFoco.value.slice(0, 3)) chips.push(f)
+  for (const k of perfilKeywords.value.slice(0, 2)) chips.push(`"${k}"`)
   if (a.tipos?.includes('fondo')) chips.push('Fondos')
   if (a.tipos?.includes('licitacion')) chips.push('Licitaciones')
   for (const f of (a.fuentes ?? [])) chips.push(fuenteLabel(f))
@@ -340,16 +312,17 @@ onMounted(async () => {
   localStorage.setItem('fyl_last_alertas', new Date().toISOString())
 
   const { data: { user } } = await supabase.auth.getUser()
-  const { data } = await supabase
-    .from('alert_configs')
-    .select('*')
-    .eq('user_id', user!.id)
-    .order('created_at', { ascending: true })
 
-  alertas.value = data ?? []
-  loading.value = false
+  const [{ data: alertasData }, { data: perfilData }] = await Promise.all([
+    supabase.from('alert_configs').select('*').eq('user_id', user!.id).order('created_at', { ascending: true }),
+    supabase.from('perfil_postulante').select('foco_proyecto, palabras_clave').eq('user_id', user!.id).maybeSingle(),
+  ])
 
-  // Auto-seleccionar la primera alerta activa
+  alertas.value    = alertasData ?? []
+  perfilFoco.value = perfilData?.foco_proyecto ?? []
+  perfilKeywords.value = perfilData?.palabras_clave ?? []
+  loading.value    = false
+
   const primera = alertas.value.find(a => a.activo)
   if (primera) selectAlerta(primera.id)
 })
@@ -357,27 +330,23 @@ onMounted(async () => {
 // ── Alert CRUD ───────────────────────────────────────────────────
 function nuevaAlerta() {
   editingAlerta.value = null
-  form.value = { nombre: '', foco: [], palabras_clave: [], tipos: [], fuentes: [], alcance_interes: [], monto_minimo: '', monto_rangos: [] }
-  tagInput.value = ''
-  formMsg.value  = ''
-  view.value     = 'form'
+  form.value = { nombre: '', tipos: [], fuentes: [], alcance_interes: [], monto_minimo: '', monto_rangos: [] }
+  formMsg.value = ''
+  view.value    = 'form'
 }
 
 function editarAlerta(alerta: any) {
   editingAlerta.value = alerta
   form.value = {
     nombre:          alerta.nombre ?? '',
-    foco:            [...(alerta.foco ?? [])],
-    palabras_clave:  [...(alerta.palabras_clave ?? [])],
     tipos:           [...(alerta.tipos ?? [])],
     fuentes:         [...(alerta.fuentes ?? [])],
     alcance_interes: [...(alerta.alcance_interes ?? [])],
     monto_minimo:    alerta.monto_minimo ?? '',
     monto_rangos:    [...(alerta.monto_rangos ?? [])],
   }
-  tagInput.value = ''
-  formMsg.value  = ''
-  view.value     = 'form'
+  formMsg.value = ''
+  view.value    = 'form'
 }
 
 function cancelarForm() {
@@ -394,8 +363,6 @@ async function guardarAlerta() {
   const payload = {
     user_id:         user!.id,
     nombre:          form.value.nombre.trim(),
-    foco:            form.value.foco,
-    palabras_clave:  form.value.palabras_clave,
     tipos:           form.value.tipos,
     fuentes:         form.value.fuentes,
     alcance_interes: form.value.alcance_interes,
@@ -469,15 +436,18 @@ async function selectAlerta(id: string) {
 function buildQuery(alerta: any) {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' }).eq('estado', 'abierto')
 
-  if (alerta.palabras_clave?.length) {
-    const terms = alerta.palabras_clave
+  // Foco y keywords vienen del perfil del usuario
+  if (perfilKeywords.value.length) {
+    const terms = perfilKeywords.value
       .flatMap((k: string) => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
       .join(',')
     q = q.or(terms)
   }
-  if (alerta.tipos?.length)          q = q.in('tipo', alerta.tipos)
-  if (alerta.fuentes?.length)        q = q.in('fuente', alerta.fuentes)
-  if (alerta.foco?.length)           q = (q as any).overlaps('foco', alerta.foco)
+  if (perfilFoco.value.length) q = (q as any).overlaps('foco', perfilFoco.value)
+
+  // Filtros específicos de la alerta
+  if (alerta.tipos?.length)           q = q.in('tipo', alerta.tipos)
+  if (alerta.fuentes?.length)         q = q.in('fuente', alerta.fuentes)
   if (alerta.alcance_interes?.length) q = q.in('alcance', alerta.alcance_interes)
 
   if (alerta.monto_rangos?.length) {
@@ -512,20 +482,14 @@ async function cargarMas() {
   loadingMas.value = false
 }
 
-// ── Helpers form ─────────────────────────────────────────────────
-function addTag() {
-  const val = tagInput.value.trim().replace(',', '')
-  if (val && !form.value.palabras_clave.includes(val)) form.value.palabras_clave.push(val)
-  tagInput.value = ''
-}
-function removeTag(i: number) { form.value.palabras_clave.splice(i, 1) }
-
 function resumenAlerta(a: any): string {
   const parts: string[] = []
-  if (a.foco?.length)          parts.push(a.foco.slice(0, 2).join(', ') + (a.foco.length > 2 ? '…' : ''))
-  if (a.palabras_clave?.length) parts.push(a.palabras_clave.slice(0, 1).map((k: string) => `"${k}"`).join(''))
-  if (!parts.length)           return 'Sin criterios'
-  return parts.join(' · ')
+  if (a.fuentes?.length)         parts.push(a.fuentes.map(fuenteLabel).join(', '))
+  if (a.tipos?.includes('fondo'))      parts.push('Fondos')
+  if (a.tipos?.includes('licitacion')) parts.push('Licitaciones')
+  if (a.alcance_interes?.length) parts.push(a.alcance_interes[0])
+  if (a.monto_minimo)            parts.push(`Desde ${montoLabel(a.monto_minimo)}`)
+  return parts.length ? parts.join(' · ') : 'Todas las fuentes'
 }
 
 // ── Label helpers ────────────────────────────────────────────────
@@ -559,6 +523,15 @@ function esUrgente(f: string) {
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; height: 100%; }
 
 /* ── Form view ──────────────────────────────────────────────────── */
+.form-info {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.8125rem; color: #0369a1; background: #f0f9ff;
+  border: 1px solid #bae6fd; border-radius: 9px; padding: 0.625rem 0.875rem;
+  margin-bottom: 1.25rem;
+}
+.form-info a { color: #0ea5e9; font-weight: 600; text-decoration: none; margin-left: 0.25rem; }
+.form-info a:hover { text-decoration: underline; }
+
 .form-page { max-width: 680px; }
 .back-btn {
   display: inline-flex; align-items: center; gap: 0.4rem;

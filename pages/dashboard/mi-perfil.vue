@@ -8,12 +8,13 @@
         </div>
         <div>
           <h1>Mi Perfil Postulante</h1>
-          <p class="hero-desc">Completar tu perfil nos permite mostrarte si calificas para cada fondo y encontrar los que mejor calzan con tu situación. Solo lo haces una vez.</p>
+          <p class="hero-desc">Completar tu perfil nos permite mostrarte si calificas para cada fondo y encontrar los que mejor calzan con tu proyecto. Solo lo haces una vez.</p>
         </div>
       </div>
 
       <form class="form" @submit.prevent="guardar">
 
+        <!-- Tipo de postulante -->
         <section class="card">
           <div class="card-header">
             <h2>Tipo de postulante</h2>
@@ -68,6 +69,7 @@
           </template>
         </section>
 
+        <!-- Estado del proyecto -->
         <section class="card">
           <div class="card-header">
             <h2>Estado del proyecto</h2>
@@ -79,6 +81,41 @@
               <span class="radio-circle"></span>
               {{ e.label }}
             </label>
+          </div>
+        </section>
+
+        <!-- Foco del proyecto -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Foco del proyecto</h2>
+            <p class="hint">Selecciona los sectores que mejor describen tu proyecto. Selección múltiple.</p>
+          </div>
+          <div class="checks-grid-3">
+            <label v-for="f in focos" :key="f" class="check-item">
+              <input type="checkbox" :value="f" v-model="perfil.foco_proyecto" />
+              <span class="check-box"></span>
+              {{ f }}
+            </label>
+          </div>
+        </section>
+
+        <!-- Palabras clave -->
+        <section class="card">
+          <div class="card-header">
+            <h2>Palabras clave del proyecto</h2>
+            <p class="hint">Describe tu proyecto con palabras sueltas. Presiona Enter para agregar.</p>
+          </div>
+          <div class="tags-input">
+            <span v-for="(tag, i) in perfil.palabras_clave" :key="i" class="tag">
+              {{ tag }}<button type="button" @click="removeTag(i)">×</button>
+            </span>
+            <input
+              v-model="tagInput"
+              type="text"
+              placeholder="ej: reciclaje, software, exportación…"
+              @keydown.enter.prevent="addTag"
+              @keydown.comma.prevent="addTag"
+            />
           </div>
         </section>
 
@@ -103,6 +140,7 @@ const supabase = useSupabaseClient()
 const guardando = ref(false)
 const mensaje   = ref('')
 const error     = ref(false)
+const tagInput  = ref('')
 
 const perfil = ref({
   tipo_persona:       null as string | null,
@@ -110,6 +148,8 @@ const perfil = ref({
   edad:               null as number | null,
   antiguedad_empresa: null as string | null,
   estado_proyecto:    null as string | null,
+  foco_proyecto:      [] as string[],
+  palabras_clave:     [] as string[],
 })
 
 const estados = [
@@ -120,11 +160,28 @@ const estados = [
   { value: 'crecimiento',   label: 'Buscando crecer y expandirme' },
 ]
 
+const focos = [
+  'Agroindustrias', 'Banca y Fintech', 'Climatech', 'Descarbonización',
+  'Digitalización', 'Educación', 'Economía Verde', 'I+D+i',
+  'Industrial', 'Innovación Social', 'Mujeres', 'Multisectorial',
+  'Recursos Forestales', 'Recursos Hídricos', 'Tech',
+]
+
+function addTag() {
+  const val = tagInput.value.trim().replace(',', '')
+  if (val && !perfil.value.palabras_clave.includes(val))
+    perfil.value.palabras_clave.push(val)
+  tagInput.value = ''
+}
+function removeTag(i: number) {
+  perfil.value.palabras_clave.splice(i, 1)
+}
+
 onMounted(async () => {
   const { data: { user } } = await supabase.auth.getUser()
   const { data } = await supabase
     .from('perfil_postulante')
-    .select('tipo_persona, subtipo_natural, edad, antiguedad_empresa, estado_proyecto')
+    .select('tipo_persona, subtipo_natural, edad, antiguedad_empresa, estado_proyecto, foco_proyecto, palabras_clave')
     .eq('user_id', user!.id)
     .maybeSingle()
   if (data) {
@@ -134,6 +191,8 @@ onMounted(async () => {
       edad:               data.edad ?? null,
       antiguedad_empresa: data.antiguedad_empresa ?? null,
       estado_proyecto:    data.estado_proyecto ?? null,
+      foco_proyecto:      data.foco_proyecto ?? [],
+      palabras_clave:     data.palabras_clave ?? [],
     }
   }
 })
@@ -151,6 +210,8 @@ async function guardar() {
       edad:               perfil.value.tipo_persona === 'natural' ? perfil.value.edad : null,
       antiguedad_empresa: perfil.value.tipo_persona === 'juridica' ? perfil.value.antiguedad_empresa : null,
       estado_proyecto:    perfil.value.estado_proyecto,
+      foco_proyecto:      perfil.value.foco_proyecto,
+      palabras_clave:     perfil.value.palabras_clave,
       updated_at:         new Date().toISOString(),
     }, { onConflict: 'user_id' })
   error.value   = !!err
@@ -178,17 +239,17 @@ async function guardar() {
 h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
 .hero-desc { font-size: 0.875rem; color: #0369a1; margin-top: 0.25rem; line-height: 1.55; max-width: 560px; }
 
-.form { display: flex; flex-direction: column; gap: 1.25rem; max-width: 520px; }
+.form { display: flex; flex-direction: column; gap: 1.25rem; max-width: 600px; }
 .card { background: white; border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.5rem; }
 .card-header { margin-bottom: 1.125rem; }
 .card-header h2 { font-size: 0.9375rem; font-weight: 700; color: #0f172a; margin-bottom: 0.2rem; }
 .hint { font-size: 0.8125rem; color: #94a3b8; }
 
-.radios { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.radios     { display: flex; gap: 1.5rem; flex-wrap: wrap; }
 .radios-col { flex-direction: column; gap: 0.75rem; }
 .radio-item { display: flex; align-items: center; gap: 0.625rem; font-size: 0.9rem; color: #374151; cursor: pointer; user-select: none; }
 .radio-item input[type="radio"] { display: none; }
-.radio-circle { width: 18px; height: 18px; border: 1.5px solid #cbd5e1; border-radius: 50%; flex-shrink: 0; transition: all 0.15s; position: relative; background: white; }
+.radio-circle { width: 18px; height: 18px; border: 1.5px solid #cbd5e1; border-radius: 50%; flex-shrink: 0; transition: all 0.15s; background: white; }
 .radio-item input:checked + .radio-circle { border-color: #0ea5e9; border-width: 5px; }
 
 .sub-fields { margin-top: 1.125rem; padding-top: 1.125rem; border-top: 1px solid #f1f5f9; display: flex; flex-direction: column; gap: 1rem; }
@@ -200,11 +261,25 @@ h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02
 .select-input {
   width: 100%; padding: 0.6rem 0.75rem; border: 1.5px solid #e2e8f0; border-radius: 9px;
   font-size: 0.9rem; font-family: inherit; outline: none; background: white; color: #0f172a;
-  cursor: pointer; transition: border-color 0.15s; appearance: none;
+  cursor: pointer; appearance: none; transition: border-color 0.15s;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2.25rem;
 }
 .select-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.1); }
+
+.checks-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.6rem; }
+.check-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: #374151; cursor: pointer; user-select: none; }
+.check-item input[type="checkbox"] { display: none; }
+.check-box { width: 17px; height: 17px; border: 1.5px solid #cbd5e1; border-radius: 4px; flex-shrink: 0; transition: all 0.15s; position: relative; background: white; }
+.check-item input:checked + .check-box { background: #0ea5e9; border-color: #0ea5e9; }
+.check-item input:checked + .check-box::after { content: ''; position: absolute; left: 3px; top: 1px; width: 6px; height: 9px; border: 2px solid white; border-top: none; border-left: none; transform: rotate(45deg); }
+
+.tags-input { display: flex; flex-wrap: wrap; gap: 0.4rem; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.5rem 0.625rem; background: #fafafa; transition: all 0.15s; }
+.tags-input:focus-within { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.1); background: white; }
+.tags-input input { border: none; background: transparent; padding: 0.2rem 0.25rem; flex: 1; min-width: 120px; font-size: 0.9rem; font-family: inherit; outline: none; color: #0f172a; }
+.tag { display: flex; align-items: center; gap: 0.25rem; background: #e0f2fe; color: #0284c7; font-size: 0.8rem; font-weight: 600; padding: 0.18rem 0.45rem 0.18rem 0.65rem; border-radius: 999px; }
+.tag button { background: none; border: none; color: #7dd3fc; cursor: pointer; font-size: 1rem; padding: 0; line-height: 1; transition: color 0.15s; }
+.tag button:hover { color: #0284c7; }
 
 .actions { display: flex; align-items: center; gap: 1rem; }
 .mensaje { font-size: 0.875rem; font-weight: 500; padding: 0.5rem 0.875rem; border-radius: 8px; }
@@ -220,4 +295,9 @@ button[type="submit"]:hover:not(:disabled) { background: #0284c7; }
 button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
 .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+  .checks-grid-3 { grid-template-columns: 1fr 1fr; }
+  .content { padding: 1.5rem 1rem; }
+}
 </style>
