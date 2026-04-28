@@ -19,7 +19,7 @@
       <div v-if="!loading && !tieneConfig" class="empty">
         <div class="empty-icon">🔔</div>
         <p class="empty-title">Configura tu perfil de alertas</p>
-        <p class="empty-desc">Agrega palabras clave, tipo de oportunidad o fuentes que te interesan para ver las oportunidades que calzan contigo.</p>
+        <p class="empty-desc">Completa tu perfil de postulante o agrega palabras clave para ver las oportunidades que calzan contigo.</p>
         <NuxtLink to="/dashboard/configuracion" class="btn-primary">Configurar ahora</NuxtLink>
       </div>
 
@@ -38,7 +38,6 @@
 
       <!-- Resultados -->
       <template v-else>
-        <!-- Resumen de filtros activos -->
         <div class="filtros-activos">
           <span v-for="f in filtrosActivos" :key="f" class="filtro-chip">{{ f }}</span>
         </div>
@@ -102,61 +101,100 @@ definePageMeta({ middleware: 'auth', layout: false })
 const supabase = useSupabaseClient()
 const PAGE_SIZE = 20
 
-const loading = ref(true)
+const loading    = ref(true)
 const loadingMas = ref(false)
-const items = ref<any[]>([])
-const total = ref<number | null>(null)
-const offset = ref(0)
-const lastVisit = ref('')
+const items      = ref<any[]>([])
+const total      = ref<number | null>(null)
+const offset     = ref(0)
+const lastVisit  = ref('')
 
 interface AlertConfig {
   palabras_clave: string[]
-  tipos: string[]
-  fuentes: string[]
-  monto_rangos: string[]
-  regiones: string[]
+  tipos:          string[]
+  fuentes:        string[]
+  monto_rangos:   string[]
 }
 
-const config = ref<AlertConfig | null>(null)
+interface PerfilPostulante {
+  tipo_persona:    string | null
+  estado_proyecto: string | null
+  foco_proyecto:   string[]
+  palabras_clave:  string[]
+  alcance_interes: string[]
+  monto_minimo:    string | null
+}
+
+const alertConfig = ref<AlertConfig | null>(null)
+const perfil      = ref<PerfilPostulante | null>(null)
+
+const MONTO_ORDER = ['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M']
 
 const tieneConfig = computed(() => {
-  if (!config.value) return false
-  const c = config.value
-  return c.palabras_clave.length > 0 || c.tipos.length > 0 || c.fuentes.length > 0 || c.monto_rangos.length > 0
+  const a = alertConfig.value
+  const p = perfil.value
+  const tieneAlerta = !!(a && (a.palabras_clave.length || a.tipos.length || a.fuentes.length || a.monto_rangos.length))
+  const tienePerfil = !!(p && (p.foco_proyecto.length || p.palabras_clave.length || p.tipo_persona || p.estado_proyecto || p.alcance_interes.length || p.monto_minimo))
+  return tieneAlerta || tienePerfil
 })
 
 const filtrosActivos = computed(() => {
-  if (!config.value) return []
   const labels: string[] = []
-  for (const k of config.value.palabras_clave) labels.push(`"${k}"`)
-  for (const t of config.value.tipos) labels.push(t === 'fondo' ? 'Fondos' : 'Licitaciones')
-  for (const f of config.value.fuentes) labels.push(fuenteLabel(f))
-  for (const m of config.value.monto_rangos) labels.push(montoLabel(m))
+  if (alertConfig.value) {
+    for (const k of alertConfig.value.palabras_clave) labels.push(`"${k}"`)
+    for (const t of alertConfig.value.tipos) labels.push(t === 'fondo' ? 'Fondos' : 'Licitaciones')
+    for (const f of alertConfig.value.fuentes) labels.push(fuenteLabel(f))
+    for (const m of alertConfig.value.monto_rangos) labels.push(montoLabel(m))
+  }
+  if (perfil.value) {
+    for (const f of perfil.value.foco_proyecto) labels.push(f)
+    for (const k of perfil.value.palabras_clave) labels.push(`"${k}"`)
+    for (const a of perfil.value.alcance_interes) labels.push(alcanceLabel(a))
+    if (perfil.value.monto_minimo) labels.push(`Desde ${montoLabel(perfil.value.monto_minimo)}`)
+    if (perfil.value.tipo_persona) labels.push(perfil.value.tipo_persona === 'natural' ? 'Persona Natural' : 'Persona Jurídica')
+  }
   return labels
 })
 
 function buildQuery() {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' }).eq('estado', 'abierto')
 
-  if (config.value?.palabras_clave.length) {
-    const terms = config.value.palabras_clave
+  // Keywords: merge both sources, OR among all terms
+  const allKeywords = [
+    ...(alertConfig.value?.palabras_clave ?? []),
+    ...(perfil.value?.palabras_clave ?? []),
+  ]
+  if (allKeywords.length) {
+    const terms = allKeywords
       .flatMap(k => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
       .join(',')
     q = q.or(terms)
   }
-  if (config.value?.tipos.length)        q = q.in('tipo', config.value.tipos)
-  if (config.value?.fuentes.length)      q = q.in('fuente', config.value.fuentes)
-  if (config.value?.monto_rangos.length) q = q.in('monto_rango', config.value.monto_rangos)
+
+  // Alert config filters
+  if (alertConfig.value?.tipos?.length)        q = q.in('tipo', alertConfig.value.tipos)
+  if (alertConfig.value?.fuentes?.length)      q = q.in('fuente', alertConfig.value.fuentes)
+
+  // Monto: alert_config specific ranges take priority over perfil floor
+  if (alertConfig.value?.monto_rangos?.length) {
+    q = q.in('monto_rango', alertConfig.value.monto_rangos)
+  } else if (perfil.value?.monto_minimo) {
+    const idx = MONTO_ORDER.indexOf(perfil.value.monto_minimo)
+    if (idx >= 0) q = q.in('monto_rango', MONTO_ORDER.slice(idx))
+  }
+
+  // Perfil filters
+  if (perfil.value?.foco_proyecto?.length)   q = (q as any).overlaps('foco', perfil.value.foco_proyecto)
+  if (perfil.value?.alcance_interes?.length) q = q.in('alcance', perfil.value.alcance_interes)
 
   return q.order('fecha_scrapeado', { ascending: false })
 }
 
 async function cargar() {
   loading.value = true
-  offset.value = 0
+  offset.value  = 0
   const { data, count } = await buildQuery().range(0, PAGE_SIZE - 1)
-  items.value = data ?? []
-  total.value = count ?? 0
+  items.value  = data ?? []
+  total.value  = count ?? 0
   offset.value = items.value.length
   loading.value = false
 }
@@ -164,7 +202,7 @@ async function cargar() {
 async function cargarMas() {
   loadingMas.value = true
   const { data } = await buildQuery().range(offset.value, offset.value + PAGE_SIZE - 1)
-  items.value = [...items.value, ...(data ?? [])]
+  items.value  = [...items.value, ...(data ?? [])]
   offset.value = items.value.length
   loadingMas.value = false
 }
@@ -174,18 +212,32 @@ onMounted(async () => {
   localStorage.setItem('fyl_last_alertas', new Date().toISOString())
 
   const { data: { user } } = await supabase.auth.getUser()
-  const { data } = await supabase
-    .from('alert_configs')
-    .select('palabras_clave, tipos, fuentes, monto_rangos, regiones')
-    .eq('user_id', user!.id)
-    .maybeSingle()
 
-  config.value = data ? {
-    palabras_clave: data.palabras_clave ?? [],
-    tipos:          data.tipos ?? [],
-    fuentes:        data.fuentes ?? [],
-    monto_rangos:   data.monto_rangos ?? [],
-    regiones:       data.regiones ?? [],
+  const [{ data: aData }, { data: pData }] = await Promise.all([
+    supabase.from('alert_configs')
+      .select('palabras_clave, tipos, fuentes, monto_rangos, regiones')
+      .eq('user_id', user!.id)
+      .maybeSingle(),
+    supabase.from('perfil_postulante')
+      .select('tipo_persona, estado_proyecto, foco_proyecto, palabras_clave, alcance_interes, monto_minimo')
+      .eq('user_id', user!.id)
+      .maybeSingle(),
+  ])
+
+  alertConfig.value = aData ? {
+    palabras_clave: aData.palabras_clave ?? [],
+    tipos:          aData.tipos ?? [],
+    fuentes:        aData.fuentes ?? [],
+    monto_rangos:   aData.monto_rangos ?? [],
+  } : null
+
+  perfil.value = pData ? {
+    tipo_persona:    pData.tipo_persona ?? null,
+    estado_proyecto: pData.estado_proyecto ?? null,
+    foco_proyecto:   pData.foco_proyecto ?? [],
+    palabras_clave:  pData.palabras_clave ?? [],
+    alcance_interes: pData.alcance_interes ?? [],
+    monto_minimo:    pData.monto_minimo ?? null,
   } : null
 
   if (tieneConfig.value) await cargar()
@@ -207,6 +259,9 @@ function estadoLabel(e: string) {
 function montoLabel(m: string) {
   const map: Record<string, string> = { hasta_1M: 'Hasta $1M', '1M_10M': '$1M – $10M', '10M_30M': '$10M – $30M', '30M_60M': '$30M – $60M', '60M_100M': '$60M – $100M', sobre_100M: 'Más de $100M' }
   return map[m] ?? m
+}
+function alcanceLabel(a: string) {
+  return { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }[a] ?? a
 }
 function formatFecha(f: string) {
   if (!f) return '—'
