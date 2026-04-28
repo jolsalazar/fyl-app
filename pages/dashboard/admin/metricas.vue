@@ -71,6 +71,81 @@
           </div>
         </div>
 
+        <!-- Email clicks -->
+        <div class="section">
+          <h2>Clicks desde email <span class="h2-sub">(últimos 30 días)</span></h2>
+
+          <div v-if="loadingClicks" class="loading">Cargando…</div>
+          <template v-else>
+
+            <!-- Resumen -->
+            <div class="email-stats">
+              <div class="email-stat">
+                <span class="email-num">{{ totalClicks }}</span>
+                <span class="email-label">Clicks totales</span>
+              </div>
+              <div class="email-stat">
+                <span class="email-num">{{ usuariosUnicos }}</span>
+                <span class="email-label">Usuarios únicos</span>
+              </div>
+              <div class="email-stat">
+                <span class="email-num">{{ fondosUnicos }}</span>
+                <span class="email-label">Fondos distintos</span>
+              </div>
+            </div>
+
+            <!-- Fondos más clickeados -->
+            <div v-if="topFondos.length" style="margin-top:1.25rem">
+              <p class="tabla-title">Fondos más clickeados</p>
+              <table class="tabla">
+                <thead>
+                  <tr>
+                    <th>Convocatoria</th>
+                    <th class="col-num">Clicks</th>
+                    <th class="col-num">Último click</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="f in topFondos" :key="f.convocatoria_id">
+                    <td>
+                      <NuxtLink :to="`/dashboard/oportunidades/${f.convocatoria_id}`" class="link-fondo">
+                        {{ f.titulo || f.convocatoria_id }}
+                      </NuxtLink>
+                    </td>
+                    <td class="col-num"><span class="badge-click">{{ f.clicks }}</span></td>
+                    <td class="col-num text-muted">{{ formatFecha(f.ultimo_click) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Usuarios más activos -->
+            <div v-if="topUsuarios.length" style="margin-top:1.5rem">
+              <p class="tabla-title">Usuarios más activos por email</p>
+              <table class="tabla">
+                <thead>
+                  <tr>
+                    <th>Email</th>
+                    <th class="col-num">Clicks</th>
+                    <th class="col-num">Último click</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="u in topUsuarios" :key="u.user_id">
+                    <td class="text-mono">{{ u.email }}</td>
+                    <td class="col-num"><span class="badge-click">{{ u.clicks }}</span></td>
+                    <td class="col-num text-muted">{{ formatFecha(u.ultimo_click) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div v-if="!topFondos.length && !topUsuarios.length" class="empty-clicks">
+              Aún no hay clicks registrados desde emails.
+            </div>
+          </template>
+        </div>
+
       </template>
     </div>
   </NuxtLayout>
@@ -135,14 +210,90 @@ function semanaLabel(iso: string) {
   return d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })
 }
 
+// ── Email clicks ──────────────────────────────────────────────────
+interface ClickFondo   { convocatoria_id: string; titulo: string; clicks: number; ultimo_click: string }
+interface ClickUsuario { user_id: string; email: string; clicks: number; ultimo_click: string }
+
+const loadingClicks = ref(true)
+const topFondos     = ref<ClickFondo[]>([])
+const topUsuarios   = ref<ClickUsuario[]>([])
+
+const totalClicks   = computed(() => topFondos.value.reduce((s, f) => s + f.clicks, 0))
+const usuariosUnicos = computed(() => topUsuarios.value.length)
+const fondosUnicos  = computed(() => topFondos.value.length)
+
+function formatFecha(f: string) {
+  if (!f) return '—'
+  return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 onMounted(async () => {
   const [{ data: u }, { data: s }] = await Promise.all([
     supabase.rpc('admin_get_users'),
     supabase.rpc('admin_registros_semana'),
   ])
-  users.value = u ?? []
+  users.value   = u ?? []
   semanas.value = (s ?? []).map((r: any) => ({ semana: r.semana, total: Number(r.total) }))
   loading.value = false
+
+  // Email clicks — últimos 30 días
+  const desde30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: clicks } = await supabase
+    .from('email_clicks')
+    .select('convocatoria_id, alerta_id, user_id, clicked_at')
+    .gte('clicked_at', desde30)
+    .order('clicked_at', { ascending: false })
+
+  if (clicks?.length) {
+    // Agrupar por convocatoria
+    const byFondo = new Map<string, { clicks: number; ultimo_click: string }>()
+    for (const c of clicks) {
+      const prev = byFondo.get(c.convocatoria_id)
+      if (!prev) byFondo.set(c.convocatoria_id, { clicks: 1, ultimo_click: c.clicked_at })
+      else { prev.clicks++; if (c.clicked_at > prev.ultimo_click) prev.ultimo_click = c.clicked_at }
+    }
+
+    // Obtener títulos de convocatorias
+    const ids = [...byFondo.keys()].filter(Boolean)
+    const { data: convs } = ids.length
+      ? await supabase.from('convocatorias').select('id, titulo').in('id', ids)
+      : { data: [] }
+    const tituloMap = Object.fromEntries((convs ?? []).map((c: any) => [c.id, c.titulo]))
+
+    topFondos.value = [...byFondo.entries()]
+      .map(([id, v]) => ({ convocatoria_id: id, titulo: tituloMap[id] ?? id, ...v }))
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 10)
+
+    // Agrupar por usuario
+    const byUser = new Map<string, { clicks: number; ultimo_click: string }>()
+    for (const c of clicks) {
+      if (!c.user_id) continue
+      const prev = byUser.get(c.user_id)
+      if (!prev) byUser.set(c.user_id, { clicks: 1, ultimo_click: c.clicked_at })
+      else { prev.clicks++; if (c.clicked_at > prev.ultimo_click) prev.ultimo_click = c.clicked_at }
+    }
+
+    // Obtener emails de usuarios
+    const uids = [...byUser.keys()]
+    const { data: perfiles } = uids.length
+      ? await supabase.from('profiles').select('id, email:id').in('id', uids)
+      : { data: [] }
+
+    // Obtener emails via auth (profiles no tiene email directo)
+    const { data: authUsers } = uids.length
+      ? await supabase.rpc('admin_get_users')
+      : { data: [] }
+    const emailMap = Object.fromEntries((authUsers ?? []).map((u: any) => [u.id, u.email]))
+
+    topUsuarios.value = [...byUser.entries()]
+      .map(([uid, v]) => ({ user_id: uid, email: emailMap[uid] ?? uid, ...v }))
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 10)
+  }
+
+  loadingClicks.value = false
 })
 </script>
 
@@ -214,4 +365,42 @@ h2 { font-size: 0.875rem; font-weight: 700; color: #0f172a; text-transform: uppe
   min-height: 0; transition: height 0.3s;
 }
 .bar-label { font-size: 0.65rem; color: #94a3b8; white-space: nowrap; }
+
+/* Email clicks */
+.email-stats {
+  display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.25rem;
+}
+.email-stat {
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.2rem; min-width: 110px;
+}
+.email-num   { font-size: 1.75rem; font-weight: 800; color: #0ea5e9; line-height: 1; }
+.email-label { font-size: 0.8rem; color: #64748b; font-weight: 500; }
+
+.tabla-title { font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.625rem; }
+.tabla {
+  width: 100%; border-collapse: collapse; font-size: 0.875rem;
+}
+.tabla th {
+  text-align: left; font-size: 0.75rem; font-weight: 600; color: #94a3b8;
+  padding: 0.5rem 0.75rem; border-bottom: 1px solid #f1f5f9; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.tabla td {
+  padding: 0.625rem 0.75rem; border-bottom: 1px solid #f8fafc; color: #374151; vertical-align: middle;
+}
+.tabla tr:last-child td { border-bottom: none; }
+.tabla tr:hover td { background: #f8fafc; }
+.col-num   { text-align: right; white-space: nowrap; }
+.text-muted { color: #94a3b8; font-size: 0.8125rem; }
+.text-mono  { font-size: 0.8125rem; color: #475569; }
+.link-fondo { color: #0f172a; text-decoration: none; font-weight: 500; }
+.link-fondo:hover { color: #0ea5e9; }
+.badge-click {
+  display: inline-block; background: #f0f9ff; color: #0369a1;
+  font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.5rem;
+  border-radius: 999px; border: 1px solid #bae6fd;
+}
+.empty-clicks {
+  padding: 2rem; text-align: center; color: #94a3b8; font-size: 0.875rem;
+}
 </style>
