@@ -8,7 +8,7 @@
             <span class="pro-badge">Pro</span>
           </h1>
           <p class="subtitle">
-            <template v-if="!loadingPlan && planUsuario === 'free'">Función disponible en el Plan Pro</template>
+            <template v-if="plan === 'free' || plan === 'starter'">Función disponible en el Plan Pro</template>
             <template v-else-if="!loading && resultados.length">{{ resultados.length }} fondos analizados · ordenados por compatibilidad</template>
             <template v-else-if="!loading">Analizando tu perfil…</template>
             <template v-else>Cargando…</template>
@@ -17,12 +17,12 @@
       </div>
 
       <!-- ── UPGRADE GATE (plan free) ──────────────────────────── -->
-      <template v-if="!loadingPlan && planUsuario === 'free'">
+      <template v-if="plan === 'free' || plan === 'starter'">
         <div class="upgrade-wrap">
 
           <div class="upgrade-card">
             <div class="upgrade-top">
-              <span class="upgrade-plan-actual">Estás en el Plan Gratuito</span>
+              <span class="upgrade-plan-actual">Estás en el Plan {{ plan === 'starter' ? 'Starter' : 'Gratuito' }}</span>
               <div class="upgrade-icon-wrap">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </div>
@@ -123,7 +123,7 @@
       </template>
 
       <!-- ── CONTENIDO PRO ──────────────────────────────────────── -->
-      <template v-else-if="!loadingPlan">
+      <template v-else-if="plan === 'pro' || plan === 'agencia'">
 
       <!-- Sin perfil suficiente -->
       <div v-if="!loading && !tienePerfil" class="empty-state">
@@ -231,14 +231,15 @@
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
+const { plan, load: loadPlan } = usePlan()
 
 // ── Tipos ─────────────────────────────────────────────────────────
 interface Razon { tipo: 'positivo' | 'neutro' | 'negativo'; texto: string }
 interface Resultado { conv: any; score: number; nivel: 'alto' | 'medio' | 'bajo'; razones: Razon[] }
 
 // ── Estado ────────────────────────────────────────────────────────
-const loadingPlan  = ref(true)
-const planUsuario  = ref('free')
+const loadingPlan  = computed(() => plan.value === 'free' && !planUsuario.value)
+const planUsuario  = plan // alias para no romper el template
 const loading      = ref(true)
 const resultados   = ref<Resultado[]>([])
 const tienePerfil  = ref(false)
@@ -393,16 +394,9 @@ function esUrgente(f: string) {
 onMounted(async () => {
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Verificar plan antes de cargar cualquier otra cosa
-  const { data: profileData } = await supabase
-    .from('profiles')
-    .select('plan')
-    .eq('id', user!.id)
-    .single()
-  planUsuario.value  = profileData?.plan ?? 'free'
-  loadingPlan.value  = false
+  await loadPlan()
 
-  if (planUsuario.value === 'free') return
+  if (plan.value === 'free' || plan.value === 'starter') return
 
   const [{ data: perfilData }, { data: alertasData }] = await Promise.all([
     supabase.from('perfil_postulante')

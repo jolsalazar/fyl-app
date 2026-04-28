@@ -108,9 +108,24 @@
           <div class="panel-left">
             <div class="panel-header">
               <span class="panel-title">Mis alertas</span>
-              <button class="btn-new" @click="nuevaAlerta" title="Nueva alerta">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <button
+                class="btn-new"
+                @click="intentarNuevaAlerta"
+                :title="canAddAlerta(alertas.length) ? 'Nueva alerta' : `Límite del plan ${label}`"
+                :class="{ 'btn-new-locked': !canAddAlerta(alertas.length) }"
+              >
+                <svg v-if="canAddAlerta(alertas.length)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <svg v-else width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
               </button>
+            </div>
+
+            <!-- Banner límite de plan -->
+            <div v-if="!canAddAlerta(alertas.length)" class="plan-limit-banner">
+              <div class="plan-limit-text">
+                <strong>Límite del plan {{ label }}</strong>
+                <span>{{ maxAlertas === 1 ? 'Solo 1 alerta' : `Hasta ${maxAlertas} alertas` }} en tu plan actual.</span>
+              </div>
+              <NuxtLink to="/planes" class="plan-limit-cta">Mejorar plan</NuxtLink>
             </div>
 
             <div class="alertas-nav">
@@ -232,6 +247,9 @@ definePageMeta({ middleware: 'auth', layout: false })
 const supabase  = useSupabaseClient()
 const PAGE_SIZE = 20
 
+// ── Plan ──────────────────────────────────────────────────────────
+const { plan, label, canAddAlerta, maxAlertas, load: loadPlan } = usePlan()
+
 // ── Constantes ───────────────────────────────────────────────────
 const FUENTES = [
   { value: 'corfo',          label: 'CORFO' },
@@ -313,6 +331,8 @@ onMounted(async () => {
 
   const { data: { user } } = await supabase.auth.getUser()
 
+  await loadPlan()
+
   const [{ data: alertasData }, { data: perfilData }] = await Promise.all([
     supabase.from('alert_configs').select('*').eq('user_id', user!.id).order('created_at', { ascending: true }),
     supabase.from('perfil_postulante').select('foco_proyecto, palabras_clave').eq('user_id', user!.id).maybeSingle(),
@@ -328,6 +348,11 @@ onMounted(async () => {
 })
 
 // ── Alert CRUD ───────────────────────────────────────────────────
+function intentarNuevaAlerta() {
+  if (!canAddAlerta(alertas.value.length)) return
+  nuevaAlerta()
+}
+
 function nuevaAlerta() {
   editingAlerta.value = null
   form.value = { nombre: '', tipos: [], fuentes: [], alcance_interes: [], monto_minimo: '', monto_rangos: [] }
@@ -521,6 +546,23 @@ function esUrgente(f: string) {
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; height: 100%; }
+
+/* Plan limit banner */
+.plan-limit-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.75rem 1.25rem; background: #fefce8; border-bottom: 1px solid #fde68a;
+  flex-shrink: 0;
+}
+.plan-limit-text { display: flex; flex-direction: column; gap: 0.1rem; }
+.plan-limit-text strong { font-size: 0.8rem; font-weight: 700; color: #92400e; }
+.plan-limit-text span  { font-size: 0.75rem; color: #a16207; }
+.plan-limit-cta {
+  font-size: 0.75rem; font-weight: 700; color: white; background: #f59e0b;
+  padding: 0.3rem 0.75rem; border-radius: 7px; text-decoration: none; white-space: nowrap;
+  transition: background 0.15s; flex-shrink: 0;
+}
+.plan-limit-cta:hover { background: #d97706; }
+.btn-new-locked { background: #94a3b8 !important; cursor: not-allowed; }
 
 /* ── Form view ──────────────────────────────────────────────────── */
 .form-info {

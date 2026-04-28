@@ -40,7 +40,7 @@ async function runDigest(env: Env) {
 
   // 1. Usuarios Pro / Agencia
   const profiles = await sbGet<{ id: string }[]>(
-    env, '/rest/v1/profiles?plan=in.(pro,agencia)&select=id'
+    env, '/rest/v1/profiles?plan=in.(starter,pro,agencia)&select=id'
   )
   if (!profiles?.length) return { ok: true, message: 'No pro users' }
 
