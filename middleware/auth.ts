@@ -5,4 +5,17 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!session) {
     return navigateTo(`/login?next=${encodeURIComponent(to.fullPath)}`)
   }
+
+  // Redirigir a onboarding si no lo ha completado (excepto si ya está ahí)
+  if (to.path !== '/onboarding') {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarding_done')
+      .eq('id', session.user.id)
+      .single()
+
+    if (profile && !profile.onboarding_done) {
+      return navigateTo('/onboarding')
+    }
+  }
 })
