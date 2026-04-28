@@ -288,8 +288,9 @@ const offset         = ref(0)
 const lastVisit      = ref('')
 
 // Perfil del usuario (foco y keywords vienen del perfil, no de las alertas)
-const perfilFoco     = ref<string[]>([])
-const perfilKeywords = ref<string[]>([])
+const perfilFoco      = ref<string[]>([])
+const perfilKeywords  = ref<string[]>([])
+const idsPostulados   = ref<string[]>([])
 
 // Form
 const editingAlerta = ref<any>(null)
@@ -333,14 +334,16 @@ onMounted(async () => {
 
   await loadPlan()
 
-  const [{ data: alertasData }, { data: perfilData }] = await Promise.all([
+  const [{ data: alertasData }, { data: perfilData }, { data: postulacionesData }] = await Promise.all([
     supabase.from('alert_configs').select('*').eq('user_id', user!.id).order('created_at', { ascending: true }),
     supabase.from('perfil_postulante').select('foco_proyecto, palabras_clave').eq('user_id', user!.id).maybeSingle(),
+    supabase.from('postulaciones').select('convocatoria_id'),
   ])
 
-  alertas.value    = alertasData ?? []
-  perfilFoco.value = perfilData?.foco_proyecto ?? []
+  alertas.value        = alertasData ?? []
+  perfilFoco.value     = perfilData?.foco_proyecto ?? []
   perfilKeywords.value = perfilData?.palabras_clave ?? []
+  idsPostulados.value  = (postulacionesData ?? []).map(p => p.convocatoria_id)
   loading.value    = false
 
   const primera = alertas.value.find(a => a.activo)
@@ -481,6 +484,10 @@ function buildQuery(alerta: any) {
     const idx = MONTO_ORDER.indexOf(alerta.monto_minimo)
     if (idx >= 0) q = q.in('monto_rango', MONTO_ORDER.slice(idx))
   }
+
+  // Excluir fondos donde ya se postuló
+  if (idsPostulados.value.length)
+    q = q.not('id', 'in', `(${idsPostulados.value.join(',')})`)
 
   return q.order('fecha_scrapeado', { ascending: false })
 }
