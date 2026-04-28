@@ -27,6 +27,11 @@
           Mis alertas
           <span v-if="alertasNuevas > 0" class="nav-badge">{{ alertasNuevas > 99 ? '99+' : alertasNuevas }}</span>
         </NuxtLink>
+        <NuxtLink to="/dashboard/match" class="nav-item nav-match" active-class="active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Mi Match
+          <span class="nav-pro">Pro</span>
+        </NuxtLink>
         <NuxtLink to="/dashboard/mi-perfil" class="nav-item" active-class="active">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           Mi Perfil
@@ -231,6 +236,23 @@ async function logout() {
 .nav-item.active svg {
   color: #38bdf8;
 }
+
+.nav-pro {
+  margin-left: auto;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.nav-match { color: #94a3b8; }
+.nav-match.active { color: #a78bfa; }
+.nav-match.active svg { color: #a78bfa; }
+.nav-match:hover { color: #c4b5fd; }
 
 .nav-badge {
   margin-left: auto;
