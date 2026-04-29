@@ -8,7 +8,12 @@
           <h1>Oportunidades</h1>
           <p class="subtitle">{{ total !== null ? `${total} oportunidades encontradas` : 'Cargando...' }}</p>
         </div>
-        <button class="btn-config" @click="exportarCSV" :disabled="exportando">
+        <NuxtLink v-if="!canExport" to="/planes" class="btn-config btn-export-locked" title="Disponible en Plan Pro">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Exportar CSV
+          <span class="btn-pro-tag">Pro</span>
+        </NuxtLink>
+        <button v-else class="btn-config" @click="exportarCSV" :disabled="exportando">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           {{ exportando ? 'Exportando…' : 'Exportar CSV' }}
         </button>
@@ -154,6 +159,8 @@
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
+const { plan, canUseMatch, load: loadPlan } = usePlan()
+const canExport = computed(() => plan.value === 'pro' || plan.value === 'agencia')
 
 const PAGE_SIZE = 20
 const guardadosSet = ref<Set<string>>(new Set())
@@ -303,7 +310,10 @@ async function toggleGuardado(id: string) {
 onMounted(async () => {
   localStorage.setItem('fyl_last_visit', new Date().toISOString())
 
-  const { data: guardados } = await supabase.from('guardados').select('convocatoria_id')
+  const [, { data: guardados }] = await Promise.all([
+    loadPlan(),
+    supabase.from('guardados').select('convocatoria_id'),
+  ])
   guardadosSet.value = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
 
   cargar()
@@ -343,6 +353,13 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   font-family: 'Inter', sans-serif;
 }
 .btn-config:hover { border-color: #0ea5e9; color: #0ea5e9; }
+.btn-export-locked { color: #94a3b8; cursor: pointer; }
+.btn-export-locked:hover { border-color: #6366f1; color: #6366f1; }
+.btn-pro-tag {
+  font-size: 0.55rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;
+  padding: 0.1rem 0.35rem; border-radius: 4px; margin-left: 0.1rem;
+}
 
 /* Filtros */
 .filtros {
