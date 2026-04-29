@@ -90,7 +90,10 @@
                 </div>
                 <div v-if="item.perfil_nivel_desarrollo" class="perfil-item">
                   <span class="perfil-label">Nivel de desarrollo</span>
-                  <span class="perfil-valor">{{ item.perfil_nivel_desarrollo }}</span>
+                  <div class="perfil-tags" v-if="parsedNivelDesarrollo(item.perfil_nivel_desarrollo).length > 1">
+                    <span v-for="n in parsedNivelDesarrollo(item.perfil_nivel_desarrollo)" :key="n" class="foco-tag">{{ n }}</span>
+                  </div>
+                  <span v-else class="perfil-valor">{{ parsedNivelDesarrollo(item.perfil_nivel_desarrollo)[0] ?? item.perfil_nivel_desarrollo }}</span>
                 </div>
                 <div v-if="item.perfil_limite_edad !== null && item.perfil_limite_edad !== undefined" class="perfil-item">
                   <span class="perfil-label">Límite de edad</span>
@@ -244,6 +247,15 @@ async function togglePostulado() {
     await supabase.from('postulaciones').insert({ convocatoria_id: id })
     postulado.value = true
   }
+}
+
+function parsedNivelDesarrollo(val: string): string[] {
+  if (!val) return []
+  try {
+    const parsed = JSON.parse(val)
+    if (Array.isArray(parsed)) return parsed.map(String)
+  } catch {}
+  return [val]
 }
 
 function fuenteLabel(f: string) {
