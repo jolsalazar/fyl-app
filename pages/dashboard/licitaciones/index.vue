@@ -5,8 +5,8 @@
       <!-- Header -->
       <div class="header">
         <div>
-          <h1>Fondos</h1>
-          <p class="subtitle">{{ total !== null ? `${total} fondos encontrados` : 'Cargando...' }}</p>
+          <h1>Licitaciones</h1>
+          <p class="subtitle">{{ total !== null ? `${total} licitaciones encontradas` : 'Cargando...' }}</p>
         </div>
         <NuxtLink v-if="!canExport" to="/planes" class="btn-config btn-export-locked" title="Disponible en Plan Pro">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -41,15 +41,6 @@
           <option value="">Todos los tipos</option>
           <option value="fondo">Fondo</option>
           <option value="licitacion">Licitación</option>
-        </select>
-
-        <select v-model="filtroFuente" @change="cargar" class="select">
-          <option value="">Todas las fuentes</option>
-          <option value="corfo">CORFO</option>
-          <option value="sercotec">SERCOTEC</option>
-          <option value="anid">ANID</option>
-          <option value="mercadopublico">Mercado Público</option>
-          <option value="fondos_gob">Fondos.gob.cl</option>
         </select>
 
         <select v-model="filtroMonto" @change="cargar" class="select">
@@ -159,9 +150,10 @@
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
-const { plan, canUseMatch, load: loadPlan } = usePlan()
+const { plan, load: loadPlan } = usePlan()
 const canExport = computed(() => plan.value === 'pro' || plan.value === 'agencia')
 
+const FUENTE = 'mercadopublico'
 const PAGE_SIZE = 20
 const guardadosSet = ref<Set<string>>(new Set())
 
@@ -174,21 +166,20 @@ const offset = ref(0)
 const busqueda = ref('')
 const filtroEstado = ref('abierto')
 const filtroTipo = ref('')
-const filtroFuente = ref('')
 const filtroMonto = ref('')
 const orden = ref<'cierre' | 'reciente'>('cierre')
 
 let busquedaTimer: ReturnType<typeof setTimeout>
 
 const hayFiltros = computed(() =>
-  busqueda.value || filtroEstado.value !== 'abierto' || filtroTipo.value || filtroFuente.value || filtroMonto.value
+  busqueda.value || filtroEstado.value !== 'abierto' || filtroTipo.value || filtroMonto.value
 )
 
 function buildQuery() {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' })
+  q = q.eq('fuente', FUENTE)
   if (filtroEstado.value) q = q.eq('estado', filtroEstado.value)
   if (filtroTipo.value)   q = q.eq('tipo', filtroTipo.value)
-  if (filtroFuente.value) q = q.eq('fuente', filtroFuente.value)
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
   if (busqueda.value)     q = q.ilike('titulo', `%${busqueda.value}%`)
   if (orden.value === 'cierre') {
@@ -231,7 +222,6 @@ function limpiarFiltros() {
   busqueda.value = ''
   filtroEstado.value = 'abierto'
   filtroTipo.value = ''
-  filtroFuente.value = ''
   filtroMonto.value = ''
   cargar()
 }
@@ -291,7 +281,7 @@ async function exportarCSV() {
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url; a.download = `oportunidades-${new Date().toISOString().split('T')[0]}.csv`
+  a.href = url; a.download = `licitaciones-${new Date().toISOString().split('T')[0]}.csv`
   a.click(); URL.revokeObjectURL(url)
   exportando.value = false
 }
@@ -308,8 +298,6 @@ async function toggleGuardado(id: string) {
 }
 
 onMounted(async () => {
-  localStorage.setItem('fyl_last_visit', new Date().toISOString())
-
   const [, { data: guardados }] = await Promise.all([
     loadPlan(),
     supabase.from('guardados').select('convocatoria_id'),

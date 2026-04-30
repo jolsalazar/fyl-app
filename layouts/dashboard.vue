@@ -10,8 +10,12 @@
       <nav class="nav">
         <NuxtLink to="/dashboard" class="nav-item" exact-active-class="active">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Oportunidades
+          Fondos
           <span v-if="nuevas > 0" class="nav-badge">{{ nuevas > 99 ? '99+' : nuevas }}</span>
+        </NuxtLink>
+        <NuxtLink to="/dashboard/licitaciones" class="nav-item" active-class="active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Licitaciones
         </NuxtLink>
         <NuxtLink to="/dashboard/guardados" class="nav-item" active-class="active">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
