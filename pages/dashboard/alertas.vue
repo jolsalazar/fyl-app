@@ -120,10 +120,15 @@
             </div>
 
             <!-- Banner límite de plan -->
-            <div v-if="!canAddAlerta(alertas.length)" class="plan-limit-banner">
+            <div v-if="hayPausadasPorPlan || !canAddAlerta(alertas.length)" class="plan-limit-banner">
               <div class="plan-limit-text">
-                <strong>Límite del plan {{ label }}</strong>
-                <span>{{ maxAlertas === 1 ? 'Solo 1 alerta' : `Hasta ${maxAlertas} alertas` }} en tu plan actual.</span>
+                <strong>Plan {{ label }}</strong>
+                <span v-if="hayPausadasPorPlan">
+                  Máximo {{ maxAlertas === 1 ? '1 alerta activa' : `${maxAlertas} alertas activas` }} · desactiva una para activar otra.
+                </span>
+                <span v-else>
+                  {{ maxAlertas === 1 ? 'Solo 1 alerta' : `Hasta ${maxAlertas} alertas` }} en tu plan actual.
+                </span>
               </div>
               <NuxtLink to="/planes" class="plan-limit-cta">Mejorar plan</NuxtLink>
             </div>
@@ -141,7 +146,12 @@
                   <span class="alerta-summary">{{ resumenAlerta(alerta) }}</span>
                 </div>
                 <div class="alerta-row-actions">
-                  <button class="pill" :class="{ active: alerta.activo }" @click.stop="toggleAlerta(alerta)">
+                  <button
+                    class="pill"
+                    :class="{ active: alerta.activo, locked: !alerta.activo && !puedeActivar }"
+                    :title="!alerta.activo && !puedeActivar ? `Plan ${label}: desactiva otra alerta primero` : ''"
+                    @click.stop="toggleAlerta(alerta)"
+                  >
                     {{ alerta.activo ? 'activa' : 'inactiva' }}
                   </button>
                   <button class="icon-btn" @click.stop="editarAlerta(alerta)" title="Editar">
@@ -308,7 +318,10 @@ const form = ref({
 })
 
 // ── Computed ─────────────────────────────────────────────────────
-const selectedAlerta = computed(() => alertas.value.find(a => a.id === selectedId.value) ?? null)
+const selectedAlerta   = computed(() => alertas.value.find(a => a.id === selectedId.value) ?? null)
+const alertasActivas   = computed(() => alertas.value.filter(a => a.activo))
+const puedeActivar     = computed(() => maxAlertas.value === -1 || alertasActivas.value.length < maxAlertas.value)
+const hayPausadasPorPlan = computed(() => maxAlertas.value !== -1 && alertas.value.length > maxAlertas.value)
 
 const criteriaChips = computed(() => {
   const a = selectedAlerta.value
@@ -344,6 +357,20 @@ onMounted(async () => {
   perfilFoco.value     = perfilData?.foco_proyecto ?? []
   perfilKeywords.value = perfilData?.palabras_clave ?? []
   idsPostulados.value  = (postulacionesData ?? []).map(p => p.convocatoria_id)
+
+  // Auto-pausar alertas activas que excedan el límite del plan.
+  // Se mantiene la más antigua activa; el resto se pausa en BD.
+  if (maxAlertas.value !== -1) {
+    const activos = alertas.value.filter(a => a.activo)
+    if (activos.length > maxAlertas.value) {
+      const aPausar = activos.slice(maxAlertas.value)
+      await Promise.all(aPausar.map(a =>
+        supabase.from('alert_configs').update({ activo: false }).eq('id', a.id)
+      ))
+      aPausar.forEach(a => { a.activo = false })
+    }
+  }
+
   loading.value    = false
 
   const primera = alertas.value.find(a => a.activo)
@@ -445,6 +472,7 @@ async function borrarAlerta(id: string) {
 
 async function toggleAlerta(alerta: any) {
   const nuevoEstado = !alerta.activo
+  if (nuevoEstado && !puedeActivar.value) return
   await supabase.from('alert_configs').update({ activo: nuevoEstado }).eq('id', alerta.id)
   alerta.activo = nuevoEstado
   if (selectedId.value === alerta.id && !nuevoEstado) {
@@ -685,6 +713,7 @@ function esUrgente(f: string) {
   font-family: inherit; text-transform: uppercase; letter-spacing: 0.04em;
 }
 .pill.active { background: #f0fdf4; color: #16a34a; }
+.pill.locked { opacity: 0.45; cursor: not-allowed; }
 .icon-btn {
   width: 24px; height: 24px; background: none; border: none; cursor: pointer;
   color: #94a3b8; border-radius: 5px; display: flex; align-items: center; justify-content: center;
