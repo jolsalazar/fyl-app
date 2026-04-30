@@ -8,8 +8,27 @@
         </div>
       </div>
 
-      <div v-if="loading" class="empty">
-        <div class="spinner"></div>
+      <div v-if="loading" class="timeline">
+        <div v-for="g in 2" :key="g" class="grupo">
+          <div class="grupo-header">
+            <div class="sk-block" style="width:100px;height:24px;border-radius:999px"></div>
+            <div class="sk-block" style="width:70px;height:13px"></div>
+          </div>
+          <div class="grupo-lista">
+            <div v-for="i in 3" :key="i" class="item-row sk-card" style="pointer-events:none">
+              <div class="sk-block" style="width:36px;height:50px;flex-shrink:0;border-radius:8px"></div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:0.45rem">
+                <div style="display:flex;gap:0.4rem">
+                  <div class="sk-block" style="width:56px;height:13px"></div>
+                  <div class="sk-block" style="width:56px;height:13px"></div>
+                </div>
+                <div class="sk-block" style="height:15px;width:75%"></div>
+                <div class="sk-block" style="height:12px;width:45%"></div>
+              </div>
+              <div class="sk-block" style="width:38px;height:44px;flex-shrink:0;border-radius:8px"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-else-if="grupos.length === 0" class="empty">
@@ -200,6 +219,9 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 
 .spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes shimmer { from { background-position: -600px 0; } to { background-position: 600px 0; } }
+.sk-block { background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%); background-size: 1200px 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
 
 @media (max-width: 640px) {
   .content { padding: 1.5rem 1rem; }

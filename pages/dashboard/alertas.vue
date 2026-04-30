@@ -90,8 +90,42 @@
       <!-- ── VISTA: LISTA + RESULTADOS ─────────────────────────── -->
       <template v-else>
 
-        <!-- Loading inicial -->
-        <div v-if="loading" class="empty"><div class="spinner"></div></div>
+        <!-- Loading skeleton -->
+        <div v-if="loading" class="split">
+          <div class="panel-left">
+            <div class="panel-header">
+              <div class="sk-block" style="width:80px;height:13px;border-radius:6px"></div>
+            </div>
+            <div class="alertas-nav">
+              <div v-for="i in 4" :key="i" class="alerta-row" style="pointer-events:none">
+                <div class="sk-block" style="height:14px;width:72%;margin-bottom:0.5rem;border-radius:6px"></div>
+                <div class="sk-block" style="height:11px;width:88%;margin-bottom:0.6rem;border-radius:6px"></div>
+                <div class="sk-block" style="height:20px;width:52px;border-radius:999px"></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-right">
+            <div class="sk-block" style="height:20px;width:200px;margin-bottom:0.4rem;border-radius:6px"></div>
+            <div class="sk-block" style="height:13px;width:130px;margin-bottom:1.5rem;border-radius:6px"></div>
+            <div style="display:flex;flex-direction:column;gap:0.75rem">
+              <div v-for="i in 3" :key="i" class="card sk-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+                  <div style="display:flex;gap:0.4rem">
+                    <div class="sk-block sk-tag"></div>
+                    <div class="sk-block sk-tag"></div>
+                  </div>
+                  <div class="sk-block sk-badge"></div>
+                </div>
+                <div class="sk-block sk-title"></div>
+                <div class="sk-block sk-line"></div>
+                <div style="display:flex;gap:0.75rem;margin-top:0.875rem">
+                  <div class="sk-block sk-pill"></div>
+                  <div class="sk-block sk-pill"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- Sin alertas -->
         <div v-else-if="alertas.length === 0" class="empty-full">
@@ -791,6 +825,15 @@ function esUrgente(f: string) {
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+@keyframes shimmer { from { background-position: -600px 0; } to { background-position: 600px 0; } }
+.sk-card { pointer-events: none; }
+.sk-block { background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%); background-size: 1200px 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
+.sk-tag { width: 58px; height: 14px; }
+.sk-badge { width: 52px; height: 20px; border-radius: 999px; }
+.sk-title { height: 18px; width: 70%; margin-bottom: 0.6rem; }
+.sk-line { height: 13px; }
+.sk-pill { width: 80px; height: 13px; border-radius: 999px; }
 
 @media (max-width: 900px) {
   .split { grid-template-columns: 1fr; height: auto; }

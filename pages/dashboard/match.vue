@@ -135,8 +135,29 @@
         <NuxtLink to="/dashboard/mi-perfil" class="btn-primary">Completar mi perfil</NuxtLink>
       </div>
 
-      <!-- Loading -->
-      <div v-else-if="loading" class="empty-state"><div class="spinner"></div></div>
+      <!-- Loading skeleton -->
+      <div v-else-if="loading" class="lista">
+        <div v-for="i in 4" :key="i" class="match-card sk-card">
+          <div class="sk-block sk-match-badge"></div>
+          <div class="card-body">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+              <div style="display:flex;gap:0.4rem">
+                <div class="sk-block sk-tag"></div>
+                <div class="sk-block sk-tag"></div>
+              </div>
+              <div class="sk-block sk-badge"></div>
+            </div>
+            <div class="sk-block sk-title"></div>
+            <div class="sk-block sk-line"></div>
+            <div class="sk-block sk-line sk-short"></div>
+            <div style="display:flex;gap:0.75rem;margin-top:1rem">
+              <div class="sk-block sk-pill"></div>
+              <div class="sk-block sk-pill"></div>
+              <div class="sk-block sk-pill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Sin resultados -->
       <div v-else-if="resultados.length === 0" class="empty-state">
@@ -575,6 +596,17 @@ h3 { font-size: 0.9375rem; font-weight: 600; color: #0f172a; margin-bottom: 0.3r
 
 .spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes shimmer { from { background-position: -600px 0; } to { background-position: 600px 0; } }
+.sk-card { pointer-events: none; }
+.sk-block { background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%); background-size: 1200px 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
+.sk-match-badge { width: 72px; height: 72px; border-radius: 12px; flex-shrink: 0; }
+.sk-tag { width: 58px; height: 14px; }
+.sk-badge { width: 52px; height: 20px; border-radius: 999px; }
+.sk-title { height: 18px; width: 70%; margin-bottom: 0.6rem; }
+.sk-line { height: 13px; margin-bottom: 0.4rem; }
+.sk-short { width: 50%; }
+.sk-pill { width: 80px; height: 13px; border-radius: 999px; }
 
 /* ── Upgrade gate ────────────────────────────────────────────────── */
 .upgrade-wrap { display: flex; flex-direction: column; gap: 2rem; max-width: 680px; }
