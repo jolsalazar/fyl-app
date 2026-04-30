@@ -12,11 +12,6 @@
           <h1>{{ editingAlerta ? `Editar "${editingAlerta.nombre || 'Alerta'}"` : 'Nueva alerta' }}</h1>
           <p class="form-desc">Define los criterios para esta alerta. Te notificaremos cuando aparezcan oportunidades que coincidan.</p>
 
-          <div class="form-info" v-if="perfilFoco.length || perfilKeywords.length">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Esta alerta usa el foco y palabras clave de tu perfil como base.
-            <NuxtLink to="/dashboard/mi-perfil">Editar perfil</NuxtLink>
-          </div>
 
           <div class="form-grid">
             <!-- Nombre -->
@@ -74,6 +69,48 @@
                 <option v-for="m in MONTOS" :key="m.value" :value="m.value">{{ m.label }}</option>
               </select>
             </section>
+
+            <!-- Filtros avanzados (colapsable) -->
+            <div class="avanzados-wrap full-width">
+              <button type="button" class="avanzados-toggle" @click="showAvanzados = !showAvanzados">
+                <span>Filtros avanzados</span>
+                <span v-if="form.foco.length || form.palabras_clave.length" class="avanzados-badge">
+                  {{ form.foco.length + form.palabras_clave.length }}
+                </span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" :style="{ transform: showAvanzados ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div v-show="showAvanzados" class="avanzados-content">
+                <section class="card">
+                  <div class="card-header">
+                    <h2>Foco del proyecto</h2>
+                    <p class="hint">Filtra solo oportunidades que coincidan con estos sectores. Vacío = todos.</p>
+                  </div>
+                  <div class="checks-grid-3">
+                    <label v-for="f in FOCOS" :key="f" class="check-item">
+                      <input type="checkbox" :value="f" v-model="form.foco" /><span class="check-box"></span>{{ f }}
+                    </label>
+                  </div>
+                </section>
+                <section class="card">
+                  <div class="card-header">
+                    <h2>Palabras clave</h2>
+                    <p class="hint">Busca estas palabras en título y descripción. Presiona Enter para agregar.</p>
+                  </div>
+                  <div class="tags-input">
+                    <span v-for="(tag, i) in form.palabras_clave" :key="i" class="tag">
+                      {{ tag }}<button type="button" @click="removeTag(i)">×</button>
+                    </span>
+                    <input
+                      v-model="tagInput"
+                      type="text"
+                      placeholder="ej: reciclaje, software, exportación…"
+                      @keydown.enter.prevent="addTag"
+                      @keydown.comma.prevent="addTag"
+                    />
+                  </div>
+                </section>
+              </div>
+            </div>
           </div>
 
           <div class="form-actions">
@@ -175,10 +212,13 @@
                 :class="{ selected: selectedId === alerta.id, inactive: !alerta.activo }"
                 @click="selectAlerta(alerta.id)"
               >
-                <div class="alerta-row-main">
+                <div class="alerta-row-header">
                   <span class="alerta-name">{{ alerta.nombre || 'Sin nombre' }}</span>
-                  <span class="alerta-summary">{{ resumenAlerta(alerta) }}</span>
+                  <span v-if="alertaCounts[alerta.id] !== undefined" class="count-badge">
+                    {{ alertaCounts[alerta.id] }}
+                  </span>
                 </div>
+                <span class="alerta-summary">{{ resumenAlerta(alerta) }}</span>
                 <div class="alerta-row-actions">
                   <button
                     class="pill"
@@ -209,14 +249,21 @@
             </template>
             <template v-else :key="selectedId">
               <div class="results-head">
-                <div>
-                  <h2 class="results-title">{{ selectedAlerta?.nombre }}</h2>
-                  <p class="results-subtitle">
-                    <template v-if="loadingResults">Cargando…</template>
-                    <template v-else>{{ resultsTotal ?? 0 }} oportunidades coinciden</template>
-                  </p>
+                <h2 class="results-title">{{ selectedAlerta?.nombre }}</h2>
+                <div class="results-meta">
+                  <template v-if="loadingResults">
+                    <span class="results-count loading">Cargando…</span>
+                  </template>
+                  <template v-else>
+                    <span class="results-count">{{ resultsTotal ?? 0 }} oportunidad{{ (resultsTotal ?? 0) !== 1 ? 'es' : '' }}</span>
+                    <span v-if="selectedAlerta?.last_notified_at" class="notif-dot">·</span>
+                    <span v-if="selectedAlerta?.last_notified_at" class="notif-time">
+                      Notificada {{ timeAgo(selectedAlerta.last_notified_at) }}
+                    </span>
+                    <span v-else class="notif-time">Sin notificaciones aún</span>
+                  </template>
                 </div>
-                <div class="chips-row">
+                <div v-if="criteriaChips.length" class="chips-row">
                   <span v-for="c in criteriaChips" :key="c" class="filtro-chip">{{ c }}</span>
                 </div>
               </div>
@@ -310,6 +357,12 @@ const ALCANCES = [
   { value: 'nacional',      label: 'Nacional' },
   { value: 'internacional', label: 'Internacional' },
 ]
+const FOCOS = [
+  'Agroindustrias', 'Banca y Fintech', 'Climatech', 'Descarbonización',
+  'Digitalización', 'Educación', 'Economía Verde', 'I+D+i',
+  'Industrial', 'Innovación Social', 'Mujeres', 'Multisectorial',
+  'Recursos Forestales', 'Recursos Hídricos', 'Tech',
+]
 const MONTOS = [
   { value: 'hasta_1M',   label: 'Hasta $1M' },
   { value: '1M_10M',     label: '$1M – $10M' },
@@ -334,16 +387,16 @@ const resultsTotal   = ref<number | null>(null)
 const offset         = ref(0)
 const lastVisit      = ref('')
 
-// Perfil del usuario (foco y keywords vienen del perfil, no de las alertas)
-const perfilFoco      = ref<string[]>([])
-const perfilKeywords  = ref<string[]>([])
-const idsPostulados   = ref<string[]>([])
+const idsPostulados  = ref<string[]>([])
+const alertaCounts   = ref<Record<string, number>>({})
+const showAvanzados  = ref(false)
 
 // Form
 const editingAlerta = ref<any>(null)
 const guardando     = ref(false)
 const formMsg       = ref('')
 const formError     = ref(false)
+const tagInput      = ref('')
 
 const form = ref({
   nombre:          '',
@@ -352,6 +405,8 @@ const form = ref({
   alcance_interes: [] as string[],
   monto_minimo:    '',
   monto_rangos:    [] as string[],
+  foco:            [] as string[],
+  palabras_clave:  [] as string[],
 })
 
 // ── Computed ─────────────────────────────────────────────────────
@@ -364,9 +419,8 @@ const criteriaChips = computed(() => {
   const a = selectedAlerta.value
   if (!a) return []
   const chips: string[] = []
-  // Foco viene del perfil, no de la alerta
-  for (const f of perfilFoco.value.slice(0, 3)) chips.push(f)
-  for (const k of perfilKeywords.value.slice(0, 2)) chips.push(`"${k}"`)
+  for (const f of (a.foco ?? []).slice(0, 3)) chips.push(f)
+  for (const k of (a.palabras_clave ?? []).slice(0, 2)) chips.push(`"${k}"`)
   if (a.tipos?.includes('fondo')) chips.push('Fondos')
   if (a.tipos?.includes('licitacion')) chips.push('Licitaciones')
   for (const f of (a.fuentes ?? [])) chips.push(fuenteLabel(f))
@@ -384,16 +438,15 @@ onMounted(async () => {
 
   await loadPlan()
 
-  const [{ data: alertasData }, { data: perfilData }, { data: postulacionesData }] = await Promise.all([
+  const [{ data: alertasData }, { data: postulacionesData }] = await Promise.all([
     supabase.from('alert_configs').select('*').eq('user_id', user!.id).order('created_at', { ascending: true }),
-    supabase.from('perfil_postulante').select('foco_proyecto, palabras_clave').eq('user_id', user!.id).maybeSingle(),
     supabase.from('postulaciones').select('convocatoria_id'),
   ])
 
-  alertas.value        = alertasData ?? []
-  perfilFoco.value     = perfilData?.foco_proyecto ?? []
-  perfilKeywords.value = perfilData?.palabras_clave ?? []
-  idsPostulados.value  = (postulacionesData ?? []).map(p => p.convocatoria_id)
+  alertas.value       = alertasData ?? []
+  idsPostulados.value = (postulacionesData ?? []).map(p => p.convocatoria_id)
+
+  loadAllCounts()
 
   // Auto-pausar alertas activas que excedan el límite del plan.
   // Se mantiene la más antigua activa; el resto se pausa en BD.
@@ -422,9 +475,11 @@ function intentarNuevaAlerta() {
 
 function nuevaAlerta() {
   editingAlerta.value = null
-  form.value = { nombre: '', tipos: [], fuentes: [], alcance_interes: [], monto_minimo: '', monto_rangos: [] }
-  formMsg.value = ''
-  view.value    = 'form'
+  form.value = { nombre: '', tipos: [], fuentes: [], alcance_interes: [], monto_minimo: '', monto_rangos: [], foco: [], palabras_clave: [] }
+  tagInput.value    = ''
+  formMsg.value     = ''
+  showAvanzados.value = false
+  view.value        = 'form'
 }
 
 function editarAlerta(alerta: any) {
@@ -436,9 +491,13 @@ function editarAlerta(alerta: any) {
     alcance_interes: [...(alerta.alcance_interes ?? [])],
     monto_minimo:    alerta.monto_minimo ?? '',
     monto_rangos:    [...(alerta.monto_rangos ?? [])],
+    foco:            [...(alerta.foco ?? [])],
+    palabras_clave:  [...(alerta.palabras_clave ?? [])],
   }
-  formMsg.value = ''
-  view.value    = 'form'
+  tagInput.value      = ''
+  formMsg.value       = ''
+  showAvanzados.value = !!(alerta.foco?.length || alerta.palabras_clave?.length)
+  view.value          = 'form'
 }
 
 function cancelarForm() {
@@ -460,6 +519,8 @@ async function guardarAlerta() {
     alcance_interes: form.value.alcance_interes,
     monto_minimo:    form.value.monto_minimo || null,
     monto_rangos:    form.value.monto_rangos,
+    foco:            form.value.foco,
+    palabras_clave:  form.value.palabras_clave,
     activo:          editingAlerta.value ? editingAlerta.value.activo : true,
     updated_at:      new Date().toISOString(),
   }
@@ -530,16 +591,14 @@ async function selectAlerta(id: string) {
 function buildQuery(alerta: any) {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' }).eq('estado', 'abierto')
 
-  // Foco y keywords vienen del perfil del usuario
-  if (perfilKeywords.value.length) {
-    const terms = perfilKeywords.value
-      .flatMap((k: string) => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
+  if (alerta.palabras_clave?.length) {
+    const terms = (alerta.palabras_clave as string[])
+      .flatMap(k => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
       .join(',')
     q = q.or(terms)
   }
-  if (perfilFoco.value.length) q = (q as any).overlaps('foco', perfilFoco.value)
+  if (alerta.foco?.length) q = (q as any).overlaps('foco', alerta.foco)
 
-  // Filtros específicos de la alerta
   if (alerta.tipos?.length)           q = q.in('tipo', alerta.tipos)
   if (alerta.fuentes?.length)         q = q.in('fuente', alerta.fuentes)
   if (alerta.alcance_interes?.length) q = q.in('alcance', alerta.alcance_interes)
@@ -551,7 +610,6 @@ function buildQuery(alerta: any) {
     if (idx >= 0) q = q.in('monto_rango', MONTO_ORDER.slice(idx))
   }
 
-  // Excluir fondos donde ya se postuló
   if (idsPostulados.value.length)
     q = q.not('id', 'in', `(${idsPostulados.value.join(',')})`)
 
@@ -580,8 +638,40 @@ async function cargarMas() {
   loadingMas.value = false
 }
 
+function addTag() {
+  const val = tagInput.value.trim().replace(',', '')
+  if (val && !form.value.palabras_clave.includes(val))
+    form.value.palabras_clave.push(val)
+  tagInput.value = ''
+}
+function removeTag(i: number) {
+  form.value.palabras_clave.splice(i, 1)
+}
+
+async function loadAllCounts() {
+  const activas = alertas.value.filter(a => a.activo)
+  const entries = await Promise.all(
+    activas.map(async a => {
+      const { count } = await buildQuery(a).range(0, 0)
+      return [a.id, count ?? 0] as const
+    })
+  )
+  alertaCounts.value = Object.fromEntries(entries)
+}
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  if (diff < 60_000)        return 'hace un momento'
+  if (diff < 3_600_000)     return `hace ${Math.floor(diff / 60_000)} min`
+  const h = Math.floor(diff / 3_600_000)
+  if (h < 24)               return `hace ${h}h`
+  if (h < 48)               return 'ayer'
+  return `hace ${Math.floor(h / 24)} días`
+}
+
 function resumenAlerta(a: any): string {
   const parts: string[] = []
+  if (a.foco?.length)            parts.push(a.foco.slice(0, 2).join(', '))
   if (a.fuentes?.length)         parts.push(a.fuentes.map(fuenteLabel).join(', '))
   if (a.tipos?.includes('fondo'))      parts.push('Fondos')
   if (a.tipos?.includes('licitacion')) parts.push('Licitaciones')
@@ -696,6 +786,22 @@ function esUrgente(f: string) {
 }
 .select-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.1); }
 
+.avanzados-wrap { }
+.avanzados-toggle {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.875rem; font-weight: 600; color: #475569;
+  background: none; border: 1.5px dashed #e2e8f0; border-radius: 10px;
+  padding: 0.6rem 1rem; cursor: pointer; width: 100%;
+  font-family: inherit; transition: border-color 0.15s, color 0.15s;
+}
+.avanzados-toggle:hover { border-color: #0ea5e9; color: #0ea5e9; }
+.avanzados-badge {
+  font-size: 0.65rem; font-weight: 700; background: #0ea5e9; color: white;
+  padding: 0.1rem 0.45rem; border-radius: 999px;
+}
+.avanzados-toggle svg { margin-left: auto; }
+.avanzados-content { display: flex; flex-direction: column; gap: 1rem; margin-top: 0.75rem; }
+
 .form-actions { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.5rem; }
 .btn-save {
   padding: 0.65rem 1.5rem; background: #0ea5e9; color: white; font-size: 0.9rem;
@@ -740,11 +846,14 @@ function esUrgente(f: string) {
 .alerta-row.selected { background: #f0f9ff; border-left: 3px solid #0ea5e9; padding-left: calc(1.25rem - 3px); }
 .alerta-row.inactive { opacity: 0.5; }
 
-.alerta-row-main { margin-bottom: 0.5rem; }
-.alerta-name { display: block; font-size: 0.875rem; font-weight: 600; color: #0f172a; margin-bottom: 0.2rem; }
-.alerta-summary { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.alerta-row-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.2rem; }
+.alerta-name { font-size: 0.875rem; font-weight: 600; color: #0f172a; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.count-badge { flex-shrink: 0; font-size: 0.65rem; font-weight: 700; background: #e0f2fe; color: #0284c7; padding: 0.1rem 0.45rem; border-radius: 999px; }
+.alerta-summary { font-size: 0.75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; margin-bottom: 0.5rem; }
 
-.alerta-row-actions { display: flex; align-items: center; gap: 0.4rem; }
+.alerta-row-actions { display: flex; align-items: center; gap: 0.4rem; opacity: 0; transition: opacity 0.15s; }
+.alerta-row:hover .alerta-row-actions,
+.alerta-row.selected .alerta-row-actions { opacity: 1; }
 .pill {
   font-size: 0.65rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px;
   background: #f1f5f9; color: #94a3b8; border: none; cursor: pointer; transition: all 0.15s;
@@ -762,9 +871,13 @@ function esUrgente(f: string) {
 
 .panel-right { overflow-y: auto; padding: 1.75rem 2rem; }
 
-.results-head { margin-bottom: 1.25rem; }
-.results-title { font-size: 1.25rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
-.results-subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
+.results-head { margin-bottom: 1.5rem; }
+.results-title { font-size: 1.375rem; font-weight: 800; color: #0f172a; letter-spacing: -0.025em; margin-bottom: 0.35rem; }
+.results-meta { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.results-count { font-size: 0.875rem; font-weight: 600; color: #0f172a; }
+.results-count.loading { color: #94a3b8; }
+.notif-dot { color: #cbd5e1; font-size: 0.875rem; }
+.notif-time { font-size: 0.8125rem; color: #94a3b8; }
 .chips-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
 .filtro-chip { font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.6rem; background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; border-radius: 999px; }
 

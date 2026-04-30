@@ -68,11 +68,6 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
   )
   if (!alertas?.length) return false
 
-  // Perfil del proyecto
-  const [perfil] = await sbGet<any[]>(
-    env, `/rest/v1/perfil_postulante?user_id=eq.${userId}&select=foco_proyecto,palabras_clave`
-  ) ?? []
-
   // IDs donde ya postulé — no notificar
   const postulaciones = await sbGet<{ convocatoria_id: string }[]>(
     env, `/rest/v1/postulaciones?user_id=eq.${userId}&select=convocatoria_id`
@@ -87,7 +82,7 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
       ? new Date(alerta.last_notified_at)
       : new Date(Date.now() - 25 * 60 * 60 * 1000)
 
-    const items = await fetchMatches(env, alerta, perfil, desde, idsPostulados)
+    const items = await fetchMatches(env, alerta, desde, idsPostulados)
 
     if (items.length > 0) {
       resultados.push({ alerta, items })
@@ -106,9 +101,9 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
 }
 
 // ── Matching query ────────────────────────────────────────────────
-async function fetchMatches(env: Env, alerta: any, perfil: any, desde: Date, idsPostulados: string[] = []) {
-  const foco     = (perfil?.foco_proyecto ?? []) as string[]
-  const keywords = (perfil?.palabras_clave ?? []) as string[]
+async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: string[] = []) {
+  const foco     = (alerta.foco ?? []) as string[]
+  const keywords = (alerta.palabras_clave ?? []) as string[]
 
   const params = new URLSearchParams()
   params.set('estado',         'eq.abierto')

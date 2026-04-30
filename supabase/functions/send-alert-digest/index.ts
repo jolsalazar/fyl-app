@@ -72,13 +72,6 @@ async function processUser(supabase: any, userId: string, log: string[]): Promis
 
   if (!alertas?.length) return false
 
-  // Perfil del proyecto (foco y keywords)
-  const { data: perfil } = await supabase
-    .from('perfil_postulante')
-    .select('foco_proyecto, palabras_clave')
-    .eq('user_id', userId)
-    .maybeSingle()
-
   const resultadosPorAlerta: Array<{ alerta: any; items: any[] }> = []
   const ahora = new Date().toISOString()
 
@@ -88,7 +81,7 @@ async function processUser(supabase: any, userId: string, log: string[]): Promis
       ? new Date(alerta.last_notified_at)
       : new Date(Date.now() - 25 * 60 * 60 * 1000)
 
-    const items = await fetchMatches(supabase, alerta, perfil, desde)
+    const items = await fetchMatches(supabase, alerta, desde)
 
     if (items.length > 0) {
       resultadosPorAlerta.push({ alerta, items })
@@ -111,7 +104,7 @@ async function processUser(supabase: any, userId: string, log: string[]): Promis
 }
 
 // ── Query de matching (misma lógica que el frontend) ──────────────
-async function fetchMatches(supabase: any, alerta: any, perfil: any, desde: Date) {
+async function fetchMatches(supabase: any, alerta: any, desde: Date) {
   let q = supabase
     .from('convocatorias')
     .select('id, titulo, fuente, tipo, monto_rango, fecha_cierre_postulacion, link_postulacion, descripcion_breve, foco')
@@ -119,8 +112,8 @@ async function fetchMatches(supabase: any, alerta: any, perfil: any, desde: Date
     .gt('fecha_scrapeado', desde.toISOString())
     .limit(5) // máximo 5 por alerta en el email
 
-  const foco     = perfil?.foco_proyecto ?? []
-  const keywords = perfil?.palabras_clave ?? []
+  const foco     = alerta.foco ?? []
+  const keywords = alerta.palabras_clave ?? []
 
   if (keywords.length) {
     const terms = keywords

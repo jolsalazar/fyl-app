@@ -84,41 +84,6 @@
           </div>
         </section>
 
-        <!-- Foco del proyecto -->
-        <section class="card">
-          <div class="card-header">
-            <h2>Foco del proyecto</h2>
-            <p class="hint">Selecciona los sectores que mejor describen tu proyecto. Selección múltiple.</p>
-          </div>
-          <div class="checks-grid-3">
-            <label v-for="f in focos" :key="f" class="check-item">
-              <input type="checkbox" :value="f" v-model="perfil.foco_proyecto" />
-              <span class="check-box"></span>
-              {{ f }}
-            </label>
-          </div>
-        </section>
-
-        <!-- Palabras clave -->
-        <section class="card">
-          <div class="card-header">
-            <h2>Palabras clave del proyecto</h2>
-            <p class="hint">Describe tu proyecto con palabras sueltas. Presiona Enter para agregar.</p>
-          </div>
-          <div class="tags-input">
-            <span v-for="(tag, i) in perfil.palabras_clave" :key="i" class="tag">
-              {{ tag }}<button type="button" @click="removeTag(i)">×</button>
-            </span>
-            <input
-              v-model="tagInput"
-              type="text"
-              placeholder="ej: reciclaje, software, exportación…"
-              @keydown.enter.prevent="addTag"
-              @keydown.comma.prevent="addTag"
-            />
-          </div>
-        </section>
-
         <div class="actions">
           <div v-if="mensaje" :class="['mensaje', error ? 'error' : 'ok']">{{ mensaje }}</div>
           <button type="submit" :disabled="guardando">
@@ -140,7 +105,6 @@ const supabase = useSupabaseClient()
 const guardando = ref(false)
 const mensaje   = ref('')
 const error     = ref(false)
-const tagInput  = ref('')
 
 const perfil = ref({
   tipo_persona:       null as string | null,
@@ -148,8 +112,6 @@ const perfil = ref({
   edad:               null as number | null,
   antiguedad_empresa: null as string | null,
   estado_proyecto:    null as string | null,
-  foco_proyecto:      [] as string[],
-  palabras_clave:     [] as string[],
 })
 
 const estados = [
@@ -160,28 +122,11 @@ const estados = [
   { value: 'crecimiento',   label: 'Buscando crecer y expandirme' },
 ]
 
-const focos = [
-  'Agroindustrias', 'Banca y Fintech', 'Climatech', 'Descarbonización',
-  'Digitalización', 'Educación', 'Economía Verde', 'I+D+i',
-  'Industrial', 'Innovación Social', 'Mujeres', 'Multisectorial',
-  'Recursos Forestales', 'Recursos Hídricos', 'Tech',
-]
-
-function addTag() {
-  const val = tagInput.value.trim().replace(',', '')
-  if (val && !perfil.value.palabras_clave.includes(val))
-    perfil.value.palabras_clave.push(val)
-  tagInput.value = ''
-}
-function removeTag(i: number) {
-  perfil.value.palabras_clave.splice(i, 1)
-}
-
 onMounted(async () => {
   const { data: { user } } = await supabase.auth.getUser()
   const { data } = await supabase
     .from('perfil_postulante')
-    .select('tipo_persona, subtipo_natural, edad, antiguedad_empresa, estado_proyecto, foco_proyecto, palabras_clave')
+    .select('tipo_persona, subtipo_natural, edad, antiguedad_empresa, estado_proyecto')
     .eq('user_id', user!.id)
     .maybeSingle()
   if (data) {
@@ -191,8 +136,6 @@ onMounted(async () => {
       edad:               data.edad ?? null,
       antiguedad_empresa: data.antiguedad_empresa ?? null,
       estado_proyecto:    data.estado_proyecto ?? null,
-      foco_proyecto:      data.foco_proyecto ?? [],
-      palabras_clave:     data.palabras_clave ?? [],
     }
   }
 })
@@ -210,8 +153,6 @@ async function guardar() {
       edad:               perfil.value.tipo_persona === 'natural' ? perfil.value.edad : null,
       antiguedad_empresa: perfil.value.tipo_persona === 'juridica' ? perfil.value.antiguedad_empresa : null,
       estado_proyecto:    perfil.value.estado_proyecto,
-      foco_proyecto:      perfil.value.foco_proyecto,
-      palabras_clave:     perfil.value.palabras_clave,
       updated_at:         new Date().toISOString(),
     }, { onConflict: 'user_id' })
   error.value   = !!err
