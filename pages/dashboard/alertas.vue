@@ -423,7 +423,7 @@ async function guardarAlerta() {
     alcance_interes: form.value.alcance_interes,
     monto_minimo:    form.value.monto_minimo || null,
     monto_rangos:    form.value.monto_rangos,
-    activo:          true,
+    activo:          editingAlerta.value ? editingAlerta.value.activo : true,
     updated_at:      new Date().toISOString(),
   }
 
