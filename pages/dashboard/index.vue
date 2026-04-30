@@ -37,18 +37,11 @@
           <option value="cerrado">Cerrado</option>
         </select>
 
-        <select v-model="filtroTipo" @change="cargar" class="select">
-          <option value="">Todos los tipos</option>
-          <option value="fondo">Fondo</option>
-          <option value="licitacion">Licitación</option>
-        </select>
-
         <select v-model="filtroFuente" @change="cargar" class="select">
           <option value="">Todas las fuentes</option>
           <option value="corfo">CORFO</option>
           <option value="sercotec">SERCOTEC</option>
           <option value="anid">ANID</option>
-          <option value="mercadopublico">Mercado Público</option>
           <option value="fondos_gob">Fondos.gob.cl</option>
         </select>
 
@@ -173,7 +166,6 @@ const offset = ref(0)
 
 const busqueda = ref('')
 const filtroEstado = ref('abierto')
-const filtroTipo = ref('')
 const filtroFuente = ref('')
 const filtroMonto = ref('')
 const orden = ref<'cierre' | 'reciente'>('cierre')
@@ -181,13 +173,13 @@ const orden = ref<'cierre' | 'reciente'>('cierre')
 let busquedaTimer: ReturnType<typeof setTimeout>
 
 const hayFiltros = computed(() =>
-  busqueda.value || filtroEstado.value !== 'abierto' || filtroTipo.value || filtroFuente.value || filtroMonto.value
+  busqueda.value || filtroEstado.value !== 'abierto' || filtroFuente.value || filtroMonto.value
 )
 
 function buildQuery() {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' })
+  q = q.neq('fuente', 'mercadopublico')
   if (filtroEstado.value) q = q.eq('estado', filtroEstado.value)
-  if (filtroTipo.value)   q = q.eq('tipo', filtroTipo.value)
   if (filtroFuente.value) q = q.eq('fuente', filtroFuente.value)
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
   if (busqueda.value)     q = q.ilike('titulo', `%${busqueda.value}%`)
@@ -230,7 +222,6 @@ function setOrden(o: 'cierre' | 'reciente') {
 function limpiarFiltros() {
   busqueda.value = ''
   filtroEstado.value = 'abierto'
-  filtroTipo.value = ''
   filtroFuente.value = ''
   filtroMonto.value = ''
   cargar()

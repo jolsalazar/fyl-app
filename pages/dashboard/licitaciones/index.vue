@@ -37,12 +37,6 @@
           <option value="cerrado">Cerrado</option>
         </select>
 
-        <select v-model="filtroTipo" @change="cargar" class="select">
-          <option value="">Todos los tipos</option>
-          <option value="fondo">Fondo</option>
-          <option value="licitacion">Licitación</option>
-        </select>
-
         <select v-model="filtroMonto" @change="cargar" class="select">
           <option value="">Cualquier monto</option>
           <option value="hasta_1M">Hasta $1M</option>
@@ -165,21 +159,19 @@ const offset = ref(0)
 
 const busqueda = ref('')
 const filtroEstado = ref('abierto')
-const filtroTipo = ref('')
 const filtroMonto = ref('')
 const orden = ref<'cierre' | 'reciente'>('cierre')
 
 let busquedaTimer: ReturnType<typeof setTimeout>
 
 const hayFiltros = computed(() =>
-  busqueda.value || filtroEstado.value !== 'abierto' || filtroTipo.value || filtroMonto.value
+  busqueda.value || filtroEstado.value !== 'abierto' || filtroMonto.value
 )
 
 function buildQuery() {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' })
   q = q.eq('fuente', FUENTE)
   if (filtroEstado.value) q = q.eq('estado', filtroEstado.value)
-  if (filtroTipo.value)   q = q.eq('tipo', filtroTipo.value)
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
   if (busqueda.value)     q = q.ilike('titulo', `%${busqueda.value}%`)
   if (orden.value === 'cierre') {
@@ -221,7 +213,6 @@ function setOrden(o: 'cierre' | 'reciente') {
 function limpiarFiltros() {
   busqueda.value = ''
   filtroEstado.value = 'abierto'
-  filtroTipo.value = ''
   filtroMonto.value = ''
   cargar()
 }
