@@ -117,7 +117,7 @@ async function fetchMatches(supabase: any, alerta: any, desde: Date) {
 
   if (keywords.length) {
     const terms = keywords
-      .flatMap((k: string) => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
+      .flatMap((k: string) => [`titulo.ilike.*${k}*`, `descripcion_breve.ilike.*${k}*`])
       .join(',')
     q = q.or(terms)
   }

@@ -578,6 +578,7 @@ async function toggleAlerta(alerta: any) {
     results.value = []; resultsTotal.value = 0
   }
   if (selectedId.value === alerta.id && nuevoEstado) await loadResults()
+  loadAllCounts()
 }
 
 // ── Selección y resultados ───────────────────────────────────────
@@ -593,7 +594,7 @@ function buildQuery(alerta: any) {
 
   if (alerta.palabras_clave?.length) {
     const terms = (alerta.palabras_clave as string[])
-      .flatMap(k => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`])
+      .flatMap(k => [`titulo.ilike.*${k}*`, `descripcion_breve.ilike.*${k}*`])
       .join(',')
     q = q.or(terms)
   }
