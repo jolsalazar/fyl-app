@@ -167,12 +167,13 @@
 
           <!-- Panel derecho: resultados -->
           <div class="panel-right">
+            <Transition name="fade" mode="out-in">
             <template v-if="!selectedId">
               <div class="empty-results">
                 <p>Selecciona una alerta para ver sus resultados</p>
               </div>
             </template>
-            <template v-else>
+            <template v-else :key="selectedId">
               <div class="results-head">
                 <div>
                   <h2 class="results-title">{{ selectedAlerta?.nombre }}</h2>
@@ -243,6 +244,7 @@
                 </div>
               </template>
             </template>
+            </Transition>
           </div>
         </div>
       </template>
@@ -259,6 +261,7 @@ const PAGE_SIZE = 20
 
 // ── Plan ──────────────────────────────────────────────────────────
 const { plan, label, canAddAlerta, maxAlertas, load: loadPlan } = usePlan()
+const { show: toast } = useToast()
 
 // ── Constantes ───────────────────────────────────────────────────
 const FUENTES = [
@@ -449,8 +452,8 @@ async function guardarAlerta() {
     formMsg.value = 'Error al guardar.'
   } else {
     view.value = 'list'
+    toast(editingAlerta.value ? 'Alerta actualizada' : 'Alerta creada')
     if (editingAlerta.value) {
-      // Recargar resultados si la alerta editada estaba seleccionada
       if (selectedId.value === editingAlerta.value.id) await loadResults()
     }
   }
@@ -461,6 +464,7 @@ async function borrarAlerta(id: string) {
   if (!confirm('¿Eliminar esta alerta?')) return
   await supabase.from('alert_configs').delete().eq('id', id)
   alertas.value = alertas.value.filter(a => a.id !== id)
+  toast('Alerta eliminada', 'info')
   if (selectedId.value === id) {
     selectedId.value = null
     results.value    = []
@@ -784,6 +788,9 @@ function esUrgente(f: string) {
 
 .spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 @media (max-width: 900px) {
   .split { grid-template-columns: 1fr; height: auto; }

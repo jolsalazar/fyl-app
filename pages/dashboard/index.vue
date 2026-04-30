@@ -67,9 +67,18 @@
         <button :class="['sort-btn', orden === 'reciente' ? 'active' : '']" @click="setOrden('reciente')">Más reciente</button>
       </div>
 
-      <!-- Loading -->
-      <div v-if="loading" class="empty">
-        <div class="spinner"></div>
+      <!-- Loading skeleton -->
+      <div v-if="loading" class="lista">
+        <div v-for="i in 5" :key="i" class="card sk-card">
+          <div class="sk-top">
+            <div class="sk-row"><div class="sk-block sk-tag"></div><div class="sk-block sk-tag"></div></div>
+            <div class="sk-block sk-badge"></div>
+          </div>
+          <div class="sk-block sk-title"></div>
+          <div class="sk-block sk-line"></div>
+          <div class="sk-block sk-line sk-short"></div>
+          <div class="sk-meta"><div class="sk-block sk-pill"></div><div class="sk-block sk-pill"></div></div>
+        </div>
       </div>
 
       <!-- Sin resultados -->
@@ -78,12 +87,14 @@
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         </div>
         <p class="empty-title">Sin resultados</p>
-        <p class="empty-desc">Prueba ajustando los filtros o la búsqueda.</p>
+        <p class="empty-desc" v-if="hayFiltros">Ningún fondo coincide con los filtros aplicados.</p>
+        <p class="empty-desc" v-else>Aún no hay fondos disponibles.</p>
+        <button v-if="hayFiltros" class="btn-empty-clear" @click="limpiarFiltros">Limpiar filtros</button>
       </div>
 
       <!-- Lista -->
       <div v-else class="lista">
-        <div v-for="item in items" :key="item.id" class="card">
+        <div v-for="item in items" :key="item.id" class="card" @click="saveScroll">
           <div class="card-top">
             <div class="tags">
               <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
@@ -109,7 +120,11 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               {{ montoLabel(item.monto_rango) }}
             </span>
-            <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
+            <span v-if="item.fecha_cierre_postulacion && esUrgente(item.fecha_cierre_postulacion)" class="chip-urgente">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Cierra en {{ diasRestantes(item.fecha_cierre_postulacion) }} día{{ diasRestantes(item.fecha_cierre_postulacion) === 1 ? '' : 's' }}
+            </span>
+            <span v-else-if="item.fecha_cierre_postulacion" class="meta-item">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               Cierra {{ formatFecha(item.fecha_cierre_postulacion) }}
             </span>
@@ -152,10 +167,14 @@
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
+const route = useRoute()
+const router = useRouter()
+const { show: toast } = useToast()
 const { plan, canUseMatch, load: loadPlan } = usePlan()
 const canExport = computed(() => plan.value === 'pro' || plan.value === 'agencia')
 
 const PAGE_SIZE = 20
+const SCROLL_KEY = 'scroll_fondos'
 const guardadosSet = ref<Set<string>>(new Set())
 
 const loading = ref(true)
@@ -164,11 +183,21 @@ const items = ref<any[]>([])
 const total = ref<number | null>(null)
 const offset = ref(0)
 
-const busqueda = ref('')
-const filtroEstado = ref('abierto')
-const filtroFuente = ref('')
-const filtroMonto = ref('')
-const orden = ref<'cierre' | 'reciente'>('cierre')
+const busqueda = ref((route.query.q as string) || '')
+const filtroEstado = ref((route.query.estado as string) || 'abierto')
+const filtroFuente = ref((route.query.fuente as string) || '')
+const filtroMonto = ref((route.query.monto as string) || '')
+const orden = ref<'cierre' | 'reciente'>(route.query.orden === 'reciente' ? 'reciente' : 'cierre')
+
+watch([busqueda, filtroEstado, filtroFuente, filtroMonto, orden], () => {
+  const q: Record<string, string> = {}
+  if (busqueda.value) q.q = busqueda.value
+  if (filtroEstado.value !== 'abierto') q.estado = filtroEstado.value
+  if (filtroFuente.value) q.fuente = filtroFuente.value
+  if (filtroMonto.value) q.monto = filtroMonto.value
+  if (orden.value !== 'cierre') q.orden = orden.value
+  router.replace({ query: q })
+})
 
 let busquedaTimer: ReturnType<typeof setTimeout>
 
@@ -291,11 +320,22 @@ async function toggleGuardado(id: string) {
   if (guardadosSet.value.has(id)) {
     await supabase.from('guardados').delete().eq('convocatoria_id', id)
     guardadosSet.value.delete(id)
+    toast('Eliminado de guardados', 'info')
   } else {
     await supabase.from('guardados').insert({ convocatoria_id: id })
     guardadosSet.value.add(id)
+    toast('Guardado correctamente')
   }
   guardadosSet.value = new Set(guardadosSet.value)
+}
+
+function saveScroll() {
+  const el = document.querySelector('.main') as HTMLElement
+  if (el) sessionStorage.setItem(SCROLL_KEY, el.scrollTop.toString())
+}
+
+function diasRestantes(f: string): number {
+  return Math.ceil((new Date(f).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 }
 
 onMounted(async () => {
@@ -307,7 +347,15 @@ onMounted(async () => {
   ])
   guardadosSet.value = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
 
-  cargar()
+  await cargar()
+
+  const saved = sessionStorage.getItem(SCROLL_KEY)
+  if (saved) {
+    await nextTick()
+    const el = document.querySelector('.main') as HTMLElement
+    if (el) el.scrollTop = parseInt(saved)
+    sessionStorage.removeItem(SCROLL_KEY)
+  }
 })
 </script>
 
@@ -561,6 +609,58 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   border: 1px solid #bae6fd;
 }
 .ver-link.primary:hover { background: #e0f2fe; }
+
+/* Empty clear button */
+.btn-empty-clear {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: inherit;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-empty-clear:hover { border-color: #0ea5e9; color: #0ea5e9; }
+
+/* Urgency chip */
+.chip-urgente {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+/* Skeleton */
+@keyframes shimmer {
+  from { background-position: -600px 0; }
+  to   { background-position: 600px 0; }
+}
+.sk-card { pointer-events: none; }
+.sk-block {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%);
+  background-size: 1200px 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+.sk-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.875rem; }
+.sk-row { display: flex; gap: 0.5rem; }
+.sk-tag { width: 58px; height: 14px; }
+.sk-badge { width: 52px; height: 20px; border-radius: 999px; }
+.sk-title { height: 18px; width: 70%; margin-bottom: 0.6rem; }
+.sk-line { height: 13px; margin-bottom: 0.4rem; }
+.sk-short { width: 50%; }
+.sk-meta { display: flex; gap: 0.75rem; margin-top: 1rem; }
+.sk-pill { width: 80px; height: 13px; border-radius: 999px; }
 
 /* Load more */
 .load-more { text-align: center; margin-top: 1.5rem; }

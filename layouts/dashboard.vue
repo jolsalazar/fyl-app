@@ -1,7 +1,18 @@
 <template>
   <div class="shell">
+    <!-- Mobile hamburger -->
+    <button class="hamburger" @click="sidebarOpen = true" aria-label="Abrir menú">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
+    <!-- Overlay -->
+    <div class="overlay" v-if="sidebarOpen" @click="sidebarOpen = false"></div>
+
     <!-- Sidebar -->
-    <aside class="sidebar">
+    <aside class="sidebar" :class="{ open: sidebarOpen }">
+      <button class="sidebar-close" @click="sidebarOpen = false" aria-label="Cerrar menú">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
       <div class="brand">
         <span class="brand-dot"></span>
         Fondos y Licitaciones
@@ -16,6 +27,7 @@
         <NuxtLink to="/dashboard/licitaciones" class="nav-item" active-class="active">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           Licitaciones
+          <span v-if="nuevasLicitaciones > 0" class="nav-badge">{{ nuevasLicitaciones > 99 ? '99+' : nuevasLicitaciones }}</span>
         </NuxtLink>
         <NuxtLink to="/dashboard/guardados" class="nav-item" active-class="active">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
@@ -86,6 +98,8 @@
     <main class="main">
       <slot />
     </main>
+
+    <AppToast />
   </div>
 </template>
 
@@ -97,8 +111,10 @@ const email = ref('')
 const isAdmin = ref(false)
 const adminExpanded = ref(false)
 const nuevas = ref(0)
+const nuevasLicitaciones = ref(0)
 const totalGuardados = ref(0)
 const alertasNuevas = ref(0)
+const sidebarOpen = ref(false)
 const inicial = computed(() => email.value?.[0]?.toUpperCase() ?? '?')
 
 onMounted(async () => {
@@ -113,15 +129,17 @@ onMounted(async () => {
     .single()
   isAdmin.value = profile?.role === 'admin'
 
-  // Badge: nuevas convocatorias desde última visita
+  // Badges: nuevas convocatorias desde última visita
   const lastVisit = localStorage.getItem('fyl_last_visit')
   if (lastVisit) {
-    const { count } = await supabase
-      .from('convocatorias')
-      .select('id', { count: 'exact', head: true })
-      .gt('fecha_scrapeado', lastVisit)
-      .eq('estado', 'abierto')
-    nuevas.value = count ?? 0
+    const [{ count: cFondos }, { count: cLicit }] = await Promise.all([
+      supabase.from('convocatorias').select('id', { count: 'exact', head: true })
+        .gt('fecha_scrapeado', lastVisit).eq('estado', 'abierto').neq('fuente', 'mercadopublico'),
+      supabase.from('convocatorias').select('id', { count: 'exact', head: true })
+        .gt('fecha_scrapeado', lastVisit).eq('estado', 'abierto').eq('fuente', 'mercadopublico'),
+    ])
+    nuevas.value = cFondos ?? 0
+    nuevasLicitaciones.value = cLicit ?? 0
   }
 
   // Contador de guardados
@@ -370,5 +388,56 @@ async function logout() {
 .main {
   flex: 1;
   overflow-y: auto;
+}
+
+/* Mobile */
+.hamburger {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 200;
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 0.45rem;
+  cursor: pointer;
+  color: #475569;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.sidebar-close {
+  display: none;
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: #475569;
+  cursor: pointer;
+  padding: 4px;
+}
+.overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 149;
+}
+
+@media (max-width: 768px) {
+  .hamburger { display: flex; }
+  .sidebar-close { display: flex; }
+  .overlay { display: block; }
+  .sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    height: 100vh;
+    z-index: 150;
+    transition: left 0.25s ease;
+    width: 240px;
+  }
+  .sidebar.open { left: 0; }
+  .main { padding-top: 3.5rem; }
 }
 </style>
