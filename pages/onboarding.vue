@@ -215,35 +215,57 @@
         </div>
       </div>
 
-      <!-- ── PASO 5: ¡Listo! ────────────────────────────────────── -->
+      <!-- ── PASO 5: ¡Listo! + matches ──────────────────────────── -->
       <div v-else-if="paso === 5" key="5" class="step step-final">
         <div class="confetti-wrap">🎉</div>
         <h1>¡Todo listo!</h1>
-        <p class="step-desc">Tu perfil y primera alerta están configurados. Desde mañana recibirás un email diario con las oportunidades que calzan con tu proyecto.</p>
 
-        <div class="resumen">
-          <div class="resumen-item" v-if="perfil.tipo_persona">
-            <span class="resumen-label">Tipo</span>
-            <span class="resumen-val">{{ perfil.tipo_persona === 'natural' ? 'Persona Natural' : 'Persona Jurídica' }}</span>
-          </div>
-          <div class="resumen-item" v-if="perfil.estado_proyecto">
-            <span class="resumen-label">Etapa</span>
-            <span class="resumen-val">{{ estados.find(e => e.value === perfil.estado_proyecto)?.label }}</span>
-          </div>
-          <div class="resumen-item" v-if="perfil.foco_proyecto.length">
-            <span class="resumen-label">Focos</span>
-            <span class="resumen-val">{{ perfil.foco_proyecto.slice(0, 3).join(', ') }}{{ perfil.foco_proyecto.length > 3 ? '…' : '' }}</span>
-          </div>
-          <div class="resumen-item">
-            <span class="resumen-label">Alerta</span>
-            <span class="resumen-val">{{ alerta.nombre }}</span>
-          </div>
+        <!-- Loading matches -->
+        <div v-if="calculandoMatch" class="match-loading">
+          <div class="spinner-match"></div>
+          <span>Calculando fondos que calzan con tu perfil…</span>
         </div>
 
-        <NuxtLink to="/dashboard" class="btn-primary btn-lg">
-          Ir a mi dashboard
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-        </NuxtLink>
+        <!-- Resultados de match -->
+        <template v-else-if="matchResults.length">
+          <p class="step-desc">
+            Encontramos <strong>{{ matchResults.length }} fondos abiertos</strong> que calzan con tu proyecto. Aquí una vista previa:
+          </p>
+
+          <div class="match-preview-list">
+            <div v-for="r in matchResults" :key="r.item.id" class="match-preview-card">
+              <div class="match-preview-top">
+                <div :class="['match-donut-sm', r.match.nivel]">{{ r.match.score }}%</div>
+                <div class="match-preview-info">
+                  <p class="match-preview-titulo">{{ r.item.titulo }}</p>
+                  <p class="match-preview-org">{{ r.item.organizador }}</p>
+                </div>
+              </div>
+              <div class="match-razones-sm">
+                <span v-for="rz in r.match.razones.slice(0, 2)" :key="rz.texto" :class="['razon-chip', rz.tipo]">
+                  {{ rz.tipo === 'positivo' ? '✓' : rz.tipo === 'negativo' ? '✗' : '·' }} {{ rz.texto }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="match-cta-wrap">
+            <NuxtLink to="/planes" class="btn-primary btn-lg">
+              Ver mi match completo
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </NuxtLink>
+            <NuxtLink to="/dashboard" class="btn-ghost">Ir a mi dashboard</NuxtLink>
+          </div>
+        </template>
+
+        <!-- Fallback sin matches -->
+        <template v-else>
+          <p class="step-desc">Tu perfil y primera alerta están configurados. Desde mañana recibirás un email con las oportunidades nuevas.</p>
+          <NuxtLink to="/dashboard" class="btn-primary btn-lg">
+            Ir a mi dashboard
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </NuxtLink>
+        </template>
       </div>
       </transition>
 
@@ -252,11 +274,15 @@
 </template>
 
 <script setup lang="ts">
+import { calcularMatch, type Perfil } from '~/composables/useMatch'
+
 definePageMeta({ middleware: 'auth' })
 
 const supabase = useSupabaseClient()
 const paso     = ref(1)
-const guardando = ref(false)
+const guardando       = ref(false)
+const calculandoMatch = ref(false)
+const matchResults    = ref<{ item: any; match: ReturnType<typeof calcularMatch> }[]>([])
 const tagInput  = ref('')
 const email     = ref('')
 
@@ -353,6 +379,35 @@ async function finalizar() {
 
   guardando.value = false
   paso.value = 5
+
+  // Calcular matches con el perfil recién guardado
+  calculandoMatch.value = true
+  try {
+    const { data: fondos } = await supabase
+      .from('convocatorias')
+      .select('id, titulo, organizador, foco, perfil_tipo_persona, perfil_nivel_desarrollo, monto_rango, alcance')
+      .eq('estado', 'abierto')
+      .eq('tipo', 'fondo')
+      .limit(60)
+
+    const perfilMatch: Perfil = {
+      tipo_persona:    perfil.value.tipo_persona,
+      estado_proyecto: perfil.value.estado_proyecto,
+      foco:            perfil.value.foco_proyecto,
+      alcance:         [],
+      monto_minimo:    null,
+    }
+
+    matchResults.value = (fondos ?? [])
+      .map(f => ({ item: f, match: calcularMatch(perfilMatch, f) }))
+      .filter(r => r.match.score >= 40)
+      .sort((a, b) => b.match.score - a.match.score)
+      .slice(0, 5)
+  } catch {
+    // silencioso — fallback sin matches
+  } finally {
+    calculandoMatch.value = false
+  }
 }
 
 onMounted(async () => {
@@ -527,13 +582,55 @@ h1 { font-size: 1.625rem; font-weight: 800; color: #0f172a; letter-spacing: -0.0
 /* Final */
 .step-final { align-items: center; text-align: center; }
 .confetti-wrap { font-size: 4rem; }
-.resumen {
-  background: white; border: 1px solid #e2e8f0; border-radius: 14px;
-  padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; width: 100%;
+
+/* Match loading */
+.match-loading {
+  display: flex; align-items: center; gap: 0.75rem;
+  font-size: 0.9rem; color: #64748b; padding: 1rem 0;
 }
-.resumen-item { display: flex; justify-content: space-between; align-items: center; font-size: 0.875rem; }
-.resumen-label { color: #94a3b8; font-weight: 500; }
-.resumen-val { color: #0f172a; font-weight: 600; }
+.spinner-match {
+  width: 18px; height: 18px; flex-shrink: 0;
+  border: 2px solid #e2e8f0; border-top-color: #0ea5e9;
+  border-radius: 50%; animation: spin 0.65s linear infinite;
+}
+
+/* Match preview list */
+.match-preview-list {
+  display: flex; flex-direction: column; gap: 0.625rem; width: 100%; text-align: left;
+}
+.match-preview-card {
+  background: white; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 1rem 1.125rem; display: flex; flex-direction: column; gap: 0.625rem;
+}
+.match-preview-top { display: flex; align-items: center; gap: 0.875rem; }
+.match-donut-sm {
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 800; color: white;
+}
+.match-donut-sm.alto  { background: linear-gradient(135deg, #22c55e, #16a34a); }
+.match-donut-sm.medio { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.match-donut-sm.bajo  { background: linear-gradient(135deg, #94a3b8, #64748b); }
+.match-preview-info { flex: 1; min-width: 0; }
+.match-preview-titulo {
+  font-size: 0.875rem; font-weight: 600; color: #0f172a;
+  line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.match-preview-org { font-size: 0.775rem; color: #94a3b8; margin-top: 0.1rem; }
+.match-razones-sm { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.razon-chip {
+  font-size: 0.72rem; font-weight: 500;
+  padding: 0.18rem 0.55rem; border-radius: 999px;
+  border: 1px solid transparent;
+}
+.razon-chip.positivo { background: #f0fdf4; color: #15803d; border-color: #bbf7d0; }
+.razon-chip.negativo { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.razon-chip.neutro   { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+
+/* CTAs finales */
+.match-cta-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 0.75rem; width: 100%;
+}
 
 .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
