@@ -375,8 +375,8 @@ function diasRestantes(f: string): number {
 }
 
 function esNueva(f: string): boolean {
-  if (!lastVisitRef || !f) return false
-  return new Date(f) > new Date(lastVisitRef)
+  if (!lastVisitRef.value || !f) return false
+  return new Date(f) > new Date(lastVisitRef.value)
 }
 
 function formatFechaRelativa(f: string): string {
@@ -389,13 +389,14 @@ function formatFechaRelativa(f: string): string {
   return `hace ${Math.floor(dias / 7)} semanas`
 }
 
-const lastVisitRef = localStorage.getItem('fyl_last_visit') ?? ''
+const lastVisitRef = ref('')
 
 onBeforeUnmount(() => {
   localStorage.setItem('fyl_last_visit', new Date().toISOString())
 })
 
 onMounted(async () => {
+  lastVisitRef.value = localStorage.getItem('fyl_last_visit') ?? ''
 
   const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
