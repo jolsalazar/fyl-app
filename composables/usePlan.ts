@@ -73,6 +73,12 @@ export function usePlan() {
     return PLAN_ORDER.indexOf(otroPlan) > PLAN_ORDER.indexOf(_plan.value)
   }
 
+  function reset() {
+    _plan.value    = 'free'
+    _loaded.value  = false
+    _loading.value = true
+  }
+
   return {
     plan:            readonly(_plan),
     loading:         readonly(_loading),
@@ -86,5 +92,6 @@ export function usePlan() {
     planRequerido,
     esMejor,
     load,
+    reset,
   }
 }

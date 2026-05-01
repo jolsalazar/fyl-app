@@ -139,7 +139,7 @@
 <script setup lang="ts">
 const supabase = useSupabaseClient()
 const router = useRouter()
-const { plan, label: planLabel, load: loadPlan } = usePlan()
+const { plan, label: planLabel, load: loadPlan, reset: resetPlan } = usePlan()
 
 const email        = ref('')
 const isAdmin      = ref(false)
@@ -228,6 +228,7 @@ onMounted(async () => {
 
 async function logout() {
   menuOpen.value = false
+  resetPlan()
   await supabase.auth.signOut()
   router.push('/login')
 }

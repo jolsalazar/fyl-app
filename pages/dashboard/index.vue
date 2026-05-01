@@ -73,7 +73,7 @@
           Popular esta semana
         </span>
         <div class="populares-lista">
-          <NuxtLink v-for="p in populares" :key="p.id" :to="`/dashboard/oportunidades/${p.id}`" class="popular-item">
+          <NuxtLink v-for="p in populares" :key="p.id" :to="p.tipo === 'licitacion' ? `/dashboard/licitaciones/${p.id}` : `/dashboard/oportunidades/${p.id}`" class="popular-item">
             <span class="popular-titulo">{{ p.titulo }}</span>
             <span class="popular-guardados">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
@@ -139,7 +139,7 @@
             </div>
           </div>
 
-          <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="card-title-link"><h3>{{ item.titulo }}</h3></NuxtLink>
+          <NuxtLink :to="item.tipo === 'licitacion' ? `/dashboard/licitaciones/${item.id}` : `/dashboard/oportunidades/${item.id}`" class="card-title-link"><h3>{{ item.titulo }}</h3></NuxtLink>
           <p class="desc">{{ item.descripcion_breve }}</p>
 
           <div class="card-meta">
@@ -175,7 +175,7 @@
                 Postular
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </a>
-              <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="ver-link">
+              <NuxtLink :to="item.tipo === 'licitacion' ? `/dashboard/licitaciones/${item.id}` : `/dashboard/oportunidades/${item.id}`" class="ver-link">
                 Ver detalle
               </NuxtLink>
             </div>
