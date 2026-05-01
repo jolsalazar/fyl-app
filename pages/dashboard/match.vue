@@ -5,10 +5,10 @@
       <div class="header">
         <div>
           <h1>Mi Match
-            <span class="pro-badge">Pro</span>
+            <span class="pro-badge">Starter</span>
           </h1>
           <p class="subtitle">
-            <template v-if="plan === 'free' || plan === 'starter'">Función disponible en el Plan Pro</template>
+            <template v-if="plan === 'free'">Función disponible desde el Plan Starter</template>
             <template v-else-if="!loading && resultados.length">{{ resultados.length }} fondos analizados · ordenados por compatibilidad</template>
             <template v-else-if="!loading">Analizando tu perfil…</template>
             <template v-else>Cargando…</template>
@@ -16,18 +16,18 @@
         </div>
       </div>
 
-      <!-- ── UPGRADE GATE (plan free) ──────────────────────────── -->
-      <template v-if="plan === 'free' || plan === 'starter'">
+      <!-- ── UPGRADE GATE (solo plan free) ──────────────────────── -->
+      <template v-if="plan === 'free'">
         <div class="upgrade-wrap">
 
           <div class="upgrade-card">
             <div class="upgrade-top">
-              <span class="upgrade-plan-actual">Estás en el Plan {{ plan === 'starter' ? 'Starter' : 'Gratuito' }}</span>
+              <span class="upgrade-plan-actual">Estás en el Plan Gratuito</span>
               <div class="upgrade-icon-wrap">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </div>
               <h2 class="upgrade-title">Descubre exactamente qué fondos son para ti</h2>
-              <p class="upgrade-desc">El Plan Gratuito te avisa cuando se abren fondos. El Plan Pro analiza cada uno y te dice si realmente calificas — con razones concretas — para que postules solo donde tienes posibilidades reales.</p>
+              <p class="upgrade-desc">El Plan Gratuito te avisa cuando se abren fondos. Desde el Plan Starter analizamos cada uno y te decimos si realmente calificas — con razones concretas — para que postules solo donde tienes posibilidades reales.</p>
             </div>
 
             <div class="upgrade-benefits">
@@ -63,7 +63,7 @@
 
             <div class="upgrade-actions">
               <NuxtLink to="/planes" class="btn-upgrade">
-                Mejorar a Plan Pro
+                Mejorar a Plan Starter
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </NuxtLink>
               <NuxtLink to="/planes" class="btn-ver-planes">Ver todos los planes</NuxtLink>

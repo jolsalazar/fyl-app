@@ -9,7 +9,7 @@ interface PlanConfig {
 
 const PLAN_CONFIG: Record<Plan, PlanConfig> = {
   free:    { maxAlertas: 1,  emailAlertas: false, match: false, multiCliente: false },
-  starter: { maxAlertas: 3,  emailAlertas: true,  match: false, multiCliente: false },
+  starter: { maxAlertas: 3,  emailAlertas: true,  match: true,  multiCliente: false },
   pro:     { maxAlertas: -1, emailAlertas: true,  match: true,  multiCliente: false },
   agencia: { maxAlertas: -1, emailAlertas: true,  match: true,  multiCliente: true  },
 }
