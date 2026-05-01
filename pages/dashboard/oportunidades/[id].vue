@@ -77,6 +77,17 @@
               <p class="descripcion">{{ item.descripcion_breve }}</p>
             </section>
 
+            <!-- Requisitos clave -->
+            <section class="card-section" v-if="item.requisitos_clave?.length">
+              <h2>Requisitos para postular</h2>
+              <ul class="requisitos-lista">
+                <li v-for="r in item.requisitos_clave" :key="r" class="requisito-item">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  {{ r }}
+                </li>
+              </ul>
+            </section>
+
             <!-- Perfil requerido -->
             <section class="card-section" v-if="tienePerfilRequerido">
               <h2>Perfil requerido</h2>
@@ -153,27 +164,45 @@
             </div>
 
             <!-- Financiamiento -->
-            <div class="side-card" v-if="item.monto_rango || item.tipo_financiamiento">
+            <div class="side-card" v-if="item.monto_rango || item.monto_maximo || item.es_reembolsable !== null || item.porcentaje_cofinanciamiento !== null || item.plazo_ejecucion">
               <h3>Financiamiento</h3>
               <div class="side-rows">
-                <div v-if="item.monto_rango" class="side-row">
-                  <span class="side-label">Monto</span>
+                <div v-if="item.monto_maximo" class="side-row">
+                  <span class="side-label">Monto máximo por beneficiario</span>
+                  <span class="side-val monto-exacto">{{ formatMonto(item.monto_maximo) }}</span>
+                </div>
+                <div v-else-if="item.monto_rango" class="side-row">
+                  <span class="side-label">Monto estimado</span>
                   <span class="side-val">{{ montoLabel(item.monto_rango) }}</span>
                 </div>
-                <div v-if="item.tipo_financiamiento" class="side-row">
-                  <span class="side-label">Tipo</span>
-                  <span class="side-val">{{ item.tipo_financiamiento }}</span>
+                <div v-if="item.es_reembolsable !== null && item.es_reembolsable !== undefined" class="side-row">
+                  <span class="side-label">¿Se devuelve?</span>
+                  <span :class="['side-val', 'badge-reembolso', item.es_reembolsable ? 'reembolsable' : 'no-reembolsable']">
+                    {{ item.es_reembolsable ? 'Sí — crédito' : 'No — subsidio' }}
+                  </span>
+                </div>
+                <div v-if="item.porcentaje_cofinanciamiento !== null && item.porcentaje_cofinanciamiento !== undefined" class="side-row">
+                  <span class="side-label">Aporte propio requerido</span>
+                  <span class="side-val">{{ item.porcentaje_cofinanciamiento === 0 ? 'Sin cofinanciamiento' : `${item.porcentaje_cofinanciamiento}%` }}</span>
+                </div>
+                <div v-if="item.plazo_ejecucion" class="side-row">
+                  <span class="side-label">Plazo de ejecución</span>
+                  <span class="side-val">{{ item.plazo_ejecucion }}</span>
                 </div>
               </div>
             </div>
 
             <!-- Alcance -->
-            <div class="side-card" v-if="item.alcance">
+            <div class="side-card" v-if="item.alcance || item.region">
               <h3>Alcance</h3>
               <div class="side-rows">
-                <div class="side-row">
+                <div v-if="item.alcance" class="side-row">
                   <span class="side-label">Cobertura</span>
                   <span class="side-val">{{ alcanceLabel(item.alcance) }}</span>
+                </div>
+                <div v-if="item.region" class="side-row">
+                  <span class="side-label">Región</span>
+                  <span class="side-val">{{ item.region }}</span>
                 </div>
               </div>
             </div>
@@ -358,6 +387,11 @@ function montoLabel(m: string) {
 
 function alcanceLabel(a: string) {
   return { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }[a] ?? a
+}
+
+function formatMonto(n: number) {
+  if (!n) return '—'
+  return '$' + n.toLocaleString('es-CL')
 }
 
 function formatFecha(f: string) {
@@ -631,6 +665,23 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* Requisitos */
+.requisitos-lista { list-style: none; display: flex; flex-direction: column; gap: 0.625rem; }
+.requisito-item {
+  display: flex; align-items: flex-start; gap: 0.5rem;
+  font-size: 0.9rem; color: #334155; line-height: 1.5;
+}
+.requisito-item svg { color: #16a34a; flex-shrink: 0; margin-top: 0.2rem; }
+
+/* Financiamiento */
+.monto-exacto { font-size: 1.05rem; font-weight: 800; color: #0f172a; }
+.badge-reembolso {
+  font-size: 0.75rem; font-weight: 700;
+  padding: 0.2rem 0.6rem; border-radius: 999px;
+}
+.badge-reembolso.no-reembolsable { background: #f0fdf4; color: #16a34a; }
+.badge-reembolso.reembolsable    { background: #fefce8; color: #a16207; }
 
 /* Match side card */
 .match-card-side { border-color: #e0f2fe; }
