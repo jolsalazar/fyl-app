@@ -351,6 +351,7 @@ const FUENTES = [
   { value: 'anid',           label: 'ANID' },
   { value: 'mercadopublico', label: 'Mercado Público' },
   { value: 'fondos_gob',     label: 'Fondos.gob.cl' },
+  { value: 'incubadoras',    label: 'Incubadoras' },
 ]
 const ALCANCES = [
   { value: 'regional',      label: 'Regional' },
@@ -683,7 +684,7 @@ function resumenAlerta(a: any): string {
 
 // ── Label helpers ────────────────────────────────────────────────
 function fuenteLabel(f: string) {
-  return { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl' }[f] ?? f
+  return { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl', incubadoras: 'Incubadoras' }[f] ?? f
 }
 function estadoLabel(e: string) {
   return { abierto: 'Abierto', cerrado: 'Cerrado', por_abrir: 'Por abrir' }[e] ?? e

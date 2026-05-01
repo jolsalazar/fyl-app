@@ -48,6 +48,7 @@
           <option value="sercotec">SERCOTEC</option>
           <option value="anid">ANID</option>
           <option value="fondos_gob">Fondos.gob.cl</option>
+          <option value="incubadoras">Incubadoras</option>
         </select>
 
         <select v-model="filtroMonto" @change="cargar" class="select">
@@ -146,6 +147,7 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               {{ montoLabel(item.monto_rango) }}
             </span>
+            <span v-if="esNueva(item.fecha_scrapeado)" class="chip-nueva">Nueva</span>
             <span v-if="item.fecha_cierre_postulacion && esUrgente(item.fecha_cierre_postulacion)" class="chip-urgente">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               Cierra en {{ diasRestantes(item.fecha_cierre_postulacion) }} día{{ diasRestantes(item.fecha_cierre_postulacion) === 1 ? '' : 's' }}
@@ -153,6 +155,10 @@
             <span v-else-if="item.fecha_cierre_postulacion" class="meta-item">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               Cierra {{ formatFecha(item.fecha_cierre_postulacion) }}
+            </span>
+            <span v-if="item.fecha_scrapeado" class="meta-item meta-scrapeado">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Agregado {{ formatFechaRelativa(item.fecha_scrapeado) }}
             </span>
             <span v-if="item.alcance" class="meta-item">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
@@ -290,6 +296,7 @@ function fuenteLabel(f: string) {
   const map: Record<string, string> = {
     corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID',
     mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl',
+    incubadoras: 'Incubadoras',
   }
   return map[f] ?? f
 }
@@ -367,8 +374,28 @@ function diasRestantes(f: string): number {
   return Math.ceil((new Date(f).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
 }
 
-onMounted(async () => {
+function esNueva(f: string): boolean {
+  if (!lastVisitRef || !f) return false
+  return new Date(f) > new Date(lastVisitRef)
+}
+
+function formatFechaRelativa(f: string): string {
+  if (!f) return '—'
+  const dias = Math.floor((Date.now() - new Date(f).getTime()) / (1000 * 60 * 60 * 24))
+  if (dias === 0) return 'hoy'
+  if (dias === 1) return 'ayer'
+  if (dias < 7)  return `hace ${dias} días`
+  if (dias < 14) return 'hace 1 semana'
+  return `hace ${Math.floor(dias / 7)} semanas`
+}
+
+const lastVisitRef = localStorage.getItem('fyl_last_visit') ?? ''
+
+onBeforeUnmount(() => {
   localStorage.setItem('fyl_last_visit', new Date().toISOString())
+})
+
+onMounted(async () => {
 
   const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -746,6 +773,22 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   transition: all 0.15s;
 }
 .btn-empty-clear:hover { border-color: #0ea5e9; color: #0ea5e9; }
+
+/* Nueva chip */
+.chip-nueva {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #0ea5e9;
+  color: white;
+}
+
+.meta-scrapeado { color: #cbd5e1; font-size: 0.75rem; }
 
 /* Urgency chip */
 .chip-urgente {

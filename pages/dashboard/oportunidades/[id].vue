@@ -369,6 +369,7 @@ function fuenteLabel(f: string) {
   const map: Record<string, string> = {
     corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID',
     mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl',
+    incubadoras: 'Incubadoras',
   }
   return map[f] ?? f
 }
