@@ -39,8 +39,9 @@
             </div>
             <div class="card-right">
               <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
-              <button class="btn-unsave" @click="quitar(item.convocatoria_id)" title="Quitar de guardados">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              <button class="btn-unsave" @click="quitar(item.convocatoria_id)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Quitar
               </button>
             </div>
           </div>
@@ -58,6 +59,10 @@
             <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               Cierra {{ formatFecha(item.fecha_cierre_postulacion) }}
+            </span>
+            <span v-if="item.guardado_at" class="meta-item meta-guardado">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              Guardado {{ formatFechaRelativa(item.guardado_at) }}
             </span>
           </div>
 
@@ -83,6 +88,7 @@
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
+const { show: toast } = useToast()
 const items = ref<any[]>([])
 const loading = ref(true)
 
@@ -101,13 +107,14 @@ onMounted(async () => {
     .in('id', ids)
 
   const map = Object.fromEntries((convocatorias ?? []).map(c => [c.id, c]))
-  items.value = guardados.map(g => ({ ...map[g.convocatoria_id], convocatoria_id: g.convocatoria_id })).filter(i => i.titulo)
+  items.value = guardados.map(g => ({ ...map[g.convocatoria_id], convocatoria_id: g.convocatoria_id, guardado_at: g.created_at })).filter(i => i.titulo)
   loading.value = false
 })
 
 async function quitar(convocatoriaId: string) {
   await supabase.from('guardados').delete().eq('convocatoria_id', convocatoriaId)
   items.value = items.value.filter(i => i.convocatoria_id !== convocatoriaId)
+  toast('Eliminado de guardados', 'info')
 }
 
 function fuenteLabel(f: string) {
@@ -125,6 +132,16 @@ function formatFecha(f: string) {
   if (!f) return '—'
   return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })
 }
+function formatFechaRelativa(f: string): string {
+  if (!f) return '—'
+  const dias = Math.floor((Date.now() - new Date(f).getTime()) / (1000 * 60 * 60 * 24))
+  if (dias === 0) return 'hoy'
+  if (dias === 1) return 'ayer'
+  if (dias < 7)  return `hace ${dias} días`
+  if (dias < 14) return 'hace 1 semana'
+  return `hace ${Math.floor(dias / 7)} semanas`
+}
+
 function esUrgente(f: string) {
   if (!f) return false
   const dias = (new Date(f).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
@@ -177,8 +194,14 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .badge-estado.cerrado  { background: #f1f5f9; color: #94a3b8; }
 .badge-estado.por_abrir { background: #fefce8; color: #a16207; }
 
-.btn-unsave { background: none; border: none; color: #0ea5e9; cursor: pointer; padding: 2px; display: flex; align-items: center; }
-.btn-unsave:hover { color: #ef4444; }
+.btn-unsave {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: none; border: 1.5px solid #e2e8f0; border-radius: 999px;
+  color: #94a3b8; cursor: pointer; padding: 0.2rem 0.6rem;
+  font-size: 0.72rem; font-weight: 600; font-family: inherit;
+  transition: all 0.15s;
+}
+.btn-unsave:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
 
 .card-title-link { text-decoration: none; }
 .card-title-link:hover h3 { color: #0ea5e9; }
@@ -188,6 +211,7 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .card-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.875rem; }
 .meta-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; }
 .meta-item.urgente { color: #f59e0b; font-weight: 600; }
+.meta-guardado { color: #cbd5e1; }
 
 .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.875rem; border-top: 1px solid #f1f5f9; gap: 0.75rem; flex-wrap: wrap; }
 .focos { display: flex; gap: 0.35rem; flex-wrap: wrap; }
