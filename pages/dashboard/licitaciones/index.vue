@@ -107,7 +107,7 @@
             </div>
           </div>
 
-          <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="card-title-link"><h3>{{ item.titulo }}</h3></NuxtLink>
+          <NuxtLink :to="`/dashboard/licitaciones/${item.id}`" class="card-title-link"><h3>{{ item.titulo }}</h3></NuxtLink>
           <p class="desc">{{ item.descripcion_breve }}</p>
 
           <div class="card-meta">
@@ -138,7 +138,7 @@
                 Postular
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </a>
-              <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="ver-link">
+              <NuxtLink :to="`/dashboard/licitaciones/${item.id}`" class="ver-link">
                 Ver detalle
               </NuxtLink>
             </div>
