@@ -6,7 +6,12 @@
       <div class="header">
         <div>
           <h1>Fondos</h1>
-          <p class="subtitle">{{ total !== null ? `${total} fondos encontrados` : 'Cargando...' }}</p>
+          <p class="subtitle">
+            {{ total !== null ? `${total} fondos encontrados` : 'Cargando...' }}
+            <span v-if="nuevosEstaSemana > 0" class="badge-nuevos">
+              +{{ nuevosEstaSemana }} esta semana
+            </span>
+          </p>
         </div>
         <NuxtLink v-if="!canExport" to="/planes" class="btn-config btn-export-locked" title="Disponible en Plan Pro">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -60,6 +65,23 @@
         </button>
       </div>
 
+      <!-- Popular esta semana -->
+      <div v-if="populares.length > 0 && !hayFiltros" class="populares-wrap">
+        <span class="populares-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          Popular esta semana
+        </span>
+        <div class="populares-lista">
+          <NuxtLink v-for="p in populares" :key="p.id" :to="`/dashboard/oportunidades/${p.id}`" class="popular-item">
+            <span class="popular-titulo">{{ p.titulo }}</span>
+            <span class="popular-guardados">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              {{ p.total }}
+            </span>
+          </NuxtLink>
+        </div>
+      </div>
+
       <!-- Sort -->
       <div class="sort-bar">
         <span class="sort-label">Ordenar por:</span>
@@ -101,6 +123,10 @@
               <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
             </div>
             <div class="card-top-right">
+              <span v-if="guardadosCount[item.id] >= 2" class="tag-popular">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                {{ guardadosCount[item.id] }}
+              </span>
               <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
               <button
                 :class="['btn-guardar', guardadosSet.has(item.id) ? 'guardado' : '']"
@@ -176,6 +202,9 @@ const canExport = computed(() => plan.value === 'pro' || plan.value === 'agencia
 const PAGE_SIZE = 20
 const SCROLL_KEY = 'scroll_fondos'
 const guardadosSet = ref<Set<string>>(new Set())
+const guardadosCount = ref<Record<string, number>>({})
+const populares = ref<{ id: string, titulo: string, total: number }[]>([])
+const nuevosEstaSemana = ref(0)
 
 const loading = ref(true)
 const loadingMas = ref(false)
@@ -341,11 +370,41 @@ function diasRestantes(f: string): number {
 onMounted(async () => {
   localStorage.setItem('fyl_last_visit', new Date().toISOString())
 
-  const [, { data: guardados }] = await Promise.all([
+  const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [, { data: guardados }, { data: guardadosCountData }, { data: popularesData }, { count: cNuevos }] = await Promise.all([
     loadPlan(),
     supabase.from('guardados').select('convocatoria_id'),
+    supabase.from('guardados').select('convocatoria_id'),
+    supabase.from('guardados').select('convocatoria_id, created_at, convocatorias!inner(id, titulo, fuente, estado)')
+      .neq('convocatorias.fuente', 'mercadopublico')
+      .eq('convocatorias.estado', 'abierto')
+      .gte('created_at', semanaAtras),
+    supabase.from('convocatorias')
+      .select('id', { count: 'exact', head: true })
+      .neq('fuente', 'mercadopublico')
+      .gte('fecha_scrapeado', semanaAtras),
   ])
+
   guardadosSet.value = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
+
+  // Conteo por convocatoria para mostrar en cards
+  const countMap: Record<string, number> = {}
+  for (const g of guardadosCountData ?? []) {
+    countMap[g.convocatoria_id] = (countMap[g.convocatoria_id] ?? 0) + 1
+  }
+  guardadosCount.value = countMap
+
+  // Top 3 más guardados esta semana
+  const popMap: Record<string, { id: string, titulo: string, total: number }> = {}
+  for (const g of popularesData ?? []) {
+    const conv = (g as any).convocatorias
+    if (!conv) continue
+    const id = conv.id
+    popMap[id] = { id, titulo: conv.titulo, total: (popMap[id]?.total ?? 0) + 1 }
+  }
+  populares.value = Object.values(popMap).sort((a, b) => b.total - a.total).slice(0, 3)
+  nuevosEstaSemana.value = cNuevos ?? 0
 
   await cargar()
 
@@ -373,7 +432,13 @@ onMounted(async () => {
   gap: 1rem;
 }
 h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
-.subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
+.subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.badge-nuevos {
+  font-size: 0.7rem; font-weight: 700;
+  background: #f0fdf4; color: #16a34a;
+  border: 1px solid #bbf7d0;
+  padding: 0.1rem 0.5rem; border-radius: 999px;
+}
 
 .btn-config {
   display: inline-flex;
@@ -458,6 +523,62 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   transition: all 0.15s;
 }
 .btn-clear:hover { border-color: #ef4444; color: #ef4444; }
+
+/* Popular */
+.populares-wrap {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.populares-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #0ea5e9;
+  margin-bottom: 0.75rem;
+}
+.populares-lista { display: flex; flex-direction: column; gap: 0.4rem; }
+.popular-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: background 0.1s;
+}
+.popular-item:hover { background: #f8fafc; }
+.popular-titulo { font-size: 0.875rem; color: #334155; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.popular-guardados {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #0ea5e9;
+  flex-shrink: 0;
+}
+
+/* Tag popular en card */
+.tag-popular {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #0ea5e9;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+}
 
 /* Sort */
 .sort-bar {

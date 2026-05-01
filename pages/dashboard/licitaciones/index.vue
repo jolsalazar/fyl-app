@@ -6,7 +6,10 @@
       <div class="header">
         <div>
           <h1>Licitaciones</h1>
-          <p class="subtitle">{{ total !== null ? `${total} licitaciones encontradas` : 'Cargando...' }}</p>
+          <p class="subtitle">
+            {{ total !== null ? `${total} licitaciones encontradas` : 'Cargando...' }}
+            <span v-if="nuevosEstaSemana > 0" class="badge-nuevos">+{{ nuevosEstaSemana }} esta semana</span>
+          </p>
         </div>
         <NuxtLink v-if="!canExport" to="/planes" class="btn-config btn-export-locked" title="Disponible en Plan Pro">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -169,6 +172,7 @@ const FUENTE = 'mercadopublico'
 const PAGE_SIZE = 20
 const SCROLL_KEY = 'scroll_licitaciones'
 const guardadosSet = ref<Set<string>>(new Set())
+const nuevosEstaSemana = ref(0)
 
 const loading = ref(true)
 const loadingMas = ref(false)
@@ -328,11 +332,18 @@ function diasRestantes(f: string): number {
 }
 
 onMounted(async () => {
-  const [, { data: guardados }] = await Promise.all([
+  const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [, { data: guardados }, { count: cNuevos }] = await Promise.all([
     loadPlan(),
     supabase.from('guardados').select('convocatoria_id'),
+    supabase.from('convocatorias')
+      .select('id', { count: 'exact', head: true })
+      .eq('fuente', FUENTE)
+      .gte('fecha_scrapeado', semanaAtras),
   ])
   guardadosSet.value = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
+  nuevosEstaSemana.value = cNuevos ?? 0
 
   await cargar()
 
@@ -360,7 +371,8 @@ onMounted(async () => {
   gap: 1rem;
 }
 h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
-.subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
+.subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.badge-nuevos { font-size: 0.7rem; font-weight: 700; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; padding: 0.1rem 0.5rem; border-radius: 999px; }
 
 .btn-config {
   display: inline-flex;

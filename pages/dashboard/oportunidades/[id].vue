@@ -29,10 +29,16 @@
             <h1>{{ item.titulo }}</h1>
             <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
           </div>
-          <p v-if="item.organizador" class="organizador">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-            {{ item.organizador }}
-          </p>
+          <div class="organizador-wrap">
+            <p v-if="item.organizador" class="organizador">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              {{ item.organizador }}
+            </p>
+            <span v-if="edicionesAnteriores > 0" class="chip-recurrente">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+              Fondo recurrente · {{ edicionesAnteriores }} edición{{ edicionesAnteriores !== 1 ? 'es' : '' }} anterior{{ edicionesAnteriores !== 1 ? 'es' : '' }}
+            </span>
+          </div>
         </div>
 
         <!-- Acciones principales -->
@@ -52,6 +58,7 @@
           <button :class="['btn-secundario', 'btn-guardar-detalle', guardado ? 'guardado' : '']" @click="toggleGuardado">
             <svg width="14" height="14" viewBox="0 0 24 24" :fill="guardado ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
             {{ guardado ? 'Guardado' : 'Guardar' }}
+            <span v-if="totalGuardados >= 2" class="guardados-count">{{ totalGuardados }}</span>
           </button>
           <button :class="['btn-secundario', 'btn-postule', postulado ? 'postulado' : '']" @click="togglePostulado">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -171,6 +178,41 @@
               </div>
             </div>
 
+            <!-- Compatibilidad -->
+            <div v-if="matchResult" class="side-card match-card-side">
+              <h3>Tu compatibilidad</h3>
+              <div class="match-score-wrap">
+                <div :class="['match-donut', matchResult.nivel]">
+                  <span class="match-pct">{{ matchResult.score }}%</span>
+                </div>
+                <div class="match-nivel-wrap">
+                  <span :class="['match-nivel-label', matchResult.nivel]">
+                    {{ { alto: 'Alto match', medio: 'Match parcial', bajo: 'Bajo match' }[matchResult.nivel] }}
+                  </span>
+                  <NuxtLink to="/dashboard/match" class="match-ver-todos">Ver Mi Match →</NuxtLink>
+                </div>
+              </div>
+              <div class="match-razones">
+                <div v-for="(r, i) in matchResult.razones.slice(0, 4)" :key="i" :class="['match-razon', r.tipo]">
+                  <span class="razon-icono">{{ r.tipo === 'positivo' ? '✓' : r.tipo === 'negativo' ? '✗' : '·' }}</span>
+                  <span class="razon-texto">{{ r.texto }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Organizador -->
+            <div v-if="item.organizador && otrosDelOrganizador > 0" class="side-card">
+              <h3>Organizador</h3>
+              <p class="org-nombre">{{ item.organizador }}</p>
+              <NuxtLink
+                :to="`/dashboard?q=${encodeURIComponent(item.organizador)}`"
+                class="org-link"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                Ver {{ otrosDelOrganizador }} fondo{{ otrosDelOrganizador !== 1 ? 's' : '' }} abierto{{ otrosDelOrganizador !== 1 ? 's' : '' }} de este organizador
+              </NuxtLink>
+            </div>
+
             <!-- Fuente -->
             <div class="side-card">
               <h3>Fuente</h3>
@@ -200,10 +242,15 @@ definePageMeta({ middleware: 'auth', layout: false })
 const supabase = useSupabaseClient()
 const route = useRoute()
 
-const item       = ref<any>(null)
-const loading    = ref(true)
-const guardado   = ref(false)
-const postulado  = ref(false)
+const item              = ref<any>(null)
+const loading           = ref(true)
+const guardado          = ref(false)
+const postulado         = ref(false)
+const totalGuardados    = ref(0)
+const matchResult       = ref<MatchResult | null>(null)
+const otrosDelOrganizador = ref(0)
+const edicionesAnteriores = ref(0)
+const { plan, load: loadPlan } = usePlan()
 
 const tienePerfilRequerido = computed(() =>
   item.value?.perfil_tipo_persona?.length ||
@@ -216,15 +263,46 @@ const tienePerfilRequerido = computed(() =>
 onMounted(async () => {
   const id = route.params.id as string
 
-  const [{ data }, { data: g }, { data: p }] = await Promise.all([
+  const [{ data }, { data: g }, { data: p }, { count: cGuardados }] = await Promise.all([
     supabase.from('convocatorias').select('*').eq('id', id).single(),
     supabase.from('guardados').select('id').eq('convocatoria_id', id).maybeSingle(),
     supabase.from('postulaciones').select('id').eq('convocatoria_id', id).maybeSingle(),
+    supabase.from('guardados').select('id', { count: 'exact', head: true }).eq('convocatoria_id', id),
   ])
-  item.value     = data
-  guardado.value = !!g
-  postulado.value = !!p
-  loading.value  = false
+  item.value           = data
+  guardado.value       = !!g
+  postulado.value      = !!p
+  totalGuardados.value = cGuardados ?? 0
+  loading.value        = false
+
+  // Datos del organizador: otros fondos abiertos + ediciones anteriores
+  if (data?.organizador) {
+    const [{ count: cOtros }, { count: cAnt }] = await Promise.all([
+      supabase.from('convocatorias')
+        .select('id', { count: 'exact', head: true })
+        .eq('organizador', data.organizador)
+        .eq('estado', 'abierto')
+        .neq('id', id),
+      supabase.from('convocatorias')
+        .select('id', { count: 'exact', head: true })
+        .eq('organizador', data.organizador)
+        .eq('estado', 'cerrado'),
+    ])
+    otrosDelOrganizador.value  = cOtros ?? 0
+    edicionesAnteriores.value  = cAnt ?? 0
+  }
+
+  // Calcular compatibilidad solo para Pro/Agencia con perfil completo
+  await loadPlan()
+  if (plan.value === 'pro' || plan.value === 'agencia') {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const perfil = await cargarPerfil(supabase, user.id)
+      if (perfil.tipo_persona || perfil.foco.length > 0) {
+        matchResult.value = calcularMatch(perfil, data)
+      }
+    }
+  }
 })
 
 async function toggleGuardado() {
@@ -346,6 +424,7 @@ h1 {
   letter-spacing: -0.025em;
   line-height: 1.3;
 }
+.organizador-wrap { display: flex; flex-direction: column; gap: 0.5rem; }
 .organizador {
   display: flex;
   align-items: center;
@@ -354,6 +433,31 @@ h1 {
   color: #64748b;
   font-weight: 500;
 }
+.chip-recurrente {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6366f1;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  width: fit-content;
+}
+.org-nombre { font-size: 0.875rem; font-weight: 600; color: #334155; margin-bottom: 0.625rem; }
+.org-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #0ea5e9;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.org-link:hover { color: #0284c7; }
 
 .tag-fuente {
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
@@ -407,6 +511,15 @@ h1 {
 
 .btn-guardar-detalle { cursor: pointer; font-family: 'Inter', sans-serif; }
 .btn-guardar-detalle.guardado { border-color: #0ea5e9; color: #0ea5e9; background: #f0f9ff; }
+.guardados-count {
+  background: #0ea5e9;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  margin-left: 0.1rem;
+}
 .btn-postule { cursor: pointer; font-family: 'Inter', sans-serif; }
 .btn-postule.postulado { border-color: #22c55e; color: #16a34a; background: #f0fdf4; }
 
@@ -518,6 +631,33 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* Match side card */
+.match-card-side { border-color: #e0f2fe; }
+.match-score-wrap { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.match-donut {
+  width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem; font-weight: 800; color: white;
+}
+.match-donut.alto   { background: linear-gradient(135deg, #22c55e, #16a34a); }
+.match-donut.medio  { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.match-donut.bajo   { background: linear-gradient(135deg, #94a3b8, #64748b); }
+.match-nivel-wrap { display: flex; flex-direction: column; gap: 0.25rem; }
+.match-nivel-label { font-size: 0.8rem; font-weight: 700; }
+.match-nivel-label.alto  { color: #16a34a; }
+.match-nivel-label.medio { color: #d97706; }
+.match-nivel-label.bajo  { color: #64748b; }
+.match-ver-todos { font-size: 0.75rem; color: #0ea5e9; text-decoration: none; font-weight: 500; }
+.match-ver-todos:hover { text-decoration: underline; }
+.match-razones { display: flex; flex-direction: column; gap: 0.4rem; }
+.match-razon { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.8rem; line-height: 1.4; }
+.razon-icono { font-size: 0.75rem; font-weight: 800; flex-shrink: 0; margin-top: 0.05rem; }
+.razon-texto { color: #475569; }
+.match-razon.positivo .razon-icono { color: #16a34a; }
+.match-razon.negativo .razon-icono { color: #ef4444; }
+.match-razon.neutro   .razon-icono { color: #94a3b8; }
+.match-razon.negativo .razon-texto { color: #94a3b8; }
 
 /* Loading / empty */
 .loading-wrap {
