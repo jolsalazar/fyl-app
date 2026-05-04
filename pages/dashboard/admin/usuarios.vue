@@ -18,13 +18,13 @@
           <span class="stat-num">{{ byPlan.free }}</span>
           <span class="stat-label">Free</span>
         </div>
-        <div class="stat-card accent-pro">
-          <span class="stat-num">{{ byPlan.pro }}</span>
-          <span class="stat-label">Pro</span>
+        <div class="stat-card accent-advanced">
+          <span class="stat-num">{{ byPlan.advanced }}</span>
+          <span class="stat-label">Advanced</span>
         </div>
-        <div class="stat-card accent-agencia">
-          <span class="stat-num">{{ byPlan.agencia }}</span>
-          <span class="stat-label">Agencia</span>
+        <div class="stat-card accent-agency">
+          <span class="stat-num">{{ byPlan.agency }}</span>
+          <span class="stat-label">Agency</span>
         </div>
       </div>
 
@@ -55,8 +55,8 @@
                   @change="changePlan(u, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="free">free</option>
-                  <option value="pro">pro</option>
-                  <option value="agencia">agencia</option>
+                  <option value="advanced">Advanced</option>
+                  <option value="agency">Agency</option>
                 </select>
               </td>
               <td><span :class="['badge', u.plan_status === 'active' ? 'badge-active' : 'badge-inactive']">{{ u.plan_status }}</span></td>
@@ -104,8 +104,8 @@ const currentUserId = ref('')
 const total = computed(() => users.value.length)
 const byPlan = computed(() => ({
   free: users.value.filter(u => u.plan === 'free').length,
-  pro: users.value.filter(u => u.plan === 'pro').length,
-  agencia: users.value.filter(u => u.plan === 'agencia').length,
+  advanced: users.value.filter(u => u.plan === 'advanced').length,
+  agency:   users.value.filter(u => u.plan === 'agency').length,
 }))
 
 function formatDate(iso: string) {
@@ -181,8 +181,8 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   font-weight: 500;
 }
 
-.accent-pro .stat-num { color: #6366f1; }
-.accent-agencia .stat-num { color: #0ea5e9; }
+.accent-advanced .stat-num { color: #6366f1; }
+.accent-agency .stat-num { color: #0ea5e9; }
 
 .table-wrap {
   background: white;
@@ -246,8 +246,8 @@ td {
 }
 .plan-select:disabled { opacity: 0.5; cursor: not-allowed; }
 .plan-select.free    { background: #f1f5f9; color: #475569; }
-.plan-select.pro     { background: #ede9fe; color: #6d28d9; border-color: #c4b5fd; }
-.plan-select.agencia { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
+.plan-select.advanced { background: #ede9fe; color: #6d28d9; border-color: #c4b5fd; }
+.plan-select.agency   { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
 
 .action-cell { text-align: right; }
 

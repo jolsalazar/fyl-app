@@ -26,13 +26,13 @@
             <span class="stat-num">{{ byPlan.free }}</span>
             <span class="stat-label">Free</span>
           </div>
-          <div class="stat-card accent-pro">
-            <span class="stat-num">{{ byPlan.pro }}</span>
-            <span class="stat-label">Pro</span>
+          <div class="stat-card accent-advanced">
+            <span class="stat-num">{{ byPlan.advanced }}</span>
+            <span class="stat-label">Advanced</span>
           </div>
-          <div class="stat-card accent-agencia">
-            <span class="stat-num">{{ byPlan.agencia }}</span>
-            <span class="stat-label">Agencia</span>
+          <div class="stat-card accent-agency">
+            <span class="stat-num">{{ byPlan.agency }}</span>
+            <span class="stat-label">Agency</span>
           </div>
           <div class="stat-card accent-blue">
             <span class="stat-num">{{ nuevosEstaSemana }}</span>
@@ -45,14 +45,14 @@
           <h2>Distribución por plan</h2>
           <div class="distrib-wrap">
             <div class="distrib-bar">
-              <div class="bar-seg seg-free"   :style="{ width: pct(byPlan.free) + '%' }"   v-if="byPlan.free"></div>
-              <div class="bar-seg seg-pro"    :style="{ width: pct(byPlan.pro) + '%' }"    v-if="byPlan.pro"></div>
-              <div class="bar-seg seg-agencia" :style="{ width: pct(byPlan.agencia) + '%' }" v-if="byPlan.agencia"></div>
+              <div class="bar-seg seg-free"     :style="{ width: pct(byPlan.free) + '%' }"     v-if="byPlan.free"></div>
+              <div class="bar-seg seg-advanced" :style="{ width: pct(byPlan.advanced) + '%' }" v-if="byPlan.advanced"></div>
+              <div class="bar-seg seg-agency"   :style="{ width: pct(byPlan.agency) + '%' }"   v-if="byPlan.agency"></div>
             </div>
             <div class="distrib-legend">
               <div class="legend-item"><span class="dot dot-free"></span>Free — {{ byPlan.free }} ({{ pct(byPlan.free) }}%)</div>
-              <div class="legend-item"><span class="dot dot-pro"></span>Pro — {{ byPlan.pro }} ({{ pct(byPlan.pro) }}%)</div>
-              <div class="legend-item"><span class="dot dot-agencia"></span>Agencia — {{ byPlan.agencia }} ({{ pct(byPlan.agencia) }}%)</div>
+              <div class="legend-item"><span class="dot dot-advanced"></span>Advanced — {{ byPlan.advanced }} ({{ pct(byPlan.advanced) }}%)</div>
+              <div class="legend-item"><span class="dot dot-agency"></span>Agency — {{ byPlan.agency }} ({{ pct(byPlan.agency) }}%)</div>
             </div>
           </div>
         </div>
@@ -166,10 +166,10 @@ const loading = ref(true)
 const total = computed(() => users.value.length)
 const byPlan = computed(() => ({
   free:    users.value.filter(u => u.plan === 'free').length,
-  pro:     users.value.filter(u => u.plan === 'pro').length,
-  agencia: users.value.filter(u => u.plan === 'agencia').length,
+  advanced: users.value.filter(u => u.plan === 'advanced').length,
+  agency:   users.value.filter(u => u.plan === 'agency').length,
 }))
-const pagados = computed(() => byPlan.value.pro + byPlan.value.agencia)
+const pagados = computed(() => byPlan.value.advanced + byPlan.value.agency)
 
 const nuevosEstaSemana = computed(() => {
   const hace7 = new Date(); hace7.setDate(hace7.getDate() - 7)
@@ -316,8 +316,8 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .stat-label { font-size: 0.8125rem; color: #64748b; font-weight: 500; }
 .stat-sub { font-size: 0.75rem; color: #94a3b8; }
 .accent-green .stat-num { color: #16a34a; }
-.accent-pro .stat-num { color: #6366f1; }
-.accent-agencia .stat-num { color: #0ea5e9; }
+.accent-advanced .stat-num { color: #6366f1; }
+.accent-agency .stat-num { color: #0ea5e9; }
 .accent-blue .stat-num { color: #0ea5e9; }
 
 .section {
@@ -334,15 +334,15 @@ h2 { font-size: 0.875rem; font-weight: 700; color: #0f172a; text-transform: uppe
 }
 .bar-seg { height: 100%; transition: width 0.4s; }
 .seg-free    { background: #cbd5e1; }
-.seg-pro     { background: #818cf8; }
-.seg-agencia { background: #38bdf8; }
+.seg-advanced { background: #818cf8; }
+.seg-agency   { background: #38bdf8; }
 
 .distrib-legend { display: flex; gap: 1.5rem; flex-wrap: wrap; }
 .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8125rem; color: #475569; }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .dot-free    { background: #cbd5e1; }
-.dot-pro     { background: #818cf8; }
-.dot-agencia { background: #38bdf8; }
+.dot-advanced { background: #818cf8; }
+.dot-agency   { background: #38bdf8; }
 
 /* Chart */
 .chart {

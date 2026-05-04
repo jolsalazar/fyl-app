@@ -323,7 +323,7 @@ onMounted(async () => {
 
   // Calcular compatibilidad solo para Pro/Agencia con perfil completo
   await loadPlan()
-  if (plan.value === 'pro' || plan.value === 'agencia') {
+  if (plan.value === 'advanced' || plan.value === 'agency') {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const perfil = await cargarPerfil(supabase, user.id)

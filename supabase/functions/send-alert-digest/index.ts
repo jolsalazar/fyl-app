@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     const { data: profiles } = await supabase
       .from('profiles')
       .select('id')
-      .in('plan', ['pro', 'agencia'])
+      .in('plan', ['advanced', 'agency'])
 
     if (!profiles?.length) {
       return json({ ok: true, message: 'No pro users found' })

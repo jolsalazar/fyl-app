@@ -21,7 +21,7 @@
       <!-- FREE -->
       <div class="plan-card" :class="{ current: plan === 'free' }">
         <div class="plan-top">
-          <div class="plan-name">Gratuito</div>
+          <div class="plan-name">Free</div>
           <div class="plan-price"><span class="price-num">$0</span><span class="price-per">/mes</span></div>
           <p class="plan-desc">Para explorar el ecosistema de fondos y mantenerte informado.</p>
         </div>
@@ -36,7 +36,7 @@
         </ul>
         <div class="plan-action">
           <span v-if="plan === 'free'" class="btn-current">Plan actual</span>
-          <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Cambio a plan Gratuito" class="btn-downgrade">Cambiar a Gratuito</a>
+          <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Cambio a plan Free" class="btn-downgrade">Cambiar a Free</a>
         </div>
       </div>
 
@@ -48,7 +48,7 @@
           <p class="plan-desc">Para emprendedores activos que quieren estar siempre al tanto.</p>
         </div>
         <ul class="features">
-          <li class="ok">Todo lo del plan Gratuito</li>
+          <li class="ok">Todo lo del plan Free</li>
           <li class="ok">Hasta 3 alertas activas</li>
           <li class="ok">Notificaciones por email (diarias)</li>
           <li class="no">Mi Match (scoring de compatibilidad)</li>
@@ -63,10 +63,10 @@
       </div>
 
       <!-- PRO -->
-      <div class="plan-card plan-featured" :class="{ current: plan === 'pro' }">
+      <div class="plan-card plan-featured" :class="{ current: plan === 'advanced' }">
         <div class="featured-badge">Más popular</div>
         <div class="plan-top">
-          <div class="plan-name">Pro</div>
+          <div class="plan-name">Advanced</div>
           <div class="plan-price"><span class="price-num">$19.990</span><span class="price-per">/mes</span></div>
           <p class="plan-desc">Para quienes postulan activamente y quieren postular solo donde califican.</p>
         </div>
@@ -79,30 +79,30 @@
           <li class="no">Gestión multi-cliente</li>
         </ul>
         <div class="plan-action">
-          <span v-if="plan === 'pro'" class="btn-current">Plan actual</span>
-          <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Quiero el plan Pro" class="btn-upgrade btn-pro">
-            {{ esMejor('pro') ? 'Mejorar a Pro' : 'Cambiar a Pro' }}
+          <span v-if="plan === 'advanced'" class="btn-current">Plan actual</span>
+          <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Quiero el plan Advanced" class="btn-upgrade btn-pro">
+            {{ esMejor('advanced') ? 'Mejorar a Advanced' : 'Cambiar a Advanced' }}
           </a>
         </div>
       </div>
 
       <!-- AGENCIA -->
-      <div class="plan-card" :class="{ current: plan === 'agencia' }">
+      <div class="plan-card" :class="{ current: plan === 'agency' }">
         <div class="plan-top">
-          <div class="plan-name">Agencia</div>
+          <div class="plan-name">Agency</div>
           <div class="plan-price"><span class="price-num">$49.990</span><span class="price-per">/mes</span></div>
           <p class="plan-desc">Para consultoras y agencias que gestionan múltiples clientes y proyectos.</p>
         </div>
         <ul class="features">
-          <li class="ok">Todo lo del plan Pro</li>
+          <li class="ok">Todo lo del plan Advanced</li>
           <li class="ok">Gestión multi-cliente</li>
           <li class="ok">Reportes exportables</li>
           <li class="ok">Soporte prioritario</li>
         </ul>
         <div class="plan-action">
-          <span v-if="plan === 'agencia'" class="btn-current">Plan actual</span>
-          <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Quiero el plan Agencia" class="btn-upgrade btn-agencia">
-            {{ esMejor('agencia') ? 'Mejorar a Agencia' : 'Contactar' }}
+          <span v-if="plan === 'agency'" class="btn-current">Plan actual</span>
+          <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Quiero el plan Agency" class="btn-upgrade btn-agency">
+            {{ esMejor('agency') ? 'Mejorar a Agency' : 'Contactar' }}
           </a>
         </div>
       </div>
@@ -210,7 +210,7 @@ h1 { font-size: 1.75rem; font-weight: 800; color: #0f172a; letter-spacing: -0.03
 .btn-upgrade:hover { opacity: 0.9; }
 .btn-starter { background: #f59e0b; }
 .btn-pro     { background: linear-gradient(135deg, #6366f1, #8b5cf6); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
-.btn-agencia { background: #0f172a; }
+.btn-agency { background: #0f172a; }
 .btn-downgrade {
   display: block; text-align: center; padding: 0.7rem;
   background: white; border: 1.5px solid #e2e8f0; color: #94a3b8;

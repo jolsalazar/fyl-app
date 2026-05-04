@@ -22,12 +22,12 @@
 
           <div class="upgrade-card">
             <div class="upgrade-top">
-              <span class="upgrade-plan-actual">Estás en el Plan Gratuito</span>
+              <span class="upgrade-plan-actual">Estás en el Plan Free</span>
               <div class="upgrade-icon-wrap">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
               </div>
               <h2 class="upgrade-title">Descubre exactamente qué fondos son para ti</h2>
-              <p class="upgrade-desc">El Plan Gratuito te avisa cuando se abren fondos. Desde el Plan Starter analizamos cada uno y te decimos si realmente calificas — con razones concretas — para que postules solo donde tienes posibilidades reales.</p>
+              <p class="upgrade-desc">El Plan Free te avisa cuando se abren fondos. Desde el Plan Starter analizamos cada uno y te decimos si realmente calificas — con razones concretas — para que postules solo donde tienes posibilidades reales.</p>
             </div>
 
             <div class="upgrade-benefits">
@@ -123,7 +123,7 @@
       </template>
 
       <!-- ── CONTENIDO PRO ──────────────────────────────────────── -->
-      <template v-else-if="plan === 'pro' || plan === 'agencia'">
+      <template v-else-if="plan === 'advanced' || plan === 'agency'">
 
       <!-- Sin perfil suficiente -->
       <div v-if="!loading && !tienePerfil" class="empty-state">

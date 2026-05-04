@@ -1,4 +1,4 @@
-type Plan = 'free' | 'starter' | 'pro' | 'agencia'
+type Plan = 'free' | 'starter' | 'advanced' | 'agency'
 
 interface PlanConfig {
   maxAlertas:    number   // -1 = ilimitado
@@ -8,20 +8,20 @@ interface PlanConfig {
 }
 
 const PLAN_CONFIG: Record<Plan, PlanConfig> = {
-  free:    { maxAlertas: 1,  emailAlertas: false, match: false, multiCliente: false },
-  starter: { maxAlertas: 3,  emailAlertas: true,  match: true,  multiCliente: false },
-  pro:     { maxAlertas: -1, emailAlertas: true,  match: true,  multiCliente: false },
-  agencia: { maxAlertas: -1, emailAlertas: true,  match: true,  multiCliente: true  },
+  free:     { maxAlertas: 1,  emailAlertas: false, match: false, multiCliente: false },
+  starter:  { maxAlertas: 3,  emailAlertas: true,  match: true,  multiCliente: false },
+  advanced: { maxAlertas: -1, emailAlertas: true,  match: true,  multiCliente: false },
+  agency:   { maxAlertas: -1, emailAlertas: true,  match: true,  multiCliente: true  },
 }
 
 const PLAN_LABELS: Record<Plan, string> = {
-  free:    'Gratuito',
-  starter: 'Starter',
-  pro:     'Pro',
-  agencia: 'Agencia',
+  free:     'Free',
+  starter:  'Starter',
+  advanced: 'Advanced',
+  agency:   'Agency',
 }
 
-const PLAN_ORDER: Plan[] = ['free', 'starter', 'pro', 'agencia']
+const PLAN_ORDER: Plan[] = ['free', 'starter', 'advanced', 'agency']
 
 // Estado global — se carga una sola vez por sesión
 const _plan     = ref<Plan>('free')
@@ -62,9 +62,9 @@ export function usePlan() {
 
   function planRequerido(feature: 'match' | 'email' | 'multiCliente'): string {
     const map = {
-      match:        'Pro',
+      match:        'Advanced',
       email:        'Starter',
-      multiCliente: 'Agencia',
+      multiCliente: 'Agency',
     }
     return map[feature]
   }

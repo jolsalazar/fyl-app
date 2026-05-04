@@ -59,15 +59,15 @@ const route = useRoute()
 
 const plan = computed(() => {
   const p = route.query.plan as string
-  return ['free', 'starter', 'pro', 'agencia'].includes(p) ? p : null
+  return ['free', 'starter', 'advanced', 'agency'].includes(p) ? p : null
 })
 
 const planInfo = computed(() => {
   const planes: Record<string, { nombre: string; icon: string }> = {
-    free:    { nombre: 'Gratuito',  icon: '🌱' },
-    starter: { nombre: 'Starter',  icon: '🚀' },
-    pro:     { nombre: 'Pro',      icon: '⭐' },
-    agencia: { nombre: 'Agencia',  icon: '🏢' },
+    free:     { nombre: 'Free',     icon: '🌱' },
+    starter:  { nombre: 'Starter', icon: '🚀' },
+    advanced: { nombre: 'Advanced',icon: '⭐' },
+    agency:   { nombre: 'Agency',  icon: '🏢' },
   }
   return planes[plan.value ?? 'free']
 })
