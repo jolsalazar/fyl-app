@@ -18,6 +18,10 @@
           <span class="stat-num">{{ byPlan.free }}</span>
           <span class="stat-label">Free</span>
         </div>
+        <div class="stat-card accent-starter">
+          <span class="stat-num">{{ byPlan.starter }}</span>
+          <span class="stat-label">Starter</span>
+        </div>
         <div class="stat-card accent-advanced">
           <span class="stat-num">{{ byPlan.advanced }}</span>
           <span class="stat-label">Advanced</span>
@@ -54,7 +58,8 @@
                   :class="u.plan"
                   @change="changePlan(u, ($event.target as HTMLSelectElement).value)"
                 >
-                  <option value="free">free</option>
+                  <option value="free">Free</option>
+                  <option value="starter">Starter</option>
                   <option value="advanced">Advanced</option>
                   <option value="agency">Agency</option>
                 </select>
@@ -103,7 +108,8 @@ const currentUserId = ref('')
 
 const total = computed(() => users.value.length)
 const byPlan = computed(() => ({
-  free: users.value.filter(u => u.plan === 'free').length,
+  free:     users.value.filter(u => u.plan === 'free').length,
+  starter:  users.value.filter(u => u.plan === 'starter').length,
   advanced: users.value.filter(u => u.plan === 'advanced').length,
   agency:   users.value.filter(u => u.plan === 'agency').length,
 }))
@@ -181,8 +187,9 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   font-weight: 500;
 }
 
+.accent-starter .stat-num  { color: #f59e0b; }
 .accent-advanced .stat-num { color: #6366f1; }
-.accent-agency .stat-num { color: #0ea5e9; }
+.accent-agency .stat-num   { color: #0ea5e9; }
 
 .table-wrap {
   background: white;

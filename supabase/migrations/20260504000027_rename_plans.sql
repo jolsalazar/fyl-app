@@ -1,10 +1,10 @@
 -- Renombrar planes: pro → advanced, agencia → agency
+-- Primero eliminar el constraint para poder migrar los datos
+alter table public.profiles drop constraint if exists profiles_plan_check;
+
 -- Migrar datos existentes
 update public.profiles set plan = 'advanced' where plan = 'pro';
 update public.profiles set plan = 'agency'   where plan = 'agencia';
-
--- Actualizar check constraint
-alter table public.profiles drop constraint if exists profiles_plan_check;
 alter table public.profiles add constraint profiles_plan_check
   check (plan in ('free', 'starter', 'advanced', 'agency'));
 
