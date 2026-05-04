@@ -17,7 +17,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if (select role from public.profiles where id = auth.uid()) <> 'admin' then
+  if (select p.role from public.profiles p where p.id = auth.uid()) <> 'admin' then
     raise exception 'Not authorized';
   end if;
 

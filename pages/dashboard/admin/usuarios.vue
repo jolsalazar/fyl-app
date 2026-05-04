@@ -35,7 +35,7 @@
       <!-- Table -->
       <div class="table-wrap">
         <div v-if="loading" class="loading">Cargando usuarios…</div>
-        <div v-else-if="error" class="error">{{ error }}</div>
+        <div v-else-if="loadError" class="error">No se pudieron cargar los usuarios. Intenta recargar la página.</div>
         <table v-else>
           <thead>
             <tr>
@@ -99,9 +99,11 @@ interface UserRow {
   created_at: string
 }
 
+const { show } = useToast()
+
 const users = ref<UserRow[]>([])
 const loading = ref(true)
-const error = ref('')
+const loadError = ref(false)
 const togglingId = ref('')
 const changingPlan = ref('')
 const currentUserId = ref('')
@@ -121,8 +123,13 @@ function formatDate(iso: string) {
 async function changePlan(u: UserRow, newPlan: string) {
   changingPlan.value = u.id
   const { error: err } = await supabase.rpc('admin_set_user_plan', { target_id: u.id, new_plan: newPlan })
-  if (err) { error.value = err.message }
-  else { u.plan = newPlan }
+  if (err) {
+    console.error('changePlan:', err)
+    show('No se pudo cambiar el plan', 'error')
+  } else {
+    u.plan = newPlan
+    show('Plan actualizado', 'ok')
+  }
   changingPlan.value = ''
 }
 
@@ -130,8 +137,13 @@ async function toggleRole(u: UserRow) {
   togglingId.value = u.id
   const newRole = u.role === 'admin' ? 'user' : 'admin'
   const { error: err } = await supabase.rpc('admin_set_user_role', { target_id: u.id, new_role: newRole })
-  if (err) { error.value = err.message }
-  else { u.role = newRole }
+  if (err) {
+    console.error('toggleRole:', err)
+    show('No se pudo cambiar el rol', 'error')
+  } else {
+    u.role = newRole
+    show('Rol actualizado', 'ok')
+  }
   togglingId.value = ''
 }
 
@@ -140,8 +152,12 @@ onMounted(async () => {
   currentUserId.value = user?.id ?? ''
 
   const { data, error: err } = await supabase.rpc('admin_get_users')
-  if (err) { error.value = err.message }
-  else { users.value = data ?? [] }
+  if (err) {
+    console.error('admin_get_users:', err)
+    loadError.value = true
+  } else {
+    users.value = data ?? []
+  }
   loading.value = false
 })
 </script>

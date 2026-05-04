@@ -10,7 +10,7 @@
 
       <div class="table-wrap">
         <div v-if="loading" class="loading">Cargando…</div>
-        <div v-else-if="error" class="error">{{ error }}</div>
+        <div v-else-if="loadError" class="error">No se pudieron cargar las fuentes. Intenta recargar la página.</div>
         <template v-else>
           <div class="table-head">
             <span>Fuente</span>
@@ -41,7 +41,6 @@
         </template>
       </div>
 
-      <p v-if="lastSaved" class="saved-msg">✓ Guardado</p>
     </div>
   </NuxtLayout>
 </template>
@@ -54,20 +53,25 @@ const supabase = useSupabaseClient()
 interface Fuente { fuente: string; nombre: string; activo: boolean; updated_at: string }
 interface StatRow { fuente: string; total: number; nuevas_semana: number; ultima_actualizacion: string }
 
+const { show } = useToast()
+
 const fuentes = ref<Fuente[]>([])
 const stats = ref<Record<string, StatRow>>({})
 const loading = ref(true)
-const error = ref('')
+const loadError = ref(false)
 const saving = ref('')
-const lastSaved = ref(false)
 
 onMounted(async () => {
   const [{ data: cfg, error: e1 }, { data: st, error: e2 }] = await Promise.all([
     supabase.from('scraper_config').select('fuente, nombre, activo, updated_at').order('nombre'),
     supabase.rpc('admin_scraper_stats'),
   ])
-  if (e1) { error.value = e1.message }
-  else { fuentes.value = cfg ?? [] }
+  if (e1) {
+    console.error('scraper_config:', e1)
+    loadError.value = true
+  } else {
+    fuentes.value = cfg ?? []
+  }
   if (!e2) {
     stats.value = Object.fromEntries((st ?? []).map((r: StatRow) => [r.fuente, r]))
   }
@@ -81,11 +85,12 @@ async function toggle(f: Fuente) {
     .from('scraper_config')
     .update({ activo: newVal, updated_at: new Date().toISOString() })
     .eq('fuente', f.fuente)
-  if (err) { error.value = err.message }
-  else {
+  if (err) {
+    console.error('toggle fuente:', err)
+    show('No se pudo guardar el cambio', 'error')
+  } else {
     f.activo = newVal
-    lastSaved.value = true
-    setTimeout(() => { lastSaved.value = false }, 2500)
+    show('Guardado', 'ok')
   }
   saving.value = ''
 }
