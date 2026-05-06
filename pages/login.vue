@@ -135,10 +135,11 @@ async function handleReset() {
 .brand {
   display: flex;
   align-items: center;
+  justify-content: center;
   margin-bottom: 1.75rem;
 }
 .brand-logo {
-  height: 32px;
+  height: 50px;
   width: auto;
 }
 h1 {

@@ -434,7 +434,7 @@ onMounted(async () => {
   align-items: center;
 }
 .brand-logo {
-  height: 32px;
+  height: 50px;
   width: auto;
 }
 .skip-btn {
