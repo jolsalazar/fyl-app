@@ -56,7 +56,7 @@ function buildEmail(email: string): string {
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
             <td>
-              <img src="https://app.fondosylicitaciones.cl/logo-dark.png" alt="Fondos y Licitaciones" height="36" style="display:block;border:0;" />
+              <img src="https://app.fondosylicitaciones.cl/logo-white.png" alt="Fondos y Licitaciones" height="36" style="display:block;border:0;" />
             </td>
           </tr>
         </table>

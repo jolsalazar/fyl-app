@@ -5,7 +5,19 @@
         <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" class="brand-logo" />
       </div>
 
-      <template v-if="!listo">
+      <!-- Esperando sesión de recuperación -->
+      <template v-if="!sessionLista && !listo">
+        <div v-if="linkInvalido" class="error-banner">
+          Este link ya no es válido o ha expirado.
+          <NuxtLink to="/login" class="link-inline">Solicitar uno nuevo</NuxtLink>
+        </div>
+        <div v-else class="waiting">
+          <span class="spinner-dark"></span>
+          Verificando enlace…
+        </div>
+      </template>
+
+      <template v-else-if="sessionLista && !listo">
         <h1>Nueva contraseña</h1>
         <p class="subtitle">Elige una contraseña segura para tu cuenta</p>
 
@@ -45,11 +57,30 @@
 <script setup lang="ts">
 const supabase = useSupabaseClient()
 
-const password = ref('')
+const password        = ref('')
 const confirmPassword = ref('')
-const loading = ref(false)
-const error = ref('')
-const listo = ref(false)
+const loading         = ref(false)
+const error           = ref('')
+const listo           = ref(false)
+const sessionLista    = ref(false)
+const linkInvalido    = ref(false)
+
+onMounted(() => {
+  // Esperar el evento PASSWORD_RECOVERY que dispara @nuxtjs/supabase
+  // al intercambiar el ?code= del link de reset por una sesión válida
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'PASSWORD_RECOVERY' && session) {
+      sessionLista.value = true
+    }
+  })
+
+  // Timeout: si en 8s no llega el evento, el link es inválido/expirado
+  setTimeout(() => {
+    if (!sessionLista.value && !listo.value) linkInvalido.value = true
+  }, 8000)
+
+  onUnmounted(() => subscription.unsubscribe())
+})
 
 async function handleUpdate() {
   error.value = ''
@@ -60,7 +91,7 @@ async function handleUpdate() {
   loading.value = true
   const { error: authError } = await supabase.auth.updateUser({ password: password.value })
   if (authError) {
-    error.value = 'No se pudo actualizar la contraseña. El link puede haber expirado.'
+    error.value = 'No se pudo actualizar la contraseña. Intenta solicitar un nuevo link.'
   } else {
     listo.value = true
   }
@@ -211,6 +242,27 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   border-top-color: white;
   border-radius: 50%;
   animation: spin 0.65s linear infinite;
+}
+.spinner-dark {
+  width: 18px; height: 18px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #0ea5e9;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+.waiting {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: #64748b;
+  padding: 0.5rem 0;
+}
+.link-inline {
+  color: #0ea5e9;
+  text-decoration: underline;
+  margin-left: 0.25rem;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>

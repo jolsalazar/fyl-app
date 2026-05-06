@@ -250,6 +250,7 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   font-size: 0.875rem;
 }
 .link-btn {
+  display: inline !important;
   background: none !important;
   border: none;
   color: #0ea5e9;

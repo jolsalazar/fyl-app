@@ -186,7 +186,7 @@ function buildEmail(
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
   <tr><td style="background:#0f172a;border-radius:16px 16px 0 0;padding:28px 36px;">
-    <img src="https://app.fondosylicitaciones.cl/logo-dark.png" alt="Fondos y Licitaciones" height="36" style="display:block;border:0;" />
+    <img src="https://app.fondosylicitaciones.cl/logo-white.png" alt="Fondos y Licitaciones" height="36" style="display:block;border:0;" />
   </td></tr>
 
   <tr><td style="background:white;padding:36px 36px 28px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
