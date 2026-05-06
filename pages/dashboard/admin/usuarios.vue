@@ -248,9 +248,10 @@ td {
   text-transform: capitalize;
 }
 
-.badge-free    { background: #f1f5f9; color: #475569; }
-.badge-pro     { background: #ede9fe; color: #6d28d9; }
-.badge-agencia { background: #e0f2fe; color: #0369a1; }
+.badge-free     { background: #f1f5f9; color: #475569; }
+.badge-starter  { background: #eff6ff; color: #2563eb; }
+.badge-advanced { background: #ede9fe; color: #6d28d9; }
+.badge-agency   { background: #e0f2fe; color: #0369a1; }
 .badge-active  { background: #dcfce7; color: #15803d; }
 .badge-inactive{ background: #fef2f2; color: #b91c1c; }
 .badge-admin   { background: #fef3c7; color: #b45309; }
@@ -268,7 +269,8 @@ td {
   transition: border-color 0.15s;
 }
 .plan-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.plan-select.free    { background: #f1f5f9; color: #475569; }
+.plan-select.free     { background: #f1f5f9; color: #475569; }
+.plan-select.starter  { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
 .plan-select.advanced { background: #ede9fe; color: #6d28d9; border-color: #c4b5fd; }
 .plan-select.agency   { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
 

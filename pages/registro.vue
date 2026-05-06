@@ -169,9 +169,10 @@ async function handleRegistro() {
   border-radius: 999px;
   margin-bottom: 1.25rem;
 }
-.plan-badge.free    { background: #f0fdf4; color: #16a34a; }
-.plan-badge.pro     { background: #e0f2fe; color: #0284c7; }
-.plan-badge.agencia { background: #eef2ff; color: #4338ca; }
+.plan-badge.free     { background: #f1f5f9; color: #64748b; }
+.plan-badge.starter  { background: #eff6ff; color: #2563eb; }
+.plan-badge.advanced { background: #ede9fe; color: #6d28d9; }
+.plan-badge.agency   { background: #e0f2fe; color: #0369a1; }
 .plan-trial { opacity: 0.75; }
 h1 {
   font-size: 1.5rem;
