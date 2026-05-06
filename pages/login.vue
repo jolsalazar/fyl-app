@@ -250,14 +250,20 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   font-size: 0.875rem;
 }
 .link-btn {
-  background: none;
+  background: none !important;
   border: none;
   color: #0ea5e9;
   font-size: 0.875rem;
   font-family: inherit;
   cursor: pointer;
   padding: 0;
+  width: auto;
   font-weight: 500;
+  transform: none !important;
 }
-.link-btn:hover { text-decoration: underline; }
+.link-btn:hover {
+  background: none !important;
+  color: #0284c7;
+  text-decoration: underline;
+}
 </style>

@@ -2,7 +2,7 @@
   <div class="page">
     <div class="card">
       <div class="brand">
-        <span class="dot"></span>Fondos y Licitaciones
+        <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" class="brand-logo" />
       </div>
 
       <template v-if="!listo">
@@ -91,20 +91,14 @@ async function handleUpdate() {
   border: 1px solid #e2e8f0;
 }
 .brand {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 1rem;
-  font-weight: 800;
-  color: #0f172a;
+  justify-content: center;
   margin-bottom: 1.75rem;
-  letter-spacing: -0.02em;
 }
-.dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: #0ea5e9;
-  box-shadow: 0 0 6px #0ea5e9;
+.brand-logo {
+  height: 50px;
+  width: auto;
 }
 h1 {
   font-size: 1.5rem;
