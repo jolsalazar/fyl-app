@@ -91,7 +91,12 @@ async function handleUpdate() {
   loading.value = true
   const { error: authError } = await supabase.auth.updateUser({ password: password.value })
   if (authError) {
-    error.value = 'No se pudo actualizar la contraseña. Intenta solicitar un nuevo link.'
+    const msg = authError.message?.toLowerCase() ?? ''
+    if (msg.includes('same') || msg.includes('different') || msg.includes('igual') ) {
+      error.value = 'La nueva contraseña debe ser distinta a la actual.'
+    } else {
+      error.value = 'No se pudo actualizar la contraseña. Intenta solicitar un nuevo link.'
+    }
   } else {
     listo.value = true
   }
