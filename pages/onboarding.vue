@@ -4,8 +4,7 @@
     <!-- Header -->
     <div class="top-bar">
       <div class="brand">
-        <span class="brand-dot"></span>
-        Fondos y Licitaciones
+        <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" class="brand-logo" />
       </div>
       <button v-if="paso < 5" class="skip-btn" @click="saltar">
         Saltar por ahora
@@ -431,12 +430,12 @@ onMounted(async () => {
   padding: 1.25rem 2rem; background: white; border-bottom: 1px solid #e2e8f0;
 }
 .brand {
-  display: flex; align-items: center; gap: 0.5rem;
-  font-size: 1rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
 }
-.brand-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #0ea5e9; box-shadow: 0 0 8px #0ea5e9;
+.brand-logo {
+  height: 32px;
+  width: auto;
 }
 .skip-btn {
   background: none; border: none; font-size: 0.8125rem; color: #94a3b8;
