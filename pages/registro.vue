@@ -2,7 +2,7 @@
   <div class="page">
     <div class="card">
       <div class="brand">
-        <span class="dot"></span>Fondos y Licitaciones
+        <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" class="brand-logo" />
       </div>
 
       <!-- Plan badge -->
@@ -28,18 +28,47 @@
           <label>Email</label>
           <input v-model="email" type="email" required placeholder="tu@empresa.cl" :disabled="loading" />
         </div>
+
         <div class="field">
           <label>Contraseña</label>
-          <input v-model="password" type="password" required placeholder="Mínimo 8 caracteres" :disabled="loading" minlength="8" />
+          <div class="input-wrap">
+            <input v-model="password" :type="verPass ? 'text' : 'password'" required placeholder="Mínimo 8 caracteres" :disabled="loading" />
+            <button type="button" class="eye-btn" @click="verPass = !verPass" tabindex="-1">
+              <svg v-if="!verPass" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+          <!-- Indicador de seguridad -->
+          <div v-if="password.length > 0" class="password-rules">
+            <div v-for="r in passwordRules" :key="r.label" :class="['rule', r.ok ? 'ok' : 'pending']">
+              <svg v-if="r.ok" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+              {{ r.label }}
+            </div>
+          </div>
         </div>
+
         <div class="field">
           <label>Confirmar contraseña</label>
-          <input v-model="confirmPassword" type="password" required placeholder="Repite tu contraseña" :disabled="loading" />
+          <div class="input-wrap">
+            <input v-model="confirmPassword" :type="verConfirm ? 'text' : 'password'" required placeholder="Repite tu contraseña" :disabled="loading" />
+            <button type="button" class="eye-btn" @click="verConfirm = !verConfirm" tabindex="-1">
+              <svg v-if="!verConfirm" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
         </div>
+
+        <!-- Términos y condiciones -->
+        <label class="terms-check">
+          <input type="checkbox" v-model="aceptaTerminos" :disabled="loading" />
+          <span class="check-box"></span>
+          <span>Acepto los <NuxtLink to="/terminos" target="_blank">términos y condiciones</NuxtLink> y la <NuxtLink to="/privacidad" target="_blank">política de privacidad</NuxtLink></span>
+        </label>
 
         <div v-if="error" class="error-banner">{{ error }}</div>
 
-        <button type="submit" :disabled="loading">
+        <button type="submit" :disabled="loading || !passwordValida || !aceptaTerminos">
           <span v-if="loading" class="spinner"></span>
           {{ loading ? 'Creando cuenta...' : 'Crear cuenta' }}
         </button>
@@ -72,18 +101,39 @@ const planInfo = computed(() => {
   return planes[plan.value ?? 'free']
 })
 
-const email = ref('')
-const password = ref('')
+const email           = ref('')
+const password        = ref('')
 const confirmPassword = ref('')
-const loading = ref(false)
-const error = ref('')
-const success = ref(false)
+const loading         = ref(false)
+const error           = ref('')
+const success         = ref(false)
+const verPass         = ref(false)
+const verConfirm      = ref(false)
+const aceptaTerminos  = ref(false)
+
+const passwordRules = computed(() => [
+  { label: 'Mínimo 8 caracteres',    ok: password.value.length >= 8 },
+  { label: 'Una mayúscula',          ok: /[A-Z]/.test(password.value) },
+  { label: 'Una minúscula',          ok: /[a-z]/.test(password.value) },
+  { label: 'Un número',              ok: /[0-9]/.test(password.value) },
+  { label: 'Un carácter especial',   ok: /[^A-Za-z0-9]/.test(password.value) },
+])
+
+const passwordValida = computed(() => passwordRules.value.every(r => r.ok))
 
 async function handleRegistro() {
   error.value = ''
 
+  if (!passwordValida.value) {
+    error.value = 'La contraseña no cumple los requisitos de seguridad.'
+    return
+  }
   if (password.value !== confirmPassword.value) {
     error.value = 'Las contraseñas no coinciden'
+    return
+  }
+  if (!aceptaTerminos.value) {
+    error.value = 'Debes aceptar los términos y condiciones para continuar.'
     return
   }
 
@@ -103,14 +153,12 @@ async function handleRegistro() {
     return
   }
 
-  // Enviar email de bienvenida (fire & forget — no bloqueamos el flujo)
   if (data.user) {
     supabase.functions.invoke('send-welcome-email', {
       body: { record: { id: data.user.id } },
     }).catch(() => {})
   }
 
-  // Si Supabase no requiere confirmación de email, redirige al onboarding
   if (data.session) {
     router.push('/onboarding')
   } else {
@@ -144,21 +192,13 @@ async function handleRegistro() {
   border: 1px solid #e2e8f0;
 }
 .brand {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 1rem;
-  font-weight: 800;
-  color: #0f172a;
+  justify-content: center;
   margin-bottom: 1.25rem;
-  letter-spacing: -0.02em;
 }
-.dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: #0ea5e9;
-  box-shadow: 0 0 6px #0ea5e9;
-}
+.brand-logo { height: 50px; width: auto; }
+
 .plan-badge {
   display: inline-flex;
   align-items: center;
@@ -173,7 +213,7 @@ async function handleRegistro() {
 .plan-badge.starter  { background: #eff6ff; color: #2563eb; }
 .plan-badge.advanced { background: #ede9fe; color: #6d28d9; }
 .plan-badge.agency   { background: #e0f2fe; color: #0369a1; }
-.plan-trial { opacity: 0.75; }
+
 h1 {
   font-size: 1.5rem;
   font-weight: 700;
@@ -194,6 +234,31 @@ label {
   color: #374151;
   margin-bottom: 0.4rem;
 }
+
+/* Input con ojito */
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-wrap input { padding-right: 2.5rem; }
+.eye-btn {
+  position: absolute;
+  right: 0.75rem;
+  background: none !important;
+  border: none;
+  padding: 0;
+  width: auto !important;
+  margin: 0 !important;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transform: none !important;
+  line-height: 1;
+}
+.eye-btn:hover { color: #64748b; background: none !important; }
+
 input {
   width: 100%;
   padding: 0.6875rem 0.875rem;
@@ -212,6 +277,69 @@ input:focus {
   background: white;
 }
 input:disabled { opacity: 0.6; }
+
+/* Reglas de contraseña */
+.password-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin-top: 0.5rem;
+}
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+.rule.pending { color: #94a3b8; }
+.rule.ok      { color: #16a34a; }
+
+/* Términos */
+.terms-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 1rem 0;
+  cursor: pointer;
+  font-size: 0.8375rem;
+  color: #64748b;
+  line-height: 1.5;
+  font-weight: 400;
+}
+.terms-check input[type="checkbox"] { display: none; }
+.check-box {
+  width: 17px; height: 17px;
+  min-width: 17px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  margin-top: 1px;
+  transition: all 0.15s;
+  position: relative;
+  background: white;
+}
+.terms-check input:checked + .check-box {
+  background: #0ea5e9;
+  border-color: #0ea5e9;
+}
+.terms-check input:checked + .check-box::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 1px;
+  width: 6px; height: 9px;
+  border: 2px solid white;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+.terms-check a {
+  color: #0ea5e9;
+  text-decoration: none;
+  font-weight: 500;
+}
+.terms-check a:hover { text-decoration: underline; }
+
 .error-banner {
   background: #fef2f2;
   border: 1px solid #fecaca;
@@ -239,13 +367,12 @@ input:disabled { opacity: 0.6; }
   border-radius: 50%;
   background: #22c55e;
   color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   font-weight: 700;
   flex-shrink: 0;
 }
 .success-banner strong { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; }
+
 button {
   width: 100%;
   padding: 0.75rem;

@@ -16,7 +16,13 @@
           </div>
           <div class="field">
             <label>Contraseña</label>
-            <input v-model="password" type="password" required placeholder="••••••••" :disabled="loading" />
+            <div class="input-wrap">
+              <input v-model="password" :type="verPass ? 'text' : 'password'" required placeholder="••••••••" :disabled="loading" />
+              <button type="button" class="eye-btn" @click="verPass = !verPass" tabindex="-1">
+                <svg v-if="!verPass" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
           </div>
 
           <div v-if="error" class="error-banner">{{ error }}</div>
@@ -72,9 +78,10 @@ const supabase = useSupabaseClient()
 const router = useRouter()
 const route = useRoute()
 
-const email = ref('')
+const email    = ref('')
 const password = ref('')
-const loading = ref(false)
+const verPass  = ref(false)
+const loading  = ref(false)
 const error = ref('')
 const modoReset = ref(false)
 const resetEnviado = ref(false)
@@ -181,6 +188,27 @@ input:focus {
   background: white;
 }
 input:disabled { opacity: 0.6; }
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-wrap input { padding-right: 2.5rem; }
+.eye-btn {
+  position: absolute;
+  right: 0.75rem;
+  background: none !important;
+  border: none;
+  padding: 0;
+  width: auto !important;
+  margin: 0 !important;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transform: none !important;
+}
+.eye-btn:hover { color: #64748b; background: none !important; }
 .error-banner {
   background: #fef2f2;
   border: 1px solid #fecaca;
