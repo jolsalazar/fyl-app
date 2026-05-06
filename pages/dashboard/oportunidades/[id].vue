@@ -21,6 +21,7 @@
         <!-- Header -->
         <div class="hero">
           <div class="hero-tags">
+            <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo-hero" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
             <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
             <span :class="['tag-tipo', item.tipo]">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
             <span v-if="item.tipo_financiamiento" class="tag-financiamiento">{{ item.tipo_financiamiento }}</span>
@@ -439,9 +440,16 @@ function diasRestantes(f: string) {
 .hero {
   margin-bottom: 1.25rem;
 }
+.source-logo-hero {
+  width: 48px; height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
 .hero-tags {
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  gap: 0.5rem;
   flex-wrap: wrap;
   margin-bottom: 0.75rem;
 }

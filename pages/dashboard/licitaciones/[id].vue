@@ -20,6 +20,7 @@
         <!-- Header -->
         <div class="hero">
           <div class="hero-tags">
+            <img src="/sources/mercadopublico.png" alt="Mercado Público" class="source-logo-hero" />
             <span class="tag-fuente">Mercado Público</span>
             <span class="tag-tipo">Licitación</span>
             <span v-if="item.tipo_financiamiento" class="tag-financiamiento">{{ item.tipo_financiamiento }}</span>
@@ -267,7 +268,8 @@ function diasRestantes(f: string) {
 .back-link:hover { color: #0f172a; }
 
 .hero { margin-bottom: 1.25rem; }
-.hero-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.source-logo-hero { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; flex-shrink: 0; }
+.hero-tags { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 .hero-top {
   display: flex;
   align-items: flex-start;

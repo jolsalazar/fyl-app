@@ -189,9 +189,12 @@
             <!-- Card body -->
             <div class="card-body">
               <div class="card-top">
-                <div class="tags">
-                  <span class="tag-fuente">{{ fuenteLabel(r.conv.fuente) }}</span>
-                  <span :class="['tag-tipo', r.conv.tipo]">{{ r.conv.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                <div class="card-source">
+                  <img :src="`/sources/${r.conv.fuente}.png`" :alt="fuenteLabel(r.conv.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+                  <div class="tags">
+                    <span class="tag-fuente">{{ fuenteLabel(r.conv.fuente) }}</span>
+                    <span :class="['tag-tipo', r.conv.tipo]">{{ r.conv.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                  </div>
                 </div>
                 <span :class="['badge-estado', r.conv.estado]">{{ estadoConvLabel(r.conv.estado) }}</span>
               </div>
@@ -554,7 +557,9 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 /* Card body */
 .card-body { flex: 1; min-width: 0; }
 .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; gap: 0.5rem; }
-.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.card-source { display: flex; align-items: center; gap: 0.625rem; }
+.source-logo { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 .tag-fuente { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
 .tag-tipo { font-size: 0.68rem; font-weight: 600; padding: 0.12rem 0.45rem; border-radius: 999px; }
 .tag-tipo.fondo { background: #f0fdf4; color: #16a34a; }

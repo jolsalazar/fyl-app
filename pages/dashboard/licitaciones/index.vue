@@ -20,10 +20,6 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           {{ exportando ? 'Exportando…' : 'Exportar CSV' }}
         </button>
-        <NuxtLink to="/dashboard/configuracion" class="btn-config">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Mis alertas
-        </NuxtLink>
       </div>
 
       <!-- Filtros -->
@@ -91,9 +87,12 @@
       <div v-else class="lista">
         <div v-for="item in items" :key="item.id" class="card" @click="saveScroll">
           <div class="card-top">
-            <div class="tags">
-              <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
-              <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+            <div class="card-source">
+              <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+              <div class="tags">
+                <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
+                <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+              </div>
             </div>
             <div class="card-top-right">
               <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
@@ -519,6 +518,8 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   margin-bottom: 0.625rem;
   gap: 0.5rem;
 }
+.card-source { display: flex; align-items: center; gap: 0.625rem; }
+.source-logo { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
 .tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .card-top-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
 .btn-guardar {

@@ -59,6 +59,7 @@
               </div>
               <div class="item-info">
                 <div class="item-top">
+                  <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
                   <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
                   <span :class="['tag-tipo', item.tipo]">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
                 </div>
@@ -199,7 +200,8 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .fecha-mes { font-size: 0.6875rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; }
 
 .item-info { flex: 1; min-width: 0; }
-.item-top { display: flex; gap: 0.4rem; margin-bottom: 0.3rem; flex-wrap: wrap; }
+.source-logo { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; flex-shrink: 0; }
+.item-top { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; flex-wrap: wrap; }
 .tag-fuente { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
 .tag-tipo { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; }
 .tag-tipo.fondo { background: #f0fdf4; color: #16a34a; }

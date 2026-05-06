@@ -33,9 +33,12 @@
       <div v-else class="lista">
         <div v-for="item in items" :key="item.id" class="card">
           <div class="card-top">
-            <div class="tags">
-              <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
-              <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+            <div class="card-source">
+              <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+              <div class="tags">
+                <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
+                <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+              </div>
             </div>
             <div class="card-right">
               <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
@@ -184,6 +187,9 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .card-right { display: flex; align-items: center; gap: 0.5rem; }
 
+.card-source { display: flex; align-items: center; gap: 0.625rem; }
+.source-logo { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 .tag-fuente { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
 .tag-tipo { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; }
 .tag-tipo.fondo { background: #f0fdf4; color: #16a34a; }

@@ -283,9 +283,12 @@
                   <div v-for="item in results" :key="item.id" class="card" :class="{ nueva: esNueva(item.fecha_scrapeado) }">
                     <div v-if="esNueva(item.fecha_scrapeado)" class="nueva-chip">Nueva</div>
                     <div class="card-top">
-                      <div class="tags">
-                        <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
-                        <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                      <div class="card-source">
+                        <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+                        <div class="tags">
+                          <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
+                          <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                        </div>
                       </div>
                       <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
                     </div>
@@ -902,7 +905,9 @@ function esUrgente(f: string) {
 .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-color: #cbd5e1; }
 
 .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.625rem; gap: 0.5rem; }
-.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.card-source { display: flex; align-items: center; gap: 0.625rem; }
+.source-logo { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
+.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 .tag-fuente { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
 .tag-tipo { font-size: 0.68rem; font-weight: 600; padding: 0.12rem 0.45rem; border-radius: 999px; }
 .tag-tipo.fondo { background: #f0fdf4; color: #16a34a; }
