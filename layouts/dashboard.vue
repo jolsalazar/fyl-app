@@ -8,8 +8,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <NuxtLink to="/dashboard" class="brand">
-          <span class="brand-dot"></span>
-          Fondos y Licitaciones
+          <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" class="brand-logo" />
         </NuxtLink>
       </div>
 
@@ -272,20 +271,13 @@ async function logout() {
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9375rem;
-  font-weight: 800;
-  color: #0f172a;
   text-decoration: none;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
-}
-.brand-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #0ea5e9;
-  box-shadow: 0 0 8px #0ea5e9;
   flex-shrink: 0;
+}
+.brand-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
 }
 
 .navbar-right {
