@@ -96,37 +96,29 @@ export function calcularMatch(perfil: Perfil, conv: any): MatchResult {
   return { score, nivel, razones }
 }
 
-export async function cargarPerfil(supabase: any, userId: string): Promise<Perfil> {
-  const MONTO_ORDER_LOCAL = ['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M']
+export async function cargarPerfil(supabase: any, userId: string, proyectoId?: string): Promise<Perfil> {
+  let query = supabase
+    .from('proyectos')
+    .select('tipo_persona, estado_proyecto, foco, alcance, monto_minimo')
+    .eq('user_id', userId)
 
-  const [{ data: perfilData }, { data: alertasData }] = await Promise.all([
-    supabase.from('perfil_postulante')
-      .select('tipo_persona, estado_proyecto')
-      .eq('user_id', userId)
-      .maybeSingle(),
-    supabase.from('alert_configs')
-      .select('foco, alcance_interes, monto_minimo, activo')
-      .eq('user_id', userId),
-  ])
-
-  const focos = new Set<string>()
-  const alcances = new Set<string>()
-  let montoMin: string | null = null
-
-  for (const a of (alertasData ?? []).filter((a: any) => a.activo)) {
-    for (const f of (a.foco ?? [])) focos.add(f)
-    for (const al of (a.alcance_interes ?? [])) alcances.add(al)
-    if (a.monto_minimo) {
-      if (!montoMin || MONTO_ORDER_LOCAL.indexOf(a.monto_minimo) < MONTO_ORDER_LOCAL.indexOf(montoMin))
-        montoMin = a.monto_minimo
-    }
+  if (proyectoId) {
+    query = query.eq('id', proyectoId)
+  } else {
+    query = query.order('created_at', { ascending: true }).limit(1)
   }
+
+  const { data } = await query.maybeSingle()
 
   return {
-    tipo_persona:    perfilData?.tipo_persona ?? null,
-    estado_proyecto: perfilData?.estado_proyecto ?? null,
-    foco:            [...focos],
-    alcance:         [...alcances],
-    monto_minimo:    montoMin,
+    tipo_persona:    data?.tipo_persona    ?? null,
+    estado_proyecto: data?.estado_proyecto ?? null,
+    foco:            data?.foco            ?? [],
+    alcance:         data?.alcance         ?? [],
+    monto_minimo:    data?.monto_minimo    ?? null,
   }
+}
+
+export function perfilCompleto(perfil: Perfil): boolean {
+  return !!perfil.tipo_persona && !!perfil.estado_proyecto
 }

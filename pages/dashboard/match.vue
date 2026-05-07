@@ -10,10 +10,32 @@
           <p class="subtitle">
             <template v-if="plan === 'free'">Función disponible desde el Plan Starter</template>
             <template v-else-if="!loading && resultados.length">{{ resultados.length }} fondos analizados · ordenados por compatibilidad</template>
-            <template v-else-if="!loading">Analizando tu perfil…</template>
+            <template v-else-if="!loading && perfilCompleto">Analizando tus fondos…</template>
+            <template v-else-if="!loading">Configura tu proyecto para ver resultados</template>
             <template v-else>Cargando…</template>
           </p>
         </div>
+        <!-- Selector de proyecto (cuando hay más de 1) -->
+        <div v-if="plan !== 'free' && proyectos.length > 1" class="proyecto-selector">
+          <button
+            v-for="p in proyectos"
+            :key="p.id"
+            :class="['proyecto-btn', selectedProyectoId === p.id ? 'active' : '']"
+            @click="selectProyecto(p.id)"
+          >{{ p.nombre }}</button>
+        </div>
+      </div>
+
+      <!-- Gate: perfil incompleto -->
+      <div v-if="plan !== 'free' && !loading && !perfilCompleto" class="perfil-gate">
+        <div class="perfil-gate-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <h2>Completa tu proyecto para ver el match</h2>
+        <p>Para calcular tu compatibilidad con cada fondo necesitamos saber el tipo de postulante y la etapa de tu proyecto.</p>
+        <NuxtLink to="/dashboard/mi-perfil" class="btn-completar">
+          Ir a Mis Proyectos →
+        </NuxtLink>
       </div>
 
       <!-- ── UPGRADE GATE (solo plan free) ──────────────────────── -->
@@ -262,12 +284,11 @@ interface Razon { tipo: 'positivo' | 'neutro' | 'negativo'; texto: string }
 interface Resultado { conv: any; score: number; nivel: 'alto' | 'medio' | 'bajo'; razones: Razon[] }
 
 // ── Estado ────────────────────────────────────────────────────────
-const loadingPlan  = computed(() => plan.value === 'free' && !planUsuario.value)
-const planUsuario  = plan // alias para no romper el template
-const loading      = ref(true)
-const resultados   = ref<Resultado[]>([])
-const tienePerfil  = ref(false)
-const expandidos   = ref(new Set<string>())
+const loading             = ref(true)
+const resultados          = ref<Resultado[]>([])
+const expandidos          = ref(new Set<string>())
+const proyectos           = ref<any[]>([])
+const selectedProyectoId  = ref<string | null>(null)
 
 const proyecto = ref({
   tipo_persona:    null as string | null,
@@ -277,7 +298,9 @@ const proyecto = ref({
   monto_minimo:    null as string | null,
 })
 
-const MONTO_ORDER = ['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M']
+const perfilCompleto = computed(() =>
+  !!proyecto.value.tipo_persona && !!proyecto.value.estado_proyecto
+)
 
 // ── Motor de match ────────────────────────────────────────────────
 function matchTipoPersona(userTipo: string | null, convTipos: string[] | null | undefined): Razon | null {
@@ -415,53 +438,26 @@ function esUrgente(f: string) {
 }
 
 // ── Carga de datos ────────────────────────────────────────────────
-onMounted(async () => {
-  const { data: { user } } = await supabase.auth.getUser()
+async function loadMatch(proyectoId: string) {
+  loading.value = true
+  resultados.value = []
 
-  await loadPlan()
-
-  if (plan.value === 'free' || plan.value === 'starter') return
-
-  const [{ data: perfilData }, { data: alertasData }] = await Promise.all([
-    supabase.from('perfil_postulante')
-      .select('tipo_persona, estado_proyecto, antiguedad_empresa')
-      .eq('user_id', user!.id)
-      .maybeSingle(),
-    supabase.from('alert_configs')
-      .select('foco, alcance_interes, monto_minimo, activo')
-      .eq('user_id', user!.id),
-  ])
-
-  // Construir perfil de proyecto agregando alert_configs activos
-  const focos    = new Set<string>()
-  const alcances = new Set<string>()
-  let montoMin: string | null = null
-
-  for (const a of (alertasData ?? []).filter(a => a.activo)) {
-    for (const f of (a.foco ?? [])) focos.add(f)
-    for (const al of (a.alcance_interes ?? [])) alcances.add(al)
-    if (a.monto_minimo) {
-      if (!montoMin || MONTO_ORDER.indexOf(a.monto_minimo) < MONTO_ORDER.indexOf(montoMin))
-        montoMin = a.monto_minimo
-    }
-  }
+  const { data: p } = await supabase
+    .from('proyectos')
+    .select('tipo_persona, estado_proyecto, foco, alcance, monto_minimo')
+    .eq('id', proyectoId)
+    .maybeSingle()
 
   proyecto.value = {
-    tipo_persona:    perfilData?.tipo_persona ?? null,
-    estado_proyecto: perfilData?.estado_proyecto ?? null,
-    foco:            [...focos],
-    alcance:         [...alcances],
-    monto_minimo:    montoMin,
+    tipo_persona:    p?.tipo_persona    ?? null,
+    estado_proyecto: p?.estado_proyecto ?? null,
+    foco:            p?.foco            ?? [],
+    alcance:         p?.alcance         ?? [],
+    monto_minimo:    p?.monto_minimo    ?? null,
   }
 
-  tienePerfil.value = !!(perfilData?.tipo_persona || perfilData?.estado_proyecto)
+  if (!perfilCompleto.value) { loading.value = false; return }
 
-  if (!tienePerfil.value && proyecto.value.foco.length === 0) {
-    loading.value = false
-    return
-  }
-
-  // Cargar convocatorias abiertas (pre-filtradas por foco si hay)
   let q = supabase
     .from('convocatorias')
     .select('id, titulo, descripcion_breve, fuente, tipo, estado, monto_rango, fecha_cierre_postulacion, link_postulacion, foco, alcance, perfil_tipo_persona, perfil_nivel_desarrollo, perfil_antiguedad_empresa, perfil_nivel_ventas, perfil_limite_edad')
@@ -474,12 +470,36 @@ onMounted(async () => {
 
   const { data: convs } = await q
 
-  // Calcular match y ordenar por score
   resultados.value = (convs ?? [])
     .map(conv => calcularMatch(proyecto.value, conv))
     .sort((a, b) => b.score - a.score)
 
   loading.value = false
+}
+
+async function selectProyecto(id: string) {
+  if (selectedProyectoId.value === id) return
+  selectedProyectoId.value = id
+  await loadMatch(id)
+}
+
+onMounted(async () => {
+  await loadPlan()
+  if (plan.value === 'free') { loading.value = false; return }
+
+  const { data } = await supabase
+    .from('proyectos')
+    .select('id, nombre, tipo_persona, estado_proyecto')
+    .order('created_at', { ascending: true })
+
+  proyectos.value = data ?? []
+  loading.value = false
+
+  const primero = proyectos.value[0]
+  if (primero) {
+    selectedProyectoId.value = primero.id
+    await loadMatch(primero.id)
+  }
 })
 </script>
 
@@ -489,7 +509,36 @@ onMounted(async () => {
 
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; }
 
-.header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+
+.proyecto-selector { display: flex; gap: 0.375rem; flex-wrap: wrap; flex-shrink: 0; }
+.proyecto-btn {
+  padding: 0.4rem 0.875rem; border-radius: 8px; border: 1.5px solid #e2e8f0;
+  font-size: 0.8125rem; font-weight: 500; font-family: inherit;
+  color: #64748b; background: white; cursor: pointer; transition: all 0.15s;
+}
+.proyecto-btn:hover { border-color: #0ea5e9; color: #0ea5e9; }
+.proyecto-btn.active { border-color: #0ea5e9; background: #f0f9ff; color: #0284c7; font-weight: 600; }
+
+.perfil-gate {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 4rem 2rem; text-align: center; gap: 0.875rem;
+  background: white; border: 1px solid #e2e8f0; border-radius: 16px;
+}
+.perfil-gate-icon {
+  width: 64px; height: 64px; border-radius: 16px;
+  background: #f0f9ff; display: flex; align-items: center; justify-content: center;
+  color: #0ea5e9; margin-bottom: 0.25rem;
+}
+.perfil-gate h2 { font-size: 1.125rem; font-weight: 700; color: #0f172a; }
+.perfil-gate p { font-size: 0.9rem; color: #64748b; max-width: 400px; line-height: 1.6; }
+.btn-completar {
+  display: inline-flex; align-items: center; margin-top: 0.5rem;
+  padding: 0.625rem 1.5rem; background: #0ea5e9; color: white;
+  font-size: 0.9rem; font-weight: 600; border-radius: 10px;
+  text-decoration: none; transition: background 0.15s;
+}
+.btn-completar:hover { background: #0284c7; }
 h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; display: flex; align-items: center; gap: 0.6rem; }
 .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
 
