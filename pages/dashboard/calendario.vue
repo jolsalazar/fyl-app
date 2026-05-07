@@ -56,47 +56,62 @@
             <span class="grupo-count">{{ grupo.items.length }} oportunidad{{ grupo.items.length !== 1 ? 'es' : '' }}</span>
           </div>
 
-          <div class="grupo-lista">
-            <NuxtLink
-              v-for="item in gruposExpandidos.has(grupo.label) ? grupo.items : grupo.items.slice(0, LIMIT_POR_GRUPO)"
-              :key="item.id"
-              :to="`/dashboard/oportunidades/${item.id}`"
-              class="item-row"
-            >
-              <div class="item-fecha">
-                <span class="fecha-dia">{{ diaDel(item.fecha_cierre_postulacion) }}</span>
-                <span class="fecha-mes">{{ mesDel(item.fecha_cierre_postulacion) }}</span>
-              </div>
-              <div class="item-info">
-                <div class="item-top">
-                  <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
-                  <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
-                  <span :class="['tag-tipo', item.tipo]">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
-                </div>
-                <p class="item-titulo">{{ item.titulo }}</p>
-                <p v-if="item.monto_rango" class="item-monto">{{ montoLabel(item.monto_rango) }}</p>
-              </div>
-              <div class="item-dias" :class="{ urgente: grupo.tipo === 'urgente', hoy: grupo.tipo === 'hoy' }">
-                <span class="dias-num">{{ diasRestantes(item.fecha_cierre_postulacion) }}</span>
-                <span class="dias-label">{{ diasRestantes(item.fecha_cierre_postulacion) === '1' ? 'día' : 'días' }}</span>
-              </div>
-            </NuxtLink>
+          <!-- Bloqueado para plan Free -->
+          <div v-if="plan === 'free' && GRUPOS_BLOQUEADOS_FREE.has(grupo.tipo)" class="grupo-locked">
+            <div class="locked-items">
+              <div v-for="i in Math.min(3, grupo.items.length)" :key="i" class="item-row-ghost"></div>
+            </div>
+            <div class="locked-overlay">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span>{{ grupo.items.length }} oportunidad{{ grupo.items.length !== 1 ? 'es' : '' }} · Plan Starter o superior</span>
+              <NuxtLink to="/planes" class="btn-unlock">Mejorar plan</NuxtLink>
+            </div>
           </div>
 
-          <button
-            v-if="grupo.items.length > LIMIT_POR_GRUPO"
-            class="btn-ver-mas"
-            @click="gruposExpandidos.has(grupo.label) ? gruposExpandidos.delete(grupo.label) : gruposExpandidos.add(grupo.label)"
-          >
-            <template v-if="!gruposExpandidos.has(grupo.label)">
-              Ver {{ grupo.items.length - LIMIT_POR_GRUPO }} más en "{{ grupo.label }}"
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </template>
-            <template v-else>
-              Mostrar menos
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-            </template>
-          </button>
+          <!-- Normal (free con acceso o cualquier plan de pago) -->
+          <template v-else>
+            <div class="grupo-lista">
+              <NuxtLink
+                v-for="item in gruposExpandidos.has(grupo.label) ? grupo.items : grupo.items.slice(0, LIMIT_POR_GRUPO)"
+                :key="item.id"
+                :to="`/dashboard/oportunidades/${item.id}`"
+                class="item-row"
+              >
+                <div class="item-fecha">
+                  <span class="fecha-dia">{{ diaDel(item.fecha_cierre_postulacion) }}</span>
+                  <span class="fecha-mes">{{ mesDel(item.fecha_cierre_postulacion) }}</span>
+                </div>
+                <div class="item-info">
+                  <div class="item-top">
+                    <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+                    <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
+                    <span :class="['tag-tipo', item.tipo]">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                  </div>
+                  <p class="item-titulo">{{ item.titulo }}</p>
+                  <p v-if="item.monto_rango" class="item-monto">{{ montoLabel(item.monto_rango) }}</p>
+                </div>
+                <div class="item-dias" :class="{ urgente: grupo.tipo === 'urgente', hoy: grupo.tipo === 'hoy' }">
+                  <span class="dias-num">{{ diasRestantes(item.fecha_cierre_postulacion) }}</span>
+                  <span class="dias-label">{{ diasRestantes(item.fecha_cierre_postulacion) === '1' ? 'día' : 'días' }}</span>
+                </div>
+              </NuxtLink>
+            </div>
+
+            <button
+              v-if="grupo.items.length > LIMIT_POR_GRUPO"
+              class="btn-ver-mas"
+              @click="gruposExpandidos.has(grupo.label) ? gruposExpandidos.delete(grupo.label) : gruposExpandidos.add(grupo.label)"
+            >
+              <template v-if="!gruposExpandidos.has(grupo.label)">
+                Ver {{ grupo.items.length - LIMIT_POR_GRUPO }} más en "{{ grupo.label }}"
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </template>
+              <template v-else>
+                Mostrar menos
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+              </template>
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -107,10 +122,13 @@
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
+const { plan, load: loadPlan } = usePlan()
 const items = ref<any[]>([])
 const loading = ref(true)
 const tipoFiltro = ref<'fondo' | 'licitacion'>('fondo')
 watch(tipoFiltro, () => gruposExpandidos.value.clear())
+
+const GRUPOS_BLOQUEADOS_FREE = new Set(['proximo', 'lejano', 'futuro'])
 
 const LIMIT_POR_GRUPO = 10
 const gruposExpandidos = ref<Set<string>>(new Set())
@@ -145,6 +163,7 @@ const grupos = computed(() => {
 })
 
 onMounted(async () => {
+  await loadPlan()
   const hoy = new Date().toISOString().split('T')[0]
   const { data } = await supabase
     .from('convocatorias')
@@ -264,6 +283,56 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .dias-label { font-size: 0.6875rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
 .item-dias.urgente .dias-num { color: #f59e0b; }
 .item-dias.hoy .dias-num { color: #dc2626; }
+
+/* ── Bloqueo plan Free ──────────────────────────────────────── */
+.grupo-locked {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.locked-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+.item-row-ghost {
+  height: 76px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+.locked-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: rgba(248,250,252,0.75);
+  backdrop-filter: blur(2px);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #64748b;
+  padding: 1rem;
+}
+.btn-unlock {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.875rem;
+  background: #0ea5e9;
+  color: white;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: 7px;
+  text-decoration: none;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.btn-unlock:hover { background: #0284c7; }
 
 .btn-ver-mas {
   display: flex; align-items: center; gap: 0.4rem;
