@@ -58,7 +58,7 @@
 
           <div class="grupo-lista">
             <NuxtLink
-              v-for="item in grupo.items"
+              v-for="item in gruposExpandidos.has(grupo.label) ? grupo.items : grupo.items.slice(0, LIMIT_POR_GRUPO)"
               :key="item.id"
               :to="`/dashboard/oportunidades/${item.id}`"
               class="item-row"
@@ -82,6 +82,21 @@
               </div>
             </NuxtLink>
           </div>
+
+          <button
+            v-if="grupo.items.length > LIMIT_POR_GRUPO"
+            class="btn-ver-mas"
+            @click="gruposExpandidos.has(grupo.label) ? gruposExpandidos.delete(grupo.label) : gruposExpandidos.add(grupo.label)"
+          >
+            <template v-if="!gruposExpandidos.has(grupo.label)">
+              Ver {{ grupo.items.length - LIMIT_POR_GRUPO }} más en "{{ grupo.label }}"
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </template>
+            <template v-else>
+              Mostrar menos
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+            </template>
+          </button>
         </div>
       </div>
     </div>
@@ -95,6 +110,10 @@ const supabase = useSupabaseClient()
 const items = ref<any[]>([])
 const loading = ref(true)
 const tipoFiltro = ref<'fondo' | 'licitacion'>('fondo')
+watch(tipoFiltro, () => gruposExpandidos.value.clear())
+
+const LIMIT_POR_GRUPO = 10
+const gruposExpandidos = ref<Set<string>>(new Set())
 
 const grupos = computed(() => {
   const filtered = items.value.filter(i => i.tipo === tipoFiltro.value)
@@ -245,6 +264,15 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .dias-label { font-size: 0.6875rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
 .item-dias.urgente .dias-num { color: #f59e0b; }
 .item-dias.hoy .dias-num { color: #dc2626; }
+
+.btn-ver-mas {
+  display: flex; align-items: center; gap: 0.4rem;
+  margin-top: 0.5rem; padding: 0.5rem 0.75rem;
+  background: none; border: 1.5px solid #e2e8f0; border-radius: 8px;
+  font-size: 0.8375rem; font-weight: 500; color: #64748b;
+  font-family: inherit; cursor: pointer; transition: all 0.15s;
+}
+.btn-ver-mas:hover { border-color: #0ea5e9; color: #0ea5e9; }
 
 .spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
