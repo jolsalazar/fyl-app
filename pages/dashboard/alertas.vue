@@ -494,12 +494,12 @@ onMounted(async () => {
 
   loadUnreadCounts()
 
-  // Auto-pausar alertas activas que excedan el límite del plan.
-  // Se mantiene la más antigua activa; el resto se pausa en BD.
-  if (maxAlertas.value !== -1) {
+  // Auto-pausar solo si el plan tiene límite real (nunca para advanced/agency)
+  const limite = maxAlertas.value
+  if (limite !== -1 && limite > 0) {
     const activos = alertas.value.filter(a => a.activo)
-    if (activos.length > maxAlertas.value) {
-      const aPausar = activos.slice(maxAlertas.value)
+    if (activos.length > limite) {
+      const aPausar = activos.slice(limite)
       await Promise.all(aPausar.map(a =>
         supabase.from('alert_configs').update({ activo: false }).eq('id', a.id)
       ))
