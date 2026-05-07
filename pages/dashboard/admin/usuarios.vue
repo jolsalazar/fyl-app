@@ -9,7 +9,7 @@
       </div>
 
       <!-- Stats -->
-      <div class="stats-row" v-if="!loading">
+      <div class="stats-row" v-if="!loading && !loadError">
         <div class="stat-card">
           <span class="stat-num">{{ total }}</span>
           <span class="stat-label">Total</span>
@@ -32,6 +32,13 @@
         </div>
       </div>
 
+      <!-- Búsqueda -->
+      <div class="search-bar" v-if="!loading && !loadError">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input v-model="busqueda" type="text" placeholder="Buscar por email…" class="search-input" />
+        <span v-if="busqueda" class="search-count">{{ usuariosFiltrados.length }} resultado{{ usuariosFiltrados.length !== 1 ? 's' : '' }}</span>
+      </div>
+
       <!-- Table -->
       <div class="table-wrap">
         <div v-if="loading" class="loading">Cargando usuarios…</div>
@@ -48,11 +55,11 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="u in users" :key="u.id">
+            <tr v-for="u in usuariosFiltrados" :key="u.id">
               <td class="email-cell">{{ u.email }}</td>
               <td>
                 <select
-                  :value="u.plan"
+                  v-model="u.plan"
                   :disabled="changingPlan === u.id"
                   class="plan-select"
                   :class="u.plan"
@@ -107,6 +114,13 @@ const loadError = ref(false)
 const togglingId = ref('')
 const changingPlan = ref('')
 const currentUserId = ref('')
+const busqueda = ref('')
+
+const usuariosFiltrados = computed(() => {
+  if (!busqueda.value.trim()) return users.value
+  const q = busqueda.value.toLowerCase()
+  return users.value.filter(u => u.email.toLowerCase().includes(q))
+})
 
 const total = computed(() => users.value.length)
 const byPlan = computed(() => ({
@@ -206,6 +220,19 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .accent-starter .stat-num  { color: #f59e0b; }
 .accent-advanced .stat-num { color: #6366f1; }
 .accent-agency .stat-num   { color: #0ea5e9; }
+
+.search-bar {
+  display: flex; align-items: center; gap: 0.625rem;
+  background: white; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 0.5rem 0.875rem; margin-bottom: 1rem;
+  color: #94a3b8;
+}
+.search-input {
+  flex: 1; border: none; outline: none; font-size: 0.9rem;
+  font-family: 'Inter', sans-serif; color: #0f172a; background: none;
+}
+.search-input::placeholder { color: #94a3b8; }
+.search-count { font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
 
 .table-wrap {
   background: white;
