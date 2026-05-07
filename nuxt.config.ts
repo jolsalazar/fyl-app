@@ -41,6 +41,14 @@ export default defineNuxtConfig({
     key: process.env.SUPABASE_KEY,
   },
 
+  runtimeConfig: {
+    public: {
+      // true cuando MP_ACCESS_TOKEN está seteada en el deploy. Permite al frontend
+      // mostrar el botón "Contratar" (checkout MP) en lugar del fallback por email.
+      mpEnabled: !!process.env.MP_ACCESS_TOKEN,
+    },
+  },
+
   experimental: {
     appManifest: false,
   },

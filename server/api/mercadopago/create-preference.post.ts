@@ -16,9 +16,9 @@ import { serverSupabaseUser } from '#supabase/server'
 
 const PRECIOS_CLP: Record<Plan, number> = {
   free:     0,
-  starter:  4990,
-  advanced: 14990,
-  agency:   39990,
+  starter:  5990,
+  advanced: 19990,
+  agency:   49990,
 }
 
 const NOMBRES: Record<Plan, string> = {

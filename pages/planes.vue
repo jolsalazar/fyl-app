@@ -56,13 +56,17 @@
         </ul>
         <div class="plan-action">
           <span v-if="plan === 'starter'" class="btn-current">Plan actual</span>
+          <button v-else-if="mpEnabled" class="btn-upgrade btn-starter" :disabled="contratando === 'starter'" @click="contratar('starter')">
+            <span v-if="contratando === 'starter'" class="spinner"></span>
+            {{ contratando === 'starter' ? 'Redirigiendo…' : (esMejor('starter') ? 'Mejorar a Starter' : 'Cambiar a Starter') }}
+          </button>
           <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Quiero el plan Starter" class="btn-upgrade btn-starter">
             {{ esMejor('starter') ? 'Mejorar a Starter' : 'Cambiar a Starter' }}
           </a>
         </div>
       </div>
 
-      <!-- PRO -->
+      <!-- ADVANCED -->
       <div class="plan-card plan-featured" :class="{ current: plan === 'advanced' }">
         <div class="featured-badge">Más popular</div>
         <div class="plan-top">
@@ -80,13 +84,17 @@
         </ul>
         <div class="plan-action">
           <span v-if="plan === 'advanced'" class="btn-current">Plan actual</span>
+          <button v-else-if="mpEnabled" class="btn-upgrade btn-pro" :disabled="contratando === 'advanced'" @click="contratar('advanced')">
+            <span v-if="contratando === 'advanced'" class="spinner"></span>
+            {{ contratando === 'advanced' ? 'Redirigiendo…' : (esMejor('advanced') ? 'Mejorar a Advanced' : 'Cambiar a Advanced') }}
+          </button>
           <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Quiero el plan Advanced" class="btn-upgrade btn-pro">
             {{ esMejor('advanced') ? 'Mejorar a Advanced' : 'Cambiar a Advanced' }}
           </a>
         </div>
       </div>
 
-      <!-- AGENCIA -->
+      <!-- AGENCY -->
       <div class="plan-card" :class="{ current: plan === 'agency' }">
         <div class="plan-top">
           <div class="plan-name">Agency</div>
@@ -101,6 +109,10 @@
         </ul>
         <div class="plan-action">
           <span v-if="plan === 'agency'" class="btn-current">Plan actual</span>
+          <button v-else-if="mpEnabled" class="btn-upgrade btn-agency" :disabled="contratando === 'agency'" @click="contratar('agency')">
+            <span v-if="contratando === 'agency'" class="spinner"></span>
+            {{ contratando === 'agency' ? 'Redirigiendo…' : (esMejor('agency') ? 'Mejorar a Agency' : 'Contratar') }}
+          </button>
           <a v-else href="mailto:hola@fondosylicitaciones.cl?subject=Quiero el plan Agency" class="btn-upgrade btn-agency">
             {{ esMejor('agency') ? 'Mejorar a Agency' : 'Contactar' }}
           </a>
@@ -109,11 +121,15 @@
 
     </div>
 
-    <p class="nota">
+    <p v-if="!mpEnabled" class="nota">
       Por ahora el cambio de plan se gestiona por email. Pronto tendremos pago en línea.
       Escríbenos a <a href="mailto:hola@fondosylicitaciones.cl">hola@fondosylicitaciones.cl</a>
     </p>
+    <p v-else class="nota">
+      El pago se procesa en MercadoPago. Tu plan se activa automáticamente al confirmarse el pago.
+    </p>
 
+    <AppToast />
   </div>
 </template>
 
@@ -121,7 +137,41 @@
 definePageMeta({ middleware: 'auth' })
 
 const { plan, label, esMejor, load } = usePlan()
-onMounted(load)
+const { show: toast } = useToast()
+const route   = useRoute()
+const router  = useRouter()
+
+const mpEnabled   = computed(() => Boolean(useRuntimeConfig().public.mpEnabled))
+const contratando = ref<'starter' | 'advanced' | 'agency' | null>(null)
+
+async function contratar(p: 'starter' | 'advanced' | 'agency') {
+  if (contratando.value) return
+  contratando.value = p
+  try {
+    const res = await $fetch<{ ok: boolean; init_point?: string; error?: string }>(
+      '/api/mercadopago/create-preference',
+      { method: 'POST', body: { plan: p } },
+    )
+    if (res.ok && res.init_point) {
+      window.location.href = res.init_point
+      return
+    }
+    toast('No se pudo iniciar el pago. Intenta nuevamente o escríbenos.', 'error')
+  } catch {
+    toast('No se pudo iniciar el pago. Intenta nuevamente o escríbenos.', 'error')
+  } finally {
+    contratando.value = null
+  }
+}
+
+onMounted(() => {
+  load()
+  const pago = route.query.pago
+  if (pago === 'falla') {
+    toast('El pago no se pudo completar. No se hizo ningún cobro.', 'error', 5000)
+    router.replace({ query: {} })
+  }
+})
 </script>
 
 <style scoped>
@@ -203,11 +253,20 @@ h1 { font-size: 1.75rem; font-weight: 800; color: #0f172a; letter-spacing: -0.03
   font-weight: 600; border-radius: 10px; border: 1.5px solid #e2e8f0;
 }
 .btn-upgrade {
-  display: block; text-align: center; padding: 0.7rem;
-  color: white; font-size: 0.875rem; font-weight: 700;
-  border-radius: 10px; text-decoration: none; transition: opacity 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  width: 100%; padding: 0.7rem;
+  color: white; font-size: 0.875rem; font-weight: 700; font-family: inherit;
+  border: none; border-radius: 10px; text-decoration: none; cursor: pointer;
+  transition: opacity 0.15s;
 }
-.btn-upgrade:hover { opacity: 0.9; }
+.btn-upgrade:hover:not(:disabled) { opacity: 0.9; }
+.btn-upgrade:disabled { opacity: 0.7; cursor: progress; }
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.4); border-top-color: white;
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 .btn-starter { background: #f59e0b; }
 .btn-pro     { background: linear-gradient(135deg, #6366f1, #8b5cf6); box-shadow: 0 4px 12px rgba(99,102,241,0.3); }
 .btn-agency { background: #0f172a; }

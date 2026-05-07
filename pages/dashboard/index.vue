@@ -414,6 +414,17 @@ onBeforeUnmount(() => {
 onMounted(async () => {
   lastVisitRef.value = localStorage.getItem('fyl_last_visit') ?? ''
 
+  // Mensaje de retorno desde MercadoPago (back_urls de la preferencia)
+  const pago = route.query.pago
+  if (pago === 'ok') {
+    toast('¡Pago confirmado! Tu plan se activa apenas MercadoPago notifique (puede tardar unos segundos).', 'ok', 6000)
+    try { localStorage.removeItem('plan_intencion') } catch {}
+    router.replace({ query: { ...route.query, pago: undefined } })
+  } else if (pago === 'pendiente') {
+    toast('Tu pago quedó pendiente. Te avisaremos por email cuando se confirme.', 'info', 6000)
+    router.replace({ query: { ...route.query, pago: undefined } })
+  }
+
   const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [, { data: guardados }, { data: guardadosCountData }, { data: popularesData }, { count: cNuevos }, { data: postulaciones }] = await Promise.all([

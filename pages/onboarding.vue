@@ -249,8 +249,8 @@
           </div>
 
           <div class="match-cta-wrap">
-            <NuxtLink to="/planes" class="btn-primary btn-lg">
-              Ver mi match completo
+            <NuxtLink :to="planIntencion ? '/planes' : '/planes'" class="btn-primary btn-lg">
+              {{ planIntencion ? `Contratar Plan ${planIntencionLabel}` : 'Ver mi match completo' }}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </NuxtLink>
             <NuxtLink to="/dashboard" class="btn-ghost">Ir a mi dashboard</NuxtLink>
@@ -260,10 +260,15 @@
         <!-- Fallback sin matches -->
         <template v-else>
           <p class="step-desc">Tu perfil y primera alerta están configurados. Desde mañana recibirás un email con las oportunidades nuevas.</p>
-          <NuxtLink to="/dashboard" class="btn-primary btn-lg">
+          <NuxtLink v-if="planIntencion" to="/planes" class="btn-primary btn-lg">
+            Contratar Plan {{ planIntencionLabel }}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </NuxtLink>
+          <NuxtLink v-else to="/dashboard" class="btn-primary btn-lg">
             Ir a mi dashboard
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
           </NuxtLink>
+          <NuxtLink v-if="planIntencion" to="/dashboard" class="btn-ghost" style="margin-top: 0.5rem;">Saltar y entrar al dashboard</NuxtLink>
         </template>
       </div>
       </transition>
@@ -284,6 +289,12 @@ const calculandoMatch = ref(false)
 const matchResults    = ref<{ item: any; match: ReturnType<typeof calcularMatch> }[]>([])
 const tagInput  = ref('')
 const email     = ref('')
+
+// Si el usuario llegó desde la web (fyl) eligiendo un plan pago, registro.vue lo dejó
+// guardado en localStorage. Lo leemos para ofrecer "Contratar Plan X" al final del onboarding.
+const planIntencion      = ref<string | null>(null)
+const PLAN_NOMBRES: Record<string, string> = { starter: 'Starter', advanced: 'Advanced', agency: 'Agency' }
+const planIntencionLabel = computed(() => planIntencion.value ? PLAN_NOMBRES[planIntencion.value] ?? '' : '')
 
 const perfil = ref({
   tipo_persona:       null as string | null,
@@ -422,6 +433,11 @@ async function finalizar() {
 onMounted(async () => {
   const { data: { user } } = await supabase.auth.getUser()
   email.value = user?.email ?? ''
+
+  try {
+    const stored = localStorage.getItem('plan_intencion')
+    if (stored && stored in PLAN_NOMBRES) planIntencion.value = stored
+  } catch {}
 })
 </script>
 
