@@ -6,6 +6,16 @@
           <h1>Calendario de cierres</h1>
           <p class="subtitle">Fechas límite de oportunidades abiertas</p>
         </div>
+        <div class="tipo-tabs">
+          <button :class="['tab', tipoFiltro === 'fondo' ? 'active' : '']" @click="tipoFiltro = 'fondo'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Fondos
+          </button>
+          <button :class="['tab', tipoFiltro === 'licitacion' ? 'active' : '']" @click="tipoFiltro = 'licitacion'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Licitaciones
+          </button>
+        </div>
       </div>
 
       <div v-if="loading" class="timeline">
@@ -84,9 +94,11 @@ definePageMeta({ middleware: 'auth', layout: false })
 const supabase = useSupabaseClient()
 const items = ref<any[]>([])
 const loading = ref(true)
+const tipoFiltro = ref<'fondo' | 'licitacion'>('fondo')
 
 const grupos = computed(() => {
-  if (!items.value.length) return []
+  const filtered = items.value.filter(i => i.tipo === tipoFiltro.value)
+  if (!filtered.length) return []
 
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const en7  = new Date(hoy); en7.setDate(hoy.getDate() + 7)
@@ -101,7 +113,7 @@ const grupos = computed(() => {
     { label: 'Más adelante',   tipo: 'futuro',    items: [] },
   ]
 
-  for (const item of items.value) {
+  for (const item of filtered) {
     const fecha = new Date(item.fecha_cierre_postulacion); fecha.setHours(0, 0, 0, 0)
     if (fecha.getTime() === hoy.getTime())      grupos[0].items.push(item)
     else if (fecha <= en7)                      grupos[1].items.push(item)
@@ -155,9 +167,24 @@ function montoLabel(m: string) {
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; }
-.header { margin-bottom: 1.75rem; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }
 h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
 .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
+
+.tipo-tabs {
+  display: flex; gap: 0.25rem;
+  background: #f1f5f9; border-radius: 10px; padding: 0.25rem;
+  flex-shrink: 0;
+}
+.tab {
+  display: flex; align-items: center; gap: 0.375rem;
+  padding: 0.45rem 1rem; border-radius: 7px; border: none;
+  font-size: 0.875rem; font-weight: 500; font-family: inherit;
+  color: #64748b; background: none; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
+}
+.tab:hover { color: #0f172a; }
+.tab.active { background: white; color: #0f172a; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5rem 2rem; text-align: center; gap: 0.75rem; }
 .empty-icon { width: 56px; height: 56px; background: #f1f5f9; border-radius: 14px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.25rem; }
