@@ -325,9 +325,6 @@ function alcanceLabel(a: string) {
   return { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }[a] ?? a
 }
 
-)
-}
-
 function esUrgente(f: string) {
   if (!f) return false
   const dias = (new Date(f).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
