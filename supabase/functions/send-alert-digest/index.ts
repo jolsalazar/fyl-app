@@ -99,8 +99,24 @@ async function processUser(supabase: any, userId: string, log: string[]): Promis
   if (!resultadosPorAlerta.length) return false
 
   const totalNuevas = resultadosPorAlerta.reduce((s, r) => s + r.items.length, 0)
-
   await sendEmail(user.email, totalNuevas, resultadosPorAlerta)
+
+  // Guardar en bandeja de notificaciones
+  const notifs = resultadosPorAlerta.flatMap(({ alerta, items }) =>
+    items.map((item: any) => ({
+      user_id:         userId,
+      alert_config_id: alerta.id,
+      convocatoria_id: item.id,
+      notified_at:     ahora,
+    }))
+  )
+  if (notifs.length) {
+    await supabase.from('alert_notifications').upsert(notifs, {
+      onConflict: 'alert_config_id,convocatoria_id',
+      ignoreDuplicates: true,
+    })
+  }
+
   return true
 }
 

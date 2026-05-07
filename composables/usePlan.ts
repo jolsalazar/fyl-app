@@ -40,12 +40,16 @@ export function usePlan() {
       .select('plan')
       .eq('id', user.id)
       .single()
-    _plan.value    = (data?.plan ?? 'free') as Plan
+
+    // Normalizar nombres viejos por si la migración no corrió en producción
+    const LEGACY: Record<string, Plan> = { pro: 'advanced', agencia: 'agency' }
+    const raw = data?.plan ?? 'free'
+    _plan.value    = (LEGACY[raw] ?? (raw in PLAN_CONFIG ? raw : 'free')) as Plan
     _loading.value = false
     _loaded.value  = true
   }
 
-  const config  = computed(() => PLAN_CONFIG[_plan.value])
+  const config  = computed(() => PLAN_CONFIG[_plan.value] ?? PLAN_CONFIG.free)
   const label   = computed(() => PLAN_LABELS[_plan.value])
 
   // Feature flags

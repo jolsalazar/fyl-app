@@ -214,8 +214,8 @@
               >
                 <div class="alerta-row-header">
                   <span class="alerta-name">{{ alerta.nombre || 'Sin nombre' }}</span>
-                  <span v-if="alertaCounts[alerta.id] !== undefined" class="count-badge">
-                    {{ alertaCounts[alerta.id] }}
+                  <span v-if="unreadCounts[alerta.id] > 0" class="count-badge">
+                    {{ unreadCounts[alerta.id] }}
                   </span>
                 </div>
                 <span class="alerta-summary">{{ resumenAlerta(alerta) }}</span>
@@ -239,12 +239,12 @@
             </div>
           </div>
 
-          <!-- Panel derecho: resultados -->
+          <!-- Panel derecho: bandeja de notificaciones -->
           <div class="panel-right">
             <Transition name="fade" mode="out-in">
             <template v-if="!selectedId">
               <div class="empty-results">
-                <p>Selecciona una alerta para ver sus resultados</p>
+                <p>Selecciona una alerta para ver su bandeja</p>
               </div>
             </template>
             <template v-else :key="selectedId">
@@ -255,10 +255,13 @@
                     <span class="results-count loading">Cargando…</span>
                   </template>
                   <template v-else>
-                    <span class="results-count">{{ resultsTotal ?? 0 }} oportunidad{{ (resultsTotal ?? 0) !== 1 ? 'es' : '' }}</span>
+                    <span v-if="unreadNotifications.length > 0" class="results-count">
+                      {{ unreadNotifications.length }} nueva{{ unreadNotifications.length !== 1 ? 's' : '' }}
+                    </span>
+                    <span v-else class="results-count muted">Al día</span>
                     <span v-if="selectedAlerta?.last_notified_at" class="notif-dot">·</span>
                     <span v-if="selectedAlerta?.last_notified_at" class="notif-time">
-                      Notificada {{ timeAgo(selectedAlerta.last_notified_at) }}
+                      Última notif. {{ timeAgo(selectedAlerta.last_notified_at) }}
                     </span>
                     <span v-else class="notif-time">Sin notificaciones aún</span>
                   </template>
@@ -270,61 +273,104 @@
 
               <div v-if="loadingResults" class="empty"><div class="spinner"></div></div>
 
-              <div v-else-if="results.length === 0" class="empty-results">
+              <div v-else-if="notifications.length === 0" class="empty-results">
                 <div class="empty-icon-wrap">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"/></svg>
                 </div>
-                <p class="empty-title">Sin resultados</p>
-                <p class="empty-desc">No hay oportunidades abiertas que coincidan con esta alerta.</p>
+                <p class="empty-title">Sin notificaciones aún</p>
+                <p class="empty-desc">Cuando el sistema detecte oportunidades nuevas para esta alerta te avisará por email y aparecerán aquí.</p>
               </div>
 
               <template v-else>
-                <div class="lista">
-                  <div v-for="item in results" :key="item.id" class="card" :class="{ nueva: esNueva(item.fecha_scrapeado) }">
-                    <div v-if="esNueva(item.fecha_scrapeado)" class="nueva-chip">Nueva</div>
-                    <div class="card-top">
-                      <div class="card-source">
-                        <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
-                        <div class="tags">
-                          <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
-                          <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                <!-- Nuevas (no leídas) -->
+                <div v-if="unreadNotifications.length > 0" class="inbox-section">
+                  <div class="inbox-label">
+                    <span class="inbox-label-dot"></span>
+                    Nuevas
+                  </div>
+                  <div class="lista">
+                    <div v-for="n in unreadNotifications" :key="n.id" class="card card-nueva">
+                      <div class="nueva-chip">Nueva</div>
+                      <div class="card-top">
+                        <div class="card-source">
+                          <img :src="`/sources/${n.conv?.fuente}.png`" :alt="fuenteLabel(n.conv?.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+                          <div class="tags">
+                            <span class="tag-fuente">{{ fuenteLabel(n.conv?.fuente) }}</span>
+                            <span class="tag-tipo" :class="n.conv?.tipo">{{ n.conv?.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                          </div>
                         </div>
+                        <span :class="['badge-estado', n.conv?.estado]">{{ estadoLabel(n.conv?.estado) }}</span>
                       </div>
-                      <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
-                    </div>
-                    <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="card-title-link">
-                      <h3>{{ item.titulo }}</h3>
-                    </NuxtLink>
-                    <p class="desc">{{ item.descripcion_breve }}</p>
-                    <div class="card-meta">
-                      <span v-if="item.monto_rango" class="meta-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                        {{ montoLabel(item.monto_rango) }}
-                      </span>
-                      <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        Cierra {{ formatFecha(item.fecha_cierre_postulacion) }}
-                      </span>
-                    </div>
-                    <div class="card-footer">
-                      <div class="focos">
-                        <span v-for="f in (item.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
+                      <NuxtLink :to="`/dashboard/oportunidades/${n.convocatoria_id}`" class="card-title-link">
+                        <h3>{{ n.conv?.titulo }}</h3>
+                      </NuxtLink>
+                      <p class="desc">{{ n.conv?.descripcion_breve }}</p>
+                      <div class="card-meta">
+                        <span v-if="n.conv?.monto_rango" class="meta-item">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                          {{ montoLabel(n.conv?.monto_rango) }}
+                        </span>
+                        <span v-if="n.conv?.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(n.conv?.fecha_cierre_postulacion) }">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                          Cierra {{ formatFecha(n.conv?.fecha_cierre_postulacion) }}
+                        </span>
+                        <span class="meta-item meta-notif">Recibido {{ timeAgo(n.notified_at) }}</span>
                       </div>
-                      <div class="card-links">
-                        <a v-if="item.link_postulacion" :href="item.link_postulacion" target="_blank" class="ver-link primary">
-                          Postular
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                        </a>
-                        <NuxtLink :to="`/dashboard/oportunidades/${item.id}`" class="ver-link">Ver detalle</NuxtLink>
+                      <div class="card-footer">
+                        <div class="focos">
+                          <span v-for="f in (n.conv?.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
+                        </div>
+                        <div class="card-links">
+                          <a v-if="n.conv?.link_postulacion" :href="n.conv.link_postulacion" target="_blank" class="ver-link primary">
+                            Postular
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                          </a>
+                          <NuxtLink :to="`/dashboard/oportunidades/${n.convocatoria_id}`" class="ver-link">Ver detalle</NuxtLink>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div v-if="results.length < (resultsTotal ?? 0)" class="load-more">
-                  <button @click="cargarMas" :disabled="loadingMas" class="btn-more">
-                    {{ loadingMas ? 'Cargando...' : `Ver más (${(resultsTotal ?? 0) - results.length} restantes)` }}
+                <!-- Anteriores (leídas) -->
+                <div v-if="readNotifications.length > 0" class="inbox-section">
+                  <button class="inbox-label inbox-label-toggle" @click="showRead = !showRead">
+                    <span>{{ readNotifications.length }} anterior{{ readNotifications.length !== 1 ? 'es' : '' }}</span>
+                    <svg :style="{ transform: showRead ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                   </button>
+                  <div v-if="showRead" class="lista lista-read">
+                    <div v-for="n in readNotifications" :key="n.id" class="card card-read">
+                      <div class="card-top">
+                        <div class="card-source">
+                          <img :src="`/sources/${n.conv?.fuente}.png`" :alt="fuenteLabel(n.conv?.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+                          <div class="tags">
+                            <span class="tag-fuente">{{ fuenteLabel(n.conv?.fuente) }}</span>
+                            <span class="tag-tipo" :class="n.conv?.tipo">{{ n.conv?.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                          </div>
+                        </div>
+                        <span :class="['badge-estado', n.conv?.estado]">{{ estadoLabel(n.conv?.estado) }}</span>
+                      </div>
+                      <NuxtLink :to="`/dashboard/oportunidades/${n.convocatoria_id}`" class="card-title-link">
+                        <h3>{{ n.conv?.titulo }}</h3>
+                      </NuxtLink>
+                      <div class="card-meta">
+                        <span v-if="n.conv?.monto_rango" class="meta-item">{{ montoLabel(n.conv?.monto_rango) }}</span>
+                        <span v-if="n.conv?.fecha_cierre_postulacion" class="meta-item">Cierra {{ formatFecha(n.conv?.fecha_cierre_postulacion) }}</span>
+                        <span class="meta-item meta-notif">Recibido {{ timeAgo(n.notified_at) }}</span>
+                      </div>
+                      <div class="card-footer">
+                        <div class="focos">
+                          <span v-for="f in (n.conv?.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
+                        </div>
+                        <div class="card-links">
+                          <a v-if="n.conv?.link_postulacion" :href="n.conv.link_postulacion" target="_blank" class="ver-link primary">
+                            Postular <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                          </a>
+                          <NuxtLink :to="`/dashboard/oportunidades/${n.convocatoria_id}`" class="ver-link">Ver detalle</NuxtLink>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </template>
             </template>
@@ -341,7 +387,6 @@
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase  = useSupabaseClient()
-const PAGE_SIZE = 20
 
 // ── Plan ──────────────────────────────────────────────────────────
 const { plan, label, canAddAlerta, maxAlertas, load: loadPlan } = usePlan()
@@ -385,14 +430,11 @@ const alertas    = ref<any[]>([])
 const selectedId = ref<string | null>(null)
 
 const loadingResults = ref(false)
-const loadingMas     = ref(false)
-const results        = ref<any[]>([])
-const resultsTotal   = ref<number | null>(null)
-const offset         = ref(0)
-const lastVisit      = ref('')
+const notifications  = ref<any[]>([])
+const unreadCounts   = ref<Record<string, number>>({})
+const showRead       = ref(false)
 
 const idsPostulados  = ref<string[]>([])
-const alertaCounts   = ref<Record<string, number>>({})
 const showAvanzados  = ref(false)
 
 // Form
@@ -419,6 +461,9 @@ const alertasActivas   = computed(() => alertas.value.filter(a => a.activo))
 const puedeActivar     = computed(() => maxAlertas.value === -1 || alertasActivas.value.length < maxAlertas.value)
 const hayPausadasPorPlan = computed(() => maxAlertas.value !== -1 && alertas.value.length > maxAlertas.value)
 
+const unreadNotifications = computed(() => notifications.value.filter(n => !n.is_read))
+const readNotifications   = computed(() => notifications.value.filter(n => n.is_read))
+
 const criteriaChips = computed(() => {
   const a = selectedAlerta.value
   if (!a) return []
@@ -435,9 +480,6 @@ const criteriaChips = computed(() => {
 
 // ── Lifecycle ────────────────────────────────────────────────────
 onMounted(async () => {
-  lastVisit.value = localStorage.getItem('fyl_last_alertas') ?? ''
-  localStorage.setItem('fyl_last_alertas', new Date().toISOString())
-
   const { data: { user } } = await supabase.auth.getUser()
 
   await loadPlan()
@@ -450,7 +492,7 @@ onMounted(async () => {
   alertas.value       = alertasData ?? []
   idsPostulados.value = (postulacionesData ?? []).map(p => p.convocatoria_id)
 
-  loadAllCounts()
+  loadUnreadCounts()
 
   // Auto-pausar alertas activas que excedan el límite del plan.
   // Se mantiene la más antigua activa; el resto se pausa en BD.
@@ -553,7 +595,7 @@ async function guardarAlerta() {
     view.value = 'list'
     toast(editingAlerta.value ? 'Alerta actualizada' : 'Alerta creada')
     if (editingAlerta.value) {
-      if (selectedId.value === editingAlerta.value.id) await loadResults()
+      if (selectedId.value === editingAlerta.value.id) await loadNotifications()
     }
   }
   guardando.value = false
@@ -566,8 +608,7 @@ async function borrarAlerta(id: string) {
   toast('Alerta eliminada', 'info')
   if (selectedId.value === id) {
     selectedId.value = null
-    results.value    = []
-    resultsTotal.value = null
+    notifications.value = []
     const otra = alertas.value.find(a => a.activo)
     if (otra) selectAlerta(otra.id)
   }
@@ -578,69 +619,76 @@ async function toggleAlerta(alerta: any) {
   if (nuevoEstado && !puedeActivar.value) return
   await supabase.from('alert_configs').update({ activo: nuevoEstado }).eq('id', alerta.id)
   alerta.activo = nuevoEstado
-  if (selectedId.value === alerta.id && !nuevoEstado) {
-    results.value = []; resultsTotal.value = 0
-  }
-  if (selectedId.value === alerta.id && nuevoEstado) await loadResults()
-  loadAllCounts()
 }
 
-// ── Selección y resultados ───────────────────────────────────────
+// ── Selección y bandeja ──────────────────────────────────────────
 async function selectAlerta(id: string) {
   if (selectedId.value === id) return
   selectedId.value = id
-  results.value = []; resultsTotal.value = null; offset.value = 0
-  await loadResults()
+  notifications.value = []
+  showRead.value = false
+  await loadNotifications()
+  await markRead()
 }
 
-function buildQuery(alerta: any) {
-  let q = supabase.from('convocatorias').select('*', { count: 'exact' }).eq('estado', 'abierto')
-
-  if (alerta.palabras_clave?.length) {
-    const terms = (alerta.palabras_clave as string[])
-      .flatMap(k => [`titulo.ilike.*${k}*`, `descripcion_breve.ilike.*${k}*`])
-      .join(',')
-    q = q.or(terms)
-  }
-  if (alerta.foco?.length) q = (q as any).overlaps('foco', alerta.foco)
-
-  if (alerta.tipos?.length)           q = q.in('tipo', alerta.tipos)
-  if (alerta.fuentes?.length)         q = q.in('fuente', alerta.fuentes)
-  if (alerta.alcance_interes?.length) q = q.in('alcance', alerta.alcance_interes)
-
-  if (alerta.monto_rangos?.length) {
-    q = q.in('monto_rango', alerta.monto_rangos)
-  } else if (alerta.monto_minimo) {
-    const idx = MONTO_ORDER.indexOf(alerta.monto_minimo)
-    if (idx >= 0) q = q.in('monto_rango', MONTO_ORDER.slice(idx))
-  }
-
-  if (idsPostulados.value.length)
-    q = q.not('id', 'in', `(${idsPostulados.value.join(',')})`)
-
-  return q.order('fecha_scrapeado', { ascending: false })
-}
-
-async function loadResults() {
+async function loadNotifications() {
   const alerta = selectedAlerta.value
-  if (!alerta?.activo) { results.value = []; resultsTotal.value = 0; return }
+  if (!alerta) return
   loadingResults.value = true
-  offset.value = 0
-  const { data, count } = await buildQuery(alerta).range(0, PAGE_SIZE - 1)
-  results.value      = data ?? []
-  resultsTotal.value = count ?? 0
-  offset.value       = results.value.length
+
+  const { data: notifs } = await supabase
+    .from('alert_notifications')
+    .select('id, convocatoria_id, is_read, notified_at')
+    .eq('alert_config_id', alerta.id)
+    .order('is_read', { ascending: true })
+    .order('notified_at', { ascending: false })
+    .limit(100)
+
+  if (!notifs?.length) {
+    notifications.value = []
+    loadingResults.value = false
+    return
+  }
+
+  const ids = notifs.map(n => n.convocatoria_id)
+  const { data: convs } = await supabase
+    .from('convocatorias')
+    .select('id, titulo, descripcion_breve, fuente, tipo, estado, monto_rango, fecha_cierre_postulacion, link_postulacion, foco')
+    .in('id', ids)
+
+  const convMap = Object.fromEntries((convs ?? []).map(c => [c.id, c]))
+  notifications.value = notifs.map(n => ({ ...n, conv: convMap[n.convocatoria_id] ?? null }))
   loadingResults.value = false
 }
 
-async function cargarMas() {
+async function markRead() {
   const alerta = selectedAlerta.value
   if (!alerta) return
-  loadingMas.value = true
-  const { data } = await buildQuery(alerta).range(offset.value, offset.value + PAGE_SIZE - 1)
-  results.value = [...results.value, ...(data ?? [])]
-  offset.value  = results.value.length
-  loadingMas.value = false
+  const unread = notifications.value.filter(n => !n.is_read)
+  if (!unread.length) return
+
+  await supabase
+    .from('alert_notifications')
+    .update({ is_read: true, read_at: new Date().toISOString() })
+    .eq('alert_config_id', alerta.id)
+    .eq('is_read', false)
+
+  notifications.value = notifications.value.map(n => ({ ...n, is_read: true }))
+  unreadCounts.value = { ...unreadCounts.value, [alerta.id]: 0 }
+}
+
+async function loadUnreadCounts() {
+  const entries = await Promise.all(
+    alertas.value.map(async a => {
+      const { count } = await supabase
+        .from('alert_notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('alert_config_id', a.id)
+        .eq('is_read', false)
+      return [a.id, count ?? 0] as const
+    })
+  )
+  unreadCounts.value = Object.fromEntries(entries)
 }
 
 function addTag() {
@@ -651,17 +699,6 @@ function addTag() {
 }
 function removeTag(i: number) {
   form.value.palabras_clave.splice(i, 1)
-}
-
-async function loadAllCounts() {
-  const activas = alertas.value.filter(a => a.activo)
-  const entries = await Promise.all(
-    activas.map(async a => {
-      const { count } = await buildQuery(a).range(0, 0)
-      return [a.id, count ?? 0] as const
-    })
-  )
-  alertaCounts.value = Object.fromEntries(entries)
 }
 
 function timeAgo(iso: string): string {
@@ -954,6 +991,42 @@ function esUrgente(f: string) {
 .sk-title { height: 18px; width: 70%; margin-bottom: 0.6rem; }
 .sk-line { height: 13px; }
 .sk-pill { width: 80px; height: 13px; border-radius: 999px; }
+
+/* ── Inbox ───────────────────────────────────────────────────── */
+.results-count.muted { color: #94a3b8; }
+
+.inbox-section { margin-bottom: 1.5rem; }
+
+.inbox-label {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; color: #64748b;
+  padding: 0.25rem 0; margin-bottom: 0.75rem;
+}
+.inbox-label-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #0ea5e9; box-shadow: 0 0 6px #0ea5e9;
+}
+.inbox-label-toggle {
+  background: none; border: none; cursor: pointer;
+  font-family: inherit; justify-content: space-between;
+  width: 100%; padding: 0.5rem 0;
+  border-top: 1px solid #f1f5f9;
+  transition: color 0.15s;
+}
+.inbox-label-toggle:hover { color: #0f172a; }
+
+.card-nueva {
+  border-left: 3px solid #0ea5e9;
+}
+.card-read {
+  opacity: 0.7;
+}
+.card-read:hover { opacity: 1; }
+
+.lista-read { margin-top: 0.5rem; }
+
+.meta-notif { color: #94a3b8 !important; font-style: italic; }
 
 @media (max-width: 900px) {
   .split { grid-template-columns: 1fr; height: auto; }

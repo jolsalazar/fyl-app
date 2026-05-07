@@ -98,6 +98,18 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
 
   const total = resultados.reduce((s, r) => s + r.items.length, 0)
   await sendEmail(env, authUser.email, total, resultados)
+
+  // Guardar en bandeja de notificaciones
+  const notifs = resultados.flatMap(({ alerta, items }) =>
+    items.map(item => ({
+      user_id:         userId,
+      alert_config_id: alerta.id,
+      convocatoria_id: item.id,
+      notified_at:     ahora,
+    }))
+  )
+  await sbInsert(env, '/rest/v1/alert_notifications', notifs)
+
   return true
 }
 
@@ -324,6 +336,15 @@ async function sbPatch(env: Env, path: string, body: object) {
   await fetch(`${env.SUPABASE_URL}${path}`, {
     method:  'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
+    body:    JSON.stringify(body),
+  })
+}
+
+async function sbInsert(env: Env, path: string, body: object[]) {
+  if (!body.length) return
+  await fetch(`${env.SUPABASE_URL}${path}`, {
+    method:  'POST',
+    headers: { ...sbHeaders(env), 'Prefer': 'resolution=ignore-duplicates,return=minimal' },
     body:    JSON.stringify(body),
   })
 }
