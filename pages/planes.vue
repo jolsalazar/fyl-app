@@ -31,7 +31,7 @@
           <li class="ok">Calendario de cierres</li>
           <li class="ok">1 alerta activa</li>
           <li class="no">Notificaciones por email</li>
-          <li class="no">Mi Match (scoring)</li>
+          <li class="no">Mis Match (scoring)</li>
           <li class="no">Múltiples alertas</li>
         </ul>
         <div class="plan-action">
@@ -51,7 +51,7 @@
           <li class="ok">Todo lo del plan Free</li>
           <li class="ok">Hasta 3 alertas activas</li>
           <li class="ok">Notificaciones por email (diarias)</li>
-          <li class="no">Mi Match (scoring de compatibilidad)</li>
+          <li class="no">Mis Match (scoring de compatibilidad)</li>
           <li class="no">Análisis de elegibilidad</li>
         </ul>
         <div class="plan-action">
@@ -73,7 +73,7 @@
         <ul class="features">
           <li class="ok">Todo lo del plan Starter</li>
           <li class="ok">Alertas ilimitadas</li>
-          <li class="ok">Mi Match — score de compatibilidad fondo a fondo</li>
+          <li class="ok">Mis Match — score de compatibilidad fondo a fondo</li>
           <li class="ok">Razones concretas de por qué calificas o no</li>
           <li class="ok">Resultados ordenados por compatibilidad</li>
           <li class="no">Gestión multi-cliente</li>

@@ -174,6 +174,14 @@
                 Postular
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
               </a>
+              <button
+                :class="['btn-postulado', postulacionesSet.has(item.id) ? 'marcado' : '']"
+                @click.prevent="togglePostulado(item.id)"
+                :title="postulacionesSet.has(item.id) ? 'Quitar postulación' : 'Marcar como postulado'"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                {{ postulacionesSet.has(item.id) ? 'Postulado' : 'Postulé' }}
+              </button>
               <NuxtLink :to="item.tipo === 'licitacion' ? `/dashboard/licitaciones/${item.id}` : `/dashboard/oportunidades/${item.id}`" class="ver-link">
                 Ver detalle
               </NuxtLink>
@@ -206,7 +214,8 @@ const canExport = computed(() => plan.value === 'advanced' || plan.value === 'ag
 
 const PAGE_SIZE = 20
 const SCROLL_KEY = 'scroll_fondos'
-const guardadosSet = ref<Set<string>>(new Set())
+const guardadosSet    = ref<Set<string>>(new Set())
+const postulacionesSet = ref<Set<string>>(new Set())
 const guardadosCount = ref<Record<string, number>>({})
 const populares = ref<{ id: string, titulo: string, total: number }[]>([])
 const nuevosEstaSemana = ref(0)
@@ -364,6 +373,19 @@ async function toggleGuardado(id: string) {
   guardadosSet.value = new Set(guardadosSet.value)
 }
 
+async function togglePostulado(id: string) {
+  if (postulacionesSet.value.has(id)) {
+    await supabase.from('postulaciones').delete().eq('convocatoria_id', id)
+    postulacionesSet.value.delete(id)
+    toast('Postulación desmarcada', 'info')
+  } else {
+    await supabase.from('postulaciones').insert({ convocatoria_id: id })
+    postulacionesSet.value.add(id)
+    toast('Marcado como postulado')
+  }
+  postulacionesSet.value = new Set(postulacionesSet.value)
+}
+
 function saveScroll() {
   const el = document.querySelector('.main') as HTMLElement
   if (el) sessionStorage.setItem(SCROLL_KEY, el.scrollTop.toString())
@@ -399,7 +421,7 @@ onMounted(async () => {
 
   const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [, { data: guardados }, { data: guardadosCountData }, { data: popularesData }, { count: cNuevos }] = await Promise.all([
+  const [, { data: guardados }, { data: guardadosCountData }, { data: popularesData }, { count: cNuevos }, { data: postulaciones }] = await Promise.all([
     loadPlan(),
     supabase.from('guardados').select('convocatoria_id'),
     supabase.from('guardados').select('convocatoria_id'),
@@ -411,9 +433,11 @@ onMounted(async () => {
       .select('id', { count: 'exact', head: true })
       .neq('fuente', 'mercadopublico')
       .gte('fecha_scrapeado', semanaAtras),
+    supabase.from('postulaciones').select('convocatoria_id'),
   ])
 
-  guardadosSet.value = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
+  guardadosSet.value    = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
+  postulacionesSet.value = new Set((postulaciones ?? []).map((p: any) => p.convocatoria_id))
 
   // Conteo por convocatoria para mostrar en cards
   const countMap: Record<string, number> = {}
@@ -740,6 +764,14 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   color: #64748b;
 }
 .card-links { display: flex; gap: 0.75rem; align-items: center; }
+.btn-postulado {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.8125rem; font-weight: 600; font-family: inherit;
+  color: #94a3b8; background: none; border: none;
+  cursor: pointer; padding: 0; transition: color 0.15s;
+}
+.btn-postulado:hover { color: #16a34a; }
+.btn-postulado.marcado { color: #16a34a; }
 .ver-link {
   display: inline-flex;
   align-items: center;

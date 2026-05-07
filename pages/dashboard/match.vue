@@ -4,7 +4,7 @@
 
       <div class="header">
         <div>
-          <h1>Mi Match
+          <h1>Mis Match
             <span class="pro-badge">Starter</span>
           </h1>
           <p class="subtitle">

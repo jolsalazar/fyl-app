@@ -219,7 +219,7 @@
                   <span :class="['match-nivel-label', matchResult.nivel]">
                     {{ { alto: 'Alto match', medio: 'Match parcial', bajo: 'Bajo match' }[matchResult.nivel] }}
                   </span>
-                  <NuxtLink to="/dashboard/match" class="match-ver-todos">Ver Mi Match →</NuxtLink>
+                  <NuxtLink to="/dashboard/match" class="match-ver-todos">Ver Mis Match →</NuxtLink>
                 </div>
               </div>
               <div class="match-razones">
