@@ -271,6 +271,7 @@ function montoLabel(m: string) {
 
 function alcanceLabel(a: string) {
   return { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }[a] ?? a
+}
 
 function esUrgente(f: string) {
   if (!f) return false
