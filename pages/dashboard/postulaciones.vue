@@ -203,8 +203,6 @@ function estadoLabel(e: string) {
 function montoLabel(m: string) {
   return { hasta_1M: 'Hasta $1M', '1M_10M': '$1M – $10M', '10M_30M': '$10M – $30M', '30M_60M': '$30M – $60M', '60M_100M': '$60M – $100M', sobre_100M: 'Más de $100M' }[m] ?? m
 }
-)
-}
 function esUrgente(f: string) {
   if (!f) return false
   const dias = (new Date(f).getTime() - Date.now()) / (1000 * 60 * 60 * 24)

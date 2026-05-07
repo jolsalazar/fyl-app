@@ -92,9 +92,6 @@ async function toggle(f: Fuente) {
   }
   saving.value = ''
 }
-
-)
-}
 </script>
 
 <style scoped>

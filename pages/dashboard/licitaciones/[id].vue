@@ -225,10 +225,6 @@ function alcanceLabel(a: string) {
 function formatMonto(n: number) {
   if (!n) return '—'
   return '$' + n.toLocaleString('es-CL')
-}
-
-)
-}
 
 function esUrgente(f: string) {
   if (!f) return false

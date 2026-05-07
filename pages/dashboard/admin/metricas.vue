@@ -222,8 +222,6 @@ const totalClicks   = computed(() => topFondos.value.reduce((s, f) => s + f.clic
 const usuariosUnicos = computed(() => topUsuarios.value.length)
 const fondosUnicos  = computed(() => topFondos.value.length)
 
-)
-}
 
 onMounted(async () => {
   const [{ data: u }, { data: s }] = await Promise.all([
