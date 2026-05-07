@@ -349,21 +349,32 @@ async function finalizar() {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  await Promise.all([
-    // Guardar perfil
-    supabase.from('perfil_postulante').upsert({
-      user_id:            user!.id,
-      tipo_persona:       perfil.value.tipo_persona,
-      subtipo_natural:    perfil.value.tipo_persona === 'natural' ? perfil.value.subtipo_natural : null,
-      edad:               perfil.value.tipo_persona === 'natural' ? perfil.value.edad : null,
-      antiguedad_empresa: perfil.value.tipo_persona === 'juridica' ? perfil.value.antiguedad_empresa : null,
-      estado_proyecto:    perfil.value.estado_proyecto,
-      foco_proyecto:      perfil.value.foco_proyecto,
-      palabras_clave:     perfil.value.palabras_clave,
-      updated_at:         new Date().toISOString(),
-    }, { onConflict: 'user_id' }),
+  const proyectoPayload = {
+    user_id:            user!.id,
+    nombre:             'Mi Proyecto',
+    tipo_persona:       perfil.value.tipo_persona,
+    subtipo_natural:    perfil.value.tipo_persona === 'natural'  ? perfil.value.subtipo_natural    : null,
+    edad:               perfil.value.tipo_persona === 'natural'  ? perfil.value.edad               : null,
+    antiguedad_empresa: perfil.value.tipo_persona === 'juridica' ? perfil.value.antiguedad_empresa : null,
+    estado_proyecto:    perfil.value.estado_proyecto,
+    foco:               perfil.value.foco_proyecto,
+    palabras_clave:     perfil.value.palabras_clave,
+    updated_at:         new Date().toISOString(),
+  }
 
-    // Crear primera alerta
+  const { data: existente } = await supabase
+    .from('proyectos')
+    .select('id')
+    .eq('user_id', user!.id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  await Promise.all([
+    existente
+      ? supabase.from('proyectos').update(proyectoPayload).eq('id', existente.id)
+      : supabase.from('proyectos').insert(proyectoPayload),
+
     supabase.from('alert_configs').insert({
       user_id:  user!.id,
       nombre:   alerta.value.nombre.trim(),
@@ -372,7 +383,6 @@ async function finalizar() {
       activo:   true,
     }),
 
-    // Marcar onboarding completo
     supabase.from('profiles').update({ onboarding_done: true }).eq('id', user!.id),
   ])
 

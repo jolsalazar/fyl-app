@@ -142,10 +142,11 @@ async function handleRegistro() {
   const { data, error: authError } = await supabase.auth.signUp({
     email: email.value,
     password: password.value,
-    options: {
-      data: { plan: plan.value ?? 'free' },
-    },
   })
+
+  if (plan.value && plan.value !== 'free') {
+    try { localStorage.setItem('plan_intencion', plan.value) } catch {}
+  }
 
   if (authError) {
     error.value = 'No se pudo crear la cuenta. Intenta de nuevo.'

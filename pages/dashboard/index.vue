@@ -217,7 +217,7 @@ const SCROLL_KEY = 'scroll_fondos'
 const guardadosSet    = ref<Set<string>>(new Set())
 const postulacionesSet = ref<Set<string>>(new Set())
 const guardadosCount = ref<Record<string, number>>({})
-const populares = ref<{ id: string, titulo: string, total: number }[]>([])
+const populares = ref<{ id: string, titulo: string, tipo: string, total: number }[]>([])
 const nuevosEstaSemana = ref(0)
 
 const loading = ref(true)
@@ -420,7 +420,7 @@ onMounted(async () => {
     loadPlan(),
     supabase.from('guardados').select('convocatoria_id'),
     supabase.from('guardados').select('convocatoria_id'),
-    supabase.from('guardados').select('convocatoria_id, created_at, convocatorias!inner(id, titulo, fuente, estado)')
+    supabase.from('guardados').select('convocatoria_id, created_at, convocatorias!inner(id, titulo, tipo, fuente, estado)')
       .neq('convocatorias.fuente', 'mercadopublico')
       .eq('convocatorias.estado', 'abierto')
       .gte('created_at', semanaAtras),
@@ -442,12 +442,12 @@ onMounted(async () => {
   guardadosCount.value = countMap
 
   // Top 3 más guardados esta semana
-  const popMap: Record<string, { id: string, titulo: string, total: number }> = {}
+  const popMap: Record<string, { id: string, titulo: string, tipo: string, total: number }> = {}
   for (const g of popularesData ?? []) {
     const conv = (g as any).convocatorias
     if (!conv) continue
     const id = conv.id
-    popMap[id] = { id, titulo: conv.titulo, total: (popMap[id]?.total ?? 0) + 1 }
+    popMap[id] = { id, titulo: conv.titulo, tipo: conv.tipo, total: (popMap[id]?.total ?? 0) + 1 }
   }
   populares.value = Object.values(popMap).sort((a, b) => b.total - a.total).slice(0, 3)
   nuevosEstaSemana.value = cNuevos ?? 0

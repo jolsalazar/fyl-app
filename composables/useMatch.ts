@@ -9,7 +9,7 @@ export interface Perfil {
   monto_minimo:    string | null
 }
 
-const MONTO_ORDER = ['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M']
+export const MONTO_ORDER = ['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M']
 
 function matchTipoPersona(userTipo: string | null, convTipos: string[] | null): Razon | null {
   if (!userTipo || !convTipos?.length) return null

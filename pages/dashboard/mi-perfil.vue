@@ -352,7 +352,8 @@ async function guardar() {
       toast('Proyecto guardado')
     }
   } else {
-    const { data, error } = await supabase.from('proyectos').insert(payload).select().single()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data, error } = await supabase.from('proyectos').insert({ ...payload, user_id: user!.id }).select().single()
     if (error) { msgError.value = true; mensaje.value = 'Error al crear.' }
     else {
       proyectos.value.push(data)

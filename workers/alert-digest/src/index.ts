@@ -77,6 +77,7 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
 
   const ahora      = new Date().toISOString()
   const resultados: Array<{ alerta: any; items: any[] }> = []
+  const sinMatch:   Array<any> = []
 
   for (const alerta of alertas) {
     const desde = alerta.last_notified_at
@@ -88,18 +89,27 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
     if (items.length > 0) {
       resultados.push({ alerta, items })
       log.push(`  ${authUser.email} | "${alerta.nombre}": ${items.length} nuevas`)
+    } else {
+      sinMatch.push(alerta)
     }
+  }
 
-    // Marcar como notificado siempre (evita re-envío)
+  // Alertas sin match: avanzar el cursor inmediatamente (no hay riesgo de pérdida).
+  for (const alerta of sinMatch) {
     await sbPatch(env, `/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
   }
 
   if (!resultados.length) return false
 
   const total = resultados.reduce((s, r) => s + r.items.length, 0)
-  await sendEmail(env, authUser.email, total, resultados)
+  const emailOk = await sendEmail(env, authUser.email, total, resultados)
 
-  // Guardar en bandeja de notificaciones
+  if (!emailOk) {
+    log.push(`  ${authUser.email} | envío Resend falló — no se actualiza last_notified_at, se reintenta en el próximo cron`)
+    return false
+  }
+
+  // Guardar en bandeja de notificaciones (idempotente: ignora duplicates)
   const notifs = resultados.flatMap(({ alerta, items }) =>
     items.map(item => ({
       user_id:         userId,
@@ -109,6 +119,11 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
     }))
   )
   await sbInsert(env, '/rest/v1/alert_notifications', notifs)
+
+  // Recién acá avanzamos el cursor de las alertas que sí dispararon email.
+  for (const { alerta } of resultados) {
+    await sbPatch(env, `/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
+  }
 
   return true
 }
@@ -162,9 +177,9 @@ async function sendEmail(
   to: string,
   total: number,
   resultados: Array<{ alerta: any; items: any[] }>
-) {
+): Promise<boolean> {
   const plural = total !== 1
-  await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.resend.com/emails', {
     method:  'POST',
     headers: {
       Authorization:  `Bearer ${env.RESEND_API_KEY}`,
@@ -177,6 +192,7 @@ async function sendEmail(
       html:    buildEmail(env, to, total, resultados),
     }),
   })
+  return res.ok
 }
 
 // ── HTML del email ────────────────────────────────────────────────

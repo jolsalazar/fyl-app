@@ -73,7 +73,7 @@ export default defineNuxtConfig({
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com data:",
           "img-src 'self' data: blob: https:",
-          "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://www.google-analytics.com https://region1.google-analytics.com https://c.clarity.ms https://www.clarity.ms https://www.googletagmanager.com",
+          "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://api.mercadopago.com https://www.google-analytics.com https://region1.google-analytics.com https://c.clarity.ms https://www.clarity.ms https://www.googletagmanager.com",
           "frame-ancestors 'none'",
           "form-action 'self'",
           "base-uri 'self'",
