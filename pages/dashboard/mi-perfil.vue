@@ -53,8 +53,8 @@
         <!-- Formulario del proyecto seleccionado -->
         <form v-if="form" class="form" @submit.prevent="guardar">
 
-          <!-- Alerta de perfil incompleto -->
-          <div v-if="!perfilCompletoForm" class="banner-incompleto">
+          <!-- Alerta de perfil incompleto (solo al editar, no al crear) -->
+          <div v-if="editando && !perfilCompletoForm" class="banner-incompleto">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             Completa el tipo de postulante y la etapa del proyecto para activar Mis Match.
           </div>
