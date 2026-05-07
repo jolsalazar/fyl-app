@@ -325,9 +325,7 @@ function alcanceLabel(a: string) {
   return { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }[a] ?? a
 }
 
-function formatFecha(f: string) {
-  if (!f) return '—'
-  return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })
+)
 }
 
 function esUrgente(f: string) {

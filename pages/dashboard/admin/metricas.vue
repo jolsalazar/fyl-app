@@ -222,9 +222,7 @@ const totalClicks   = computed(() => topFondos.value.reduce((s, f) => s + f.clic
 const usuariosUnicos = computed(() => topUsuarios.value.length)
 const fondosUnicos  = computed(() => topFondos.value.length)
 
-function formatFecha(f: string) {
-  if (!f) return '—'
-  return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })
+)
 }
 
 onMounted(async () => {

@@ -131,10 +131,6 @@ function montoLabel(m: string) {
   const map: Record<string, string> = { hasta_1M: 'Hasta $1M', '1M_10M': '$1M – $10M', '10M_30M': '$10M – $30M', '30M_60M': '$30M – $60M', '60M_100M': '$60M – $100M', sobre_100M: 'Más de $100M' }
   return map[m] ?? m
 }
-function formatFecha(f: string) {
-  if (!f) return '—'
-  return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 function formatFechaRelativa(f: string): string {
   if (!f) return '—'
   const dias = Math.floor((Date.now() - new Date(f).getTime()) / (1000 * 60 * 60 * 24))

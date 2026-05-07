@@ -227,9 +227,7 @@ function formatMonto(n: number) {
   return '$' + n.toLocaleString('es-CL')
 }
 
-function formatFecha(f: string) {
-  if (!f) return '—'
-  return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })
+)
 }
 
 function esUrgente(f: string) {

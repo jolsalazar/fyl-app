@@ -130,10 +130,11 @@
             </section>
 
             <!-- Texto raw como respaldo -->
-            <section class="card-section raw-section" v-if="item.raw_text && !item.descripcion_breve">
-              <h2>Detalle</h2>
-              <p class="raw-text">{{ item.raw_text }}</p>
-            </section>
+            <div class="sin-descripcion" v-if="!item.descripcion_breve">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>Descripción no disponible aún. Puedes revisar la información directamente en la fuente oficial.</span>
+              <a v-if="item.url" :href="item.url" target="_blank" rel="noopener" class="link-fuente">Ver en fuente original →</a>
+            </div>
 
           </div>
 
@@ -396,9 +397,7 @@ function formatMonto(n: number) {
   return '$' + n.toLocaleString('es-CL')
 }
 
-function formatFecha(f: string) {
-  if (!f) return '—'
-  return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })
+)
 }
 
 function esUrgente(f: string) {
@@ -631,15 +630,26 @@ h1 {
   color: #64748b;
 }
 
-/* Raw text */
-.raw-section .raw-text {
+.sin-descripcion {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   font-size: 0.875rem;
-  color: #475569;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  max-height: 300px;
-  overflow-y: auto;
+  color: #64748b;
+  line-height: 1.5;
 }
+.link-fuente {
+  color: #0ea5e9;
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.link-fuente:hover { text-decoration: underline; }
 
 /* Side cards */
 .col-side { display: flex; flex-direction: column; gap: 1rem; }

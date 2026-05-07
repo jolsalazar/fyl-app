@@ -93,9 +93,7 @@ async function toggle(f: Fuente) {
   saving.value = ''
 }
 
-function formatFecha(iso?: string) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+)
 }
 </script>
 
