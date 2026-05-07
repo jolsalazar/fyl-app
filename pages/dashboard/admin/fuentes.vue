@@ -67,7 +67,6 @@ onMounted(async () => {
     supabase.rpc('admin_scraper_stats'),
   ])
   if (e1) {
-    console.error('scraper_config:', e1)
     loadError.value = true
   } else {
     fuentes.value = cfg ?? []
@@ -86,7 +85,6 @@ async function toggle(f: Fuente) {
     .update({ activo: newVal, updated_at: new Date().toISOString() })
     .eq('fuente', f.fuente)
   if (err) {
-    console.error('toggle fuente:', err)
     show('No se pudo guardar el cambio', 'error')
   } else {
     f.activo = newVal

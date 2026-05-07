@@ -131,14 +131,16 @@ const byPlan = computed(() => ({
 }))
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Date(iso).toLocaleString('es-CL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
 }
 
 async function changePlan(u: UserRow, newPlan: string) {
   changingPlan.value = u.id
   const { error: err } = await supabase.rpc('admin_set_user_plan', { target_id: u.id, new_plan: newPlan })
   if (err) {
-    console.error('changePlan:', err)
     show('No se pudo cambiar el plan', 'error')
   } else {
     u.plan = newPlan
@@ -152,7 +154,6 @@ async function toggleRole(u: UserRow) {
   const newRole = u.role === 'admin' ? 'user' : 'admin'
   const { error: err } = await supabase.rpc('admin_set_user_role', { target_id: u.id, new_role: newRole })
   if (err) {
-    console.error('toggleRole:', err)
     show('No se pudo cambiar el rol', 'error')
   } else {
     u.role = newRole
@@ -167,7 +168,6 @@ onMounted(async () => {
 
   const { data, error: err } = await supabase.rpc('admin_get_users')
   if (err) {
-    console.error('admin_get_users:', err)
     loadError.value = true
   } else {
     users.value = data ?? []
@@ -264,7 +264,7 @@ td {
 }
 
 .email-cell { color: #0f172a; font-weight: 500; }
-.date-cell { color: #64748b; font-size: 0.8125rem; }
+.date-cell { color: #64748b; font-size: 0.8125rem; white-space: nowrap; }
 
 .badge {
   display: inline-block;

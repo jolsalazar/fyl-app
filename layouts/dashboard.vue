@@ -200,27 +200,30 @@ onMounted(async () => {
 
   const lastAlertas = localStorage.getItem('fyl_last_alertas')
   if (lastAlertas) {
-    const { data: cfg } = await supabase
+    const { data: cfgs } = await supabase
       .from('alert_configs')
-      .select('palabras_clave, tipos, fuentes, monto_rangos')
+      .select('tipos, fuentes, monto_rangos, palabras_clave, foco')
       .eq('user_id', user.id)
-      .maybeSingle()
+      .eq('activo', true)
 
-    if (cfg) {
-      const tieneConfig = cfg.palabras_clave?.length || cfg.tipos?.length || cfg.fuentes?.length || cfg.monto_rangos?.length
-      if (tieneConfig) {
-        let q = supabase.from('convocatorias').select('id', { count: 'exact', head: true })
-          .eq('estado', 'abierto').gt('fecha_scrapeado', lastAlertas)
-        if (cfg.tipos?.length)        q = q.in('tipo', cfg.tipos)
-        if (cfg.fuentes?.length)      q = q.in('fuente', cfg.fuentes)
-        if (cfg.monto_rangos?.length) q = q.in('monto_rango', cfg.monto_rangos)
-        if (cfg.palabras_clave?.length) {
-          const terms = cfg.palabras_clave.flatMap((k: string) => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`]).join(',')
-          q = q.or(terms)
-        }
-        const { count } = await q
-        alertasNuevas.value = count ?? 0
+    if (cfgs?.length) {
+      // Agregar todos los filtros de todas las alertas activas
+      const tipos    = [...new Set(cfgs.flatMap((c: any) => c.tipos     ?? []))]
+      const fuentes  = [...new Set(cfgs.flatMap((c: any) => c.fuentes   ?? []))]
+      const rangos   = [...new Set(cfgs.flatMap((c: any) => c.monto_rangos ?? []))]
+      const keywords = [...new Set(cfgs.flatMap((c: any) => c.palabras_clave ?? []))]
+
+      let q = supabase.from('convocatorias').select('id', { count: 'exact', head: true })
+        .eq('estado', 'abierto').gt('fecha_scrapeado', lastAlertas)
+      if (tipos.length)   q = q.in('tipo', tipos)
+      if (fuentes.length) q = q.in('fuente', fuentes)
+      if (rangos.length)  q = q.in('monto_rango', rangos)
+      if (keywords.length) {
+        const terms = keywords.flatMap((k: string) => [`titulo.ilike.%${k}%`, `descripcion_breve.ilike.%${k}%`]).join(',')
+        q = q.or(terms)
       }
+      const { count } = await q
+      alertasNuevas.value = count ?? 0
     }
   }
 })

@@ -44,4 +44,42 @@ export default defineNuxtConfig({
   experimental: {
     appManifest: false,
   },
+
+  // ── Cabeceras de seguridad ────────────────────────────────────────
+  routeRules: {
+    '/**': {
+      headers: {
+        // Evita que la app se incruste en iframes (clickjacking)
+        'X-Frame-Options': 'DENY',
+
+        // Evita que el browser "adivine" el tipo MIME de los archivos
+        'X-Content-Type-Options': 'nosniff',
+
+        // No enviar el Referer completo a sitios externos
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+
+        // Forzar HTTPS por 1 año
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+
+        // Deshabilitar APIs del browser que no usamos
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+
+        // Content Security Policy
+        // script-src necesita 'unsafe-inline' por los scripts de Analytics/Clarity en app.vue
+        // connect-src es la línea de defensa clave: limita adónde puede enviar datos el JS
+        'Content-Security-Policy': [
+          "default-src 'self'",
+          "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.clarity.ms",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' https://fonts.gstatic.com data:",
+          "img-src 'self' data: blob: https:",
+          "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.resend.com https://www.google-analytics.com https://region1.google-analytics.com https://c.clarity.ms https://www.clarity.ms https://www.googletagmanager.com",
+          "frame-ancestors 'none'",
+          "form-action 'self'",
+          "base-uri 'self'",
+          "upgrade-insecure-requests",
+        ].join('; '),
+      },
+    },
+  },
 })
