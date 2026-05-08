@@ -43,9 +43,12 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      // true cuando MP_ACCESS_TOKEN está seteada en el deploy. Permite al frontend
-      // mostrar el botón "Contratar" (checkout MP) en lugar del fallback por email.
-      mpEnabled: !!process.env.MP_ACCESS_TOKEN,
+      // Siempre true: los botones de checkout MP se muestran siempre.
+      // La validación real de que MP_ACCESS_TOKEN esté configurado ocurre
+      // server-side en /api/mercadopago/create-preapproval (devuelve 503 si falta).
+      // process.env.MP_ACCESS_TOKEN se evalúa en build time en Cloudflare Pages,
+      // donde los secrets NO están disponibles, por lo que siempre daba false.
+      mpEnabled: true,
     },
   },
 
