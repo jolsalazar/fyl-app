@@ -24,6 +24,12 @@
 
       <!-- Con suscripción -->
       <template v-else>
+        <!-- Warning: múltiples suscripciones activas (no debería pasar con
+             el unique partial index, pero defensa en profundidad) -->
+        <div v-if="multipleActivas" class="aviso aviso-warning">
+          <strong>Detectamos múltiples suscripciones activas en tu cuenta.</strong>
+          <p>Por favor escríbenos a <a href="mailto:hola@fondosylicitaciones.cl">hola@fondosylicitaciones.cl</a> para que lo revisemos.</p>
+        </div>
         <!-- Estado activo -->
         <section v-if="sub.status === 'authorized'" class="card">
           <div class="card-header">
@@ -45,7 +51,7 @@
           </div>
 
           <div v-if="proximoCobro" class="row">
-            <span class="row-label">Próximo cobro estimado</span>
+            <span class="row-label">{{ proximoCobroEsEstimado ? 'Próximo cobro estimado' : 'Próximo cobro' }}</span>
             <span class="row-value">{{ fechaFmt(proximoCobro) }}</span>
           </div>
 
@@ -138,6 +144,8 @@ type Subscription = {
 }
 
 const sub                  = ref<Subscription | null>(null)
+const nextPaymentDate      = ref<string | null>(null)
+const multipleActivas      = ref(false)
 const cargando             = ref(true)
 const confirmandoCancelar  = ref(false)
 const cancelando           = ref(false)
@@ -146,15 +154,21 @@ const planNombre = computed(() => sub.value && esPlanValido(sub.value.plan)
   ? PLANES_CONFIG[sub.value.plan].nombre
   : '')
 
-// Próximo cobro = (último cobro o inicio) + 1 mes (estimación)
+// Próximo cobro: preferir next_payment_date real de MP (cuando el endpoint lo
+// pudo obtener); si no, estimar (último cobro o inicio) + 1 mes.
 const proximoCobro = computed(() => {
   if (!sub.value || sub.value.status !== 'authorized') return null
+  if (nextPaymentDate.value) return nextPaymentDate.value
   const base = sub.value.last_payment_at ?? sub.value.started_at
   if (!base) return null
   const d = new Date(base)
   d.setMonth(d.getMonth() + 1)
   return d.toISOString()
 })
+
+const proximoCobroEsEstimado = computed(() =>
+  Boolean(sub.value && sub.value.status === 'authorized' && !nextPaymentDate.value),
+)
 
 // Aviso de promo solo si está activa, sin promo aplicada todavía, y la fecha de
 // cambio está a 14 días o menos
@@ -176,8 +190,15 @@ function fechaFmt(iso: string): string {
 async function cargar() {
   cargando.value = true
   try {
-    const res = await $fetch<{ ok: boolean; suscripcion: Subscription | null }>('/api/suscripcion/estado')
-    sub.value = res.suscripcion
+    const res = await $fetch<{
+      ok: boolean
+      suscripcion: Subscription | null
+      multiple_activas: boolean
+      next_payment_date: string | null
+    }>('/api/suscripcion/estado')
+    sub.value             = res.suscripcion
+    nextPaymentDate.value = res.next_payment_date
+    multipleActivas.value = res.multiple_activas
   } catch {
     toast('No pudimos cargar tu suscripción.', 'error')
   } finally {
@@ -267,6 +288,8 @@ h1 { font-size: 1.625rem; font-weight: 800; color: #0f172a; letter-spacing: -0.0
 .aviso strong { display: block; margin-bottom: 0.25rem; }
 .aviso p { margin: 0; font-size: 0.8125rem; }
 .aviso-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+.aviso-warning { background: #fef3c7; border: 1px solid #fde68a; color: #92400e; }
+.aviso-warning a { color: #92400e; text-decoration: underline; }
 
 .aviso-card { background: #fffbeb; border-color: #fde68a; }
 .aviso-card p { font-size: 0.875rem; color: #92400e; }

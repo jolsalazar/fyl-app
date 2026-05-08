@@ -23,6 +23,7 @@ import {
   obtenerPagoMercadoPago,
   obtenerPreapprovalMercadoPago,
   obtenerSuscripcion,
+  registrarEventoProcesado,
   verificarFirmaMercadoPago,
   type Plan,
 } from '~~/server/utils/mercadopago'
@@ -70,6 +71,20 @@ export default defineEventHandler(async (event) => {
   if (!firmaOk) {
     setResponseStatus(event, 401)
     return { ok: false, error: 'invalid_signature' }
+  }
+
+  // Idempotencia: si MP reenvía el mismo evento (retry, timeout), ignorarlo.
+  // Sin esto, failed_payments podría incrementarse múltiples veces para el
+  // mismo cobro rechazado y gatillar un downgrade prematuro.
+  const eventoNuevo = await registrarEventoProcesado({
+    supabaseUrl:    SUPABASE_URL,
+    serviceRoleKey: SUPABASE_SERVICE_KEY,
+    provider:       'mercadopago',
+    eventType:      type,
+    eventId:        dataId,
+  })
+  if (!eventoNuevo) {
+    return { ok: true, ignored: true, reason: 'duplicate_event' }
   }
 
   // ── PREAPPROVAL: cambio de estado de la suscripción ───────────────────────

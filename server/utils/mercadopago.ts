@@ -159,6 +159,46 @@ export async function actualizarSuscripcion(opts: {
   return res.ok
 }
 
+/**
+ * Marca un evento de webhook como procesado. Devuelve true si era nuevo,
+ * false si ya estaba registrado (duplicado — el caller debe ignorar el evento).
+ *
+ * Idempotencia: usa INSERT ... ON CONFLICT DO NOTHING. Si el array devuelto
+ * por PostgREST está vacío, el evento ya existía.
+ */
+export async function registrarEventoProcesado(opts: {
+  supabaseUrl:    string
+  serviceRoleKey: string
+  provider:       string
+  eventType:      string
+  eventId:        string
+}): Promise<boolean> {
+  const res = await fetch(`${opts.supabaseUrl}/rest/v1/webhook_events_processed`, {
+    method:  'POST',
+    headers: {
+      apikey:         opts.serviceRoleKey,
+      Authorization:  `Bearer ${opts.serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      Prefer:         'resolution=ignore-duplicates,return=representation',
+    },
+    body: JSON.stringify({
+      provider:   opts.provider,
+      event_type: opts.eventType,
+      event_id:   opts.eventId,
+    }),
+  })
+
+  if (!res.ok) {
+    // Si la tabla no existe (migración no aplicada) o falla por otro motivo,
+    // procesamos el evento de todos modos (fail-open). El caller decide.
+    console.error('[webhook] registrarEventoProcesado fallo:', res.status, await res.text())
+    return true
+  }
+
+  const rows = await res.json() as unknown[]
+  return rows.length > 0  // true = nuevo, false = duplicado
+}
+
 /** Lee una subscription por preapproval_id (devuelve null si no existe). */
 export async function obtenerSuscripcion(opts: {
   supabaseUrl:    string
