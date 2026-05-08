@@ -414,15 +414,22 @@ onBeforeUnmount(() => {
 onMounted(async () => {
   lastVisitRef.value = localStorage.getItem('fyl_last_visit') ?? ''
 
-  // Mensaje de retorno desde MercadoPago (back_urls de la preferencia)
+  // Mensaje de retorno desde MercadoPago
   const pago = route.query.pago
+  const sub  = route.query.sub
   if (pago === 'ok') {
+    // Legacy: pago único (create-preference)
     toast('¡Pago confirmado! Tu plan se activa apenas MercadoPago notifique (puede tardar unos segundos).', 'ok', 6000)
     try { localStorage.removeItem('plan_intencion') } catch {}
     router.replace({ query: { ...route.query, pago: undefined } })
   } else if (pago === 'pendiente') {
     toast('Tu pago quedó pendiente. Te avisaremos por email cuando se confirme.', 'info', 6000)
     router.replace({ query: { ...route.query, pago: undefined } })
+  } else if (sub === 'pending') {
+    // Suscripción recurrente: el usuario autorizó pero el webhook aún no llega.
+    toast('¡Suscripción autorizada! Activando tu plan… puede tardar unos segundos.', 'ok', 7000)
+    try { localStorage.removeItem('plan_intencion') } catch {}
+    router.replace({ query: { ...route.query, sub: undefined } })
   }
 
   const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()

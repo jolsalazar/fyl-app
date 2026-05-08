@@ -90,3 +90,89 @@ export async function asignarPlanUsuario(opts: {
   })
   return res.ok
 }
+
+/** Obtiene el detalle de una preapproval (suscripción) desde MP. */
+export async function obtenerPreapprovalMercadoPago(preapprovalId: string, accessToken: string) {
+  const res = await fetch(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) return null
+  return res.json() as Promise<{
+    id:                 string
+    status:             string  // 'pending' | 'authorized' | 'paused' | 'cancelled'
+    payer_email:        string
+    external_reference: string  // formato: "user_id:plan"
+    auto_recurring: {
+      transaction_amount: number
+      currency_id:        string
+      frequency:          number
+      frequency_type:     string
+    }
+    next_payment_date?: string
+  }>
+}
+
+/** Obtiene el detalle de un authorized_payment (cobro mensual de una suscripción). */
+export async function obtenerAuthorizedPaymentMercadoPago(paymentId: string, accessToken: string) {
+  const res = await fetch(`https://api.mercadopago.com/authorized_payments/${paymentId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!res.ok) return null
+  return res.json() as Promise<{
+    id:              number
+    preapproval_id:  string
+    status:          string  // 'approved' | 'rejected' | 'pending' | ...
+    transaction_amount: number
+    payment?:        { id?: number; status?: string }
+  }>
+}
+
+/** Actualiza una subscription en BD vía REST con service_role (bypass RLS). */
+export async function actualizarSuscripcion(opts: {
+  supabaseUrl:    string
+  serviceRoleKey: string
+  preapprovalId:  string
+  patch:          Record<string, unknown>
+}): Promise<boolean> {
+  const url = `${opts.supabaseUrl}/rest/v1/subscriptions?mp_preapproval_id=eq.${encodeURIComponent(opts.preapprovalId)}`
+  const res = await fetch(url, {
+    method:  'PATCH',
+    headers: {
+      apikey:         opts.serviceRoleKey,
+      Authorization:  `Bearer ${opts.serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      Prefer:         'return=minimal',
+    },
+    body: JSON.stringify(opts.patch),
+  })
+  return res.ok
+}
+
+/** Lee una subscription por preapproval_id (devuelve null si no existe). */
+export async function obtenerSuscripcion(opts: {
+  supabaseUrl:    string
+  serviceRoleKey: string
+  preapprovalId:  string
+}) {
+  const url = `${opts.supabaseUrl}/rest/v1/subscriptions?mp_preapproval_id=eq.${encodeURIComponent(opts.preapprovalId)}&select=*`
+  const res = await fetch(url, {
+    headers: {
+      apikey:         opts.serviceRoleKey,
+      Authorization:  `Bearer ${opts.serviceRoleKey}`,
+    },
+  })
+  if (!res.ok) return null
+  const rows = await res.json() as Array<{
+    id:                string
+    user_id:           string
+    plan:              Plan
+    mp_preapproval_id: string
+    status:            string
+    current_amount:    number
+    regular_amount:    number
+    promo_applied:     boolean
+    promo_ends_at:     string | null
+    failed_payments:   number
+  }>
+  return rows[0] ?? null
+}
