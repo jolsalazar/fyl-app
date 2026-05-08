@@ -31,6 +31,30 @@ export default defineEventHandler(async (event) => {
   }
 
   const supabase = await serverSupabaseClient(event)
+  const { data: profile, error: selectError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (selectError) {
+    setResponseStatus(event, 500)
+    return { ok: false, error: 'profile_lookup_failed' }
+  }
+
+  if (!profile) {
+    const { error: insertError } = await supabase
+      .from('profiles')
+      .insert({ id: user.id, intended_plan: plan })
+
+    if (insertError) {
+      setResponseStatus(event, 500)
+      return { ok: false, error: 'profile_create_failed' }
+    }
+
+    return { ok: true }
+  }
+
   const { error } = await supabase
     .from('profiles')
     .update({ intended_plan: plan })

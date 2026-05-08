@@ -42,6 +42,38 @@ export default defineEventHandler(async (event) => {
   const precioRegular = getPrecioRegular(plan as Plan)
   const hayPromo      = tienePromo(plan as Plan)
 
+  const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=id`
+  const profileRes = await fetch(profileUrl, {
+    headers: {
+      apikey:        SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    },
+  })
+  if (!profileRes.ok) {
+    setResponseStatus(event, 500)
+    return { ok: false, error: 'profile_lookup_failed' }
+  }
+
+  const profiles = await profileRes.json() as Array<{ id: string }>
+  if (profiles.length === 0) {
+    const createProfileRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles`, {
+      method:  'POST',
+      headers: {
+        apikey:         SUPABASE_SERVICE_KEY,
+        Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer:         'return=minimal',
+      },
+      body: JSON.stringify({ id: user.id, intended_plan: plan }),
+    })
+
+    if (!createProfileRes.ok) {
+      console.error('[create-preapproval] profile create failed:', await createProfileRes.text())
+      setResponseStatus(event, 500)
+      return { ok: false, error: 'profile_create_failed' }
+    }
+  }
+
   // promo_ends_at = ahora + 90 días (solo planes con promo)
   const promoEndsAt = hayPromo
     ? new Date(Date.now() + DURACION_PROMO_DIAS * 24 * 60 * 60 * 1000).toISOString()
@@ -154,10 +186,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const preapproval = {
-    reason:             `Plan ${PLANES_CONFIG[plan as Plan].nombre} — Fondos y Licitaciones`,
+    reason:             `Plan ${PLANES_CONFIG[plan as Plan].nombre} - Fondos y Licitaciones`,
     external_reference: `${user.id}:${plan}`,
     payer_email:        user.email,
-    back_url:           `${APP_URL}/dashboard?sub=pending`,
+    back_url:           `${APP_URL}/dashboard`,
     auto_recurring: {
       frequency:          1,
       frequency_type:     'months',

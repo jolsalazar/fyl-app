@@ -510,6 +510,18 @@ onMounted(async () => {
   // Cargar intención de plan: primero desde Supabase (profiles.intended_plan),
   // si no existe, fallback a localStorage (caso: endpoint falló al registrarse)
   if (user) {
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (!existingProfile) {
+      await supabase
+        .from('profiles')
+        .insert({ id: user.id, onboarding_done: false })
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('intended_plan')

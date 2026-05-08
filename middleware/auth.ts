@@ -12,9 +12,16 @@ export default defineNuxtRouteMiddleware(async (to) => {
       .from('profiles')
       .select('onboarding_done')
       .eq('id', session.user.id)
-      .single()
+      .maybeSingle()
 
-    if (profile && !profile.onboarding_done) {
+    if (!profile) {
+      await supabase
+        .from('profiles')
+        .insert({ id: session.user.id, onboarding_done: false })
+      return navigateTo('/onboarding')
+    }
+
+    if (!profile.onboarding_done) {
       return navigateTo('/onboarding')
     }
   }

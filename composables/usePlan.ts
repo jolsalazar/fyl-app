@@ -40,7 +40,7 @@ export function usePlan() {
       .from('profiles')
       .select('plan')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     // Normalizar nombres viejos por si la migración no corrió en producción
     const LEGACY: Record<string, Plan> = { pro: 'advanced', agencia: 'agency' }
