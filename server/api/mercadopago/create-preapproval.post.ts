@@ -14,9 +14,11 @@
 import { PLANES_CONFIG, esPlanValido, getPrecioInicial, getPrecioRegular, tienePromo, DURACION_PROMO_DIAS, type Plan } from '~~/utils/planes'
 import { serverSupabaseUser } from '#supabase/server'
 
+const SUBSCRIPTION_YEARS = 10
+
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
-  const APP_URL              = process.env.APP_URL
+  const APP_URL              = process.env.APP_URL?.replace(/\/+$/, '')
   const SUPABASE_URL         = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
 
@@ -41,6 +43,8 @@ export default defineEventHandler(async (event) => {
   const precioInicial = getPrecioInicial(plan as Plan)
   const precioRegular = getPrecioRegular(plan as Plan)
   const hayPromo      = tienePromo(plan as Plan)
+  const subscriptionEndDate = new Date()
+  subscriptionEndDate.setFullYear(subscriptionEndDate.getFullYear() + SUBSCRIPTION_YEARS)
 
   const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=id`
   const profileRes = await fetch(profileUrl, {
@@ -193,6 +197,7 @@ export default defineEventHandler(async (event) => {
     auto_recurring: {
       frequency:          1,
       frequency_type:     'months',
+      end_date:           subscriptionEndDate.toISOString(),
       transaction_amount: precioInicial,
       currency_id:        'CLP',
     },
@@ -210,10 +215,23 @@ export default defineEventHandler(async (event) => {
 
   if (!mpRes.ok) {
     const mpError = await mpRes.text().catch(() => '(no body)')
-    console.error('[create-preapproval] MP rechazó preapproval:', mpRes.status, mpError)
+    const mpRequestId = mpRes.headers.get('x-request-id') ?? mpRes.headers.get('x-correlation-id')
+    console.error('[create-preapproval] MP rechazó preapproval:', {
+      status: mpRes.status,
+      mpRequestId,
+      detail: mpError,
+      payload: {
+        reason: preapproval.reason,
+        external_reference: preapproval.external_reference,
+        payer_email_domain: user.email.split('@')[1] ?? null,
+        back_url: preapproval.back_url,
+        auto_recurring: preapproval.auto_recurring,
+        status: preapproval.status,
+      },
+    })
     await rollbackCanceladas()
     setResponseStatus(event, 422)
-    return { ok: false, error: 'preapproval_creation_failed', mp_status: mpRes.status, mp_detail: mpError }
+    return { ok: false, error: 'preapproval_creation_failed', mp_status: mpRes.status, mp_request_id: mpRequestId, mp_detail: mpError }
   }
 
   const mpData = await mpRes.json() as {
