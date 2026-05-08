@@ -31,10 +31,12 @@ seteado, los botones de "Contratar" aparecen activos.
 
 Aplicar en orden vía `supabase db push` o ejecutando los SQL en orden:
 
-1. `20260508000001_intended_plan.sql` — columna `intended_plan` en profiles
-2. `20260508000002_subscriptions.sql`  — tabla `subscriptions` + RPC cancelar
-3. `20260508000003_aviso_promo.sql`    — columna `aviso_promo_enviado_at`
-4. `20260508000004_pg_cron_setup.sql`  — instrucciones (NO ejecuta nada por defecto)
+1. `20260508000001_intended_plan.sql`         — columna `intended_plan` en profiles
+2. `20260508000002_subscriptions.sql`         — tabla `subscriptions` + RPC cancelar
+3. `20260508000003_aviso_promo.sql`           — columna `aviso_promo_enviado_at`
+4. `20260508000004_pg_cron_setup.sql`         — instrucciones (NO ejecuta nada por defecto)
+5. `20260508000005_subscriptions_uniq_active.sql` — unique partial index + columna `cancel_reason`. Incluye cleanup defensivo si hubiera duplicados pre-existentes
+6. `20260508000006_webhook_events.sql`        — tabla `webhook_events_processed` para idempotencia
 
 ## 3. Webhook de MercadoPago
 

@@ -12,8 +12,10 @@ export function esPlanValido(p: string): p is Plan {
 }
 
 // Tolerancia de timestamp para anti-replay. MP firma con `ts` y rechazamos
-// firmas más viejas (o más nuevas — clock skew) que esto.
-const FIRMA_TOLERANCIA_SEGUNDOS = 300 // 5 minutos
+// firmas más viejas (o más nuevas — clock skew) que esto. Si MP firma una
+// vez y reintenta múltiples veces con el MISMO header firmado, una ventana
+// muy chica corta los retries legítimos. 15 min es un compromiso razonable.
+const FIRMA_TOLERANCIA_SEGUNDOS = 900 // 15 minutos
 
 /**
  * Verifica la firma `x-signature` que MercadoPago envía con cada webhook.
@@ -120,6 +122,7 @@ export async function obtenerPreapprovalMercadoPago(preapprovalId: string, acces
       frequency_type:     string
     }
     next_payment_date?: string
+    date_created?:      string
   }>
 }
 
@@ -157,6 +160,32 @@ export async function actualizarSuscripcion(opts: {
     body: JSON.stringify(opts.patch),
   })
   return res.ok
+}
+
+/**
+ * Elimina el registro de evento procesado — rollback cuando el handler falla.
+ * Sin esto, MP reintentaría con el mismo event_id y nosotros ignoraríamos
+ * como duplicado, perdiendo activaciones/cancelaciones.
+ */
+export async function eliminarEventoProcesado(opts: {
+  supabaseUrl:    string
+  serviceRoleKey: string
+  provider:       string
+  eventType:      string
+  eventId:        string
+}): Promise<void> {
+  const url = `${opts.supabaseUrl}/rest/v1/webhook_events_processed` +
+    `?provider=eq.${encodeURIComponent(opts.provider)}` +
+    `&event_type=eq.${encodeURIComponent(opts.eventType)}` +
+    `&event_id=eq.${encodeURIComponent(opts.eventId)}`
+  await fetch(url, {
+    method:  'DELETE',
+    headers: {
+      apikey:        opts.serviceRoleKey,
+      Authorization: `Bearer ${opts.serviceRoleKey}`,
+      Prefer:        'return=minimal',
+    },
+  }).catch(err => console.error('[webhook] eliminarEventoProcesado fallo:', err))
 }
 
 /**

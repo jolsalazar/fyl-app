@@ -98,6 +98,8 @@ export default defineEventHandler(async (event) => {
     // 2. Actualizar registro local. El WHERE garantiza idempotencia y
     //    seguridad: solo actualiza si la suscripción sigue authorized
     //    (el usuario podría haber cancelado entre el SELECT y este UPDATE).
+    //    Usamos return=representation para detectar 0 filas afectadas — sin
+    //    eso podríamos enviar email "promo cambiada" sin haber actualizado.
     const updateRes = await fetch(
       `${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${sub.id}&promo_applied=eq.false&status=eq.authorized`,
       {
@@ -106,7 +108,7 @@ export default defineEventHandler(async (event) => {
           apikey:         SUPABASE_SERVICE_KEY,
           Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
           'Content-Type': 'application/json',
-          Prefer:         'return=minimal',
+          Prefer:         'return=representation',
         },
         body: JSON.stringify({
           current_amount: sub.regular_amount,
@@ -118,6 +120,13 @@ export default defineEventHandler(async (event) => {
     if (!updateRes.ok) {
       console.error(`[cron-promo] UPDATE local falló para ${sub.id}:`, await updateRes.text())
       resultados.push({ id: sub.id, ok: false, error: 'local_update_failed' })
+      continue
+    }
+
+    const filasActualizadas = await updateRes.json() as unknown[]
+    if (filasActualizadas.length === 0) {
+      // La sub fue cancelada/promo aplicada entre SELECT y UPDATE — skip email.
+      resultados.push({ id: sub.id, ok: false, error: 'no_rows_updated' })
       continue
     }
 

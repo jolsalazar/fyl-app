@@ -18,6 +18,7 @@
 import {
   actualizarSuscripcion,
   asignarPlanUsuario,
+  eliminarEventoProcesado,
   esPlanValido,
   obtenerAuthorizedPaymentMercadoPago,
   obtenerPagoMercadoPago,
@@ -42,7 +43,12 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'mercadopago_not_configured' }
   }
 
-  const body = await readBody<{ type?: string; action?: string; data?: { id?: string | number } }>(event) ?? {}
+  const body = await readBody<{
+    id?:      string | number   // ID único del evento (top-level)
+    type?:    string
+    action?:  string
+    data?:    { id?: string | number }
+  }>(event) ?? {}
 
   // MercadoPago firma `data.id` desde QUERY PARAMS, no desde body. Body puede
   // no traerlo o tener otro valor en algunos eventos. Preferimos query y caemos
@@ -55,6 +61,15 @@ export default defineEventHandler(async (event) => {
     ? String(dataIdQueryS)
     : (dataIdBody != null ? String(dataIdBody) : null)
   const type         = body.type ?? (typeof query.type === 'string' ? query.type : '')
+
+  // event_id para idempotencia: usar body.id (único por evento). data.id es
+  // el id del recurso (preapproval, payment) y se REPITE entre eventos
+  // distintos del mismo recurso (pending → authorized usan el mismo data.id).
+  // Fallback compuesto si body.id no viene: type:dataId:action.
+  const eventIdRaw = body?.id
+  const eventId    = eventIdRaw != null
+    ? String(eventIdRaw)
+    : `${type}:${dataId ?? 'no-data'}:${body?.action ?? 'no-action'}`
 
   if (!dataId) {
     return { ok: true, ignored: true, reason: 'no_data_id' }
@@ -81,11 +96,18 @@ export default defineEventHandler(async (event) => {
     serviceRoleKey: SUPABASE_SERVICE_KEY,
     provider:       'mercadopago',
     eventType:      type,
-    eventId:        dataId,
+    eventId,
   })
   if (!eventoNuevo) {
     return { ok: true, ignored: true, reason: 'duplicate_event' }
   }
+
+  // Rollback si el handler falla: si NO marcamos `procesoExitoso = true`
+  // antes de retornar, el `finally` elimina el registro y MP reintenta
+  // hasta que procese OK. Cada return EXITOSO del handler debe setear
+  // `procesoExitoso = true`. Returns de error dejan el flag en false.
+  let procesoExitoso = false
+  try {
 
   // ── PREAPPROVAL: cambio de estado de la suscripción ───────────────────────
   if (type === 'preapproval') {
@@ -103,7 +125,7 @@ export default defineEventHandler(async (event) => {
 
     // Estado pending: no hacer nada — esperar a que el usuario autorice.
     if (sub.status === 'pending') {
-      return { ok: true, status: 'pending', processed: false }
+      procesoExitoso = true; return { ok: true, status: 'pending', processed: false }
     }
 
     // authorized: activar el plan y marcar la suscripción como activa.
@@ -159,12 +181,16 @@ export default defineEventHandler(async (event) => {
           }).catch(() => { /* best-effort */ })
         }
 
-        // INSERT del registro local con datos derivados de MP + planes.ts
+        // INSERT del registro local con datos derivados de MP + planes.ts.
+        // Para promo_ends_at usamos date_created de MP si está disponible
+        // (no `now()` — el webhook puede llegar retrasado y eso extendería
+        // la promo más allá del plazo real).
         const planTipado    = plan as Plan
         const currentAmount = sub.auto_recurring?.transaction_amount ?? getPrecioRegular(planTipado)
         const regularAmount = getPrecioRegular(planTipado)
+        const fechaInicio   = sub.date_created ? new Date(sub.date_created) : new Date()
         const promoEndsAt   = tienePromo(planTipado)
-          ? new Date(Date.now() + DURACION_PROMO_DIAS * 24 * 60 * 60 * 1000).toISOString()
+          ? new Date(fechaInicio.getTime() + DURACION_PROMO_DIAS * 24 * 60 * 60 * 1000).toISOString()
           : null
 
         const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
@@ -222,7 +248,7 @@ export default defineEventHandler(async (event) => {
         return { ok: false, error: 'plan_assign_failed' }
       }
 
-      return { ok: true, processed: true, action: 'authorized', reconciled: !local }
+      procesoExitoso = true; return { ok: true, processed: true, action: 'authorized', reconciled: !local }
     }
 
     // paused/cancelled: actualizar estado. El downgrade a free se hace
@@ -257,7 +283,7 @@ export default defineEventHandler(async (event) => {
           plan: 'free' as Plan,
         })
       }
-      return { ok: true, processed: true, action: 'cancelled', upgrade: esUpgrade }
+      procesoExitoso = true; return { ok: true, processed: true, action: 'cancelled', upgrade: esUpgrade }
     }
 
     if (sub.status === 'paused') {
@@ -267,10 +293,10 @@ export default defineEventHandler(async (event) => {
         preapprovalId:  sub.id,
         patch: { status: 'paused' },
       })
-      return { ok: true, processed: true, action: 'paused' }
+      procesoExitoso = true; return { ok: true, processed: true, action: 'paused' }
     }
 
-    return { ok: true, status: sub.status, processed: false, reason: 'unknown_status' }
+    procesoExitoso = true; return { ok: true, status: sub.status, processed: false, reason: 'unknown_status' }
   }
 
   // ── AUTHORIZED_PAYMENT: cobro mensual de una suscripción ──────────────────
@@ -288,20 +314,42 @@ export default defineEventHandler(async (event) => {
     })
     if (!sub) {
       // No tenemos registro local: aceptamos el evento pero no procesamos.
-      return { ok: true, ignored: true, reason: 'no_local_subscription' }
+      procesoExitoso = true; return { ok: true, ignored: true, reason: 'no_local_subscription' }
     }
 
     if (pay.status === 'approved') {
+      // Reactivación: si la sub local NO está authorized (la marcamos cancelled
+      // por 3 fallos pero el PUT MP cancelar falló y ahora MP cobra OK), hay que
+      // reactivar el plan. Sino el usuario paga y se queda en Free.
+      const necesitaReactivar = sub.status !== 'authorized'
+
+      const patch: Record<string, unknown> = {
+        last_payment_at: new Date().toISOString(),
+        failed_payments: 0,
+      }
+      if (necesitaReactivar) {
+        patch.status        = 'authorized'
+        patch.cancelled_at  = null
+        patch.cancel_reason = null
+      }
+
       await actualizarSuscripcion({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
         preapprovalId:  pay.preapproval_id,
-        patch: {
-          last_payment_at: new Date().toISOString(),
-          failed_payments: 0,
-        },
+        patch,
       })
-      return { ok: true, processed: true, action: 'payment_approved' }
+
+      if (necesitaReactivar && esPlanValido(sub.plan)) {
+        await asignarPlanUsuario({
+          supabaseUrl:    SUPABASE_URL,
+          serviceRoleKey: SUPABASE_SERVICE_KEY,
+          userId:         sub.user_id,
+          plan:           sub.plan as Plan,
+        })
+      }
+
+      procesoExitoso = true; return { ok: true, processed: true, action: 'payment_approved', reactivated: necesitaReactivar }
     }
 
     if (pay.status === 'rejected') {
@@ -347,10 +395,10 @@ export default defineEventHandler(async (event) => {
         })
       }
 
-      return { ok: true, processed: true, action: 'payment_rejected', failed: fallidos, downgraded: llegoAlLimite }
+      procesoExitoso = true; return { ok: true, processed: true, action: 'payment_rejected', failed: fallidos, downgraded: llegoAlLimite }
     }
 
-    return { ok: true, status: pay.status, processed: false }
+    procesoExitoso = true; return { ok: true, status: pay.status, processed: false }
   }
 
   // ── PAYMENT: pago único (legacy create-preference, se mantiene por compat) ──
@@ -362,7 +410,7 @@ export default defineEventHandler(async (event) => {
     }
 
     if (pago.status !== 'approved') {
-      return { ok: true, status: pago.status, processed: false }
+      procesoExitoso = true; return { ok: true, status: pago.status, processed: false }
     }
 
     const [userId, plan] = (pago.external_reference ?? '').split(':')
@@ -382,9 +430,24 @@ export default defineEventHandler(async (event) => {
       return { ok: false, error: 'rpc_failed' }
     }
 
-    return { ok: true, processed: true, type: 'payment', userId, plan }
+    procesoExitoso = true; return { ok: true, processed: true, type: 'payment', userId, plan }
   }
 
   // Ignorar cualquier otro tipo (merchant_order, plans, etc.)
+  procesoExitoso = true
   return { ok: true, ignored: true, type }
+
+  } finally {
+    // Rollback: si el handler falló (no marcó procesoExitoso) eliminamos el
+    // registro de evento procesado para que MP pueda reintentar.
+    if (!procesoExitoso) {
+      await eliminarEventoProcesado({
+        supabaseUrl:    SUPABASE_URL,
+        serviceRoleKey: SUPABASE_SERVICE_KEY,
+        provider:       'mercadopago',
+        eventType:      type,
+        eventId,
+      })
+    }
+  }
 })

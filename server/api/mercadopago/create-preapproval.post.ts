@@ -68,7 +68,35 @@ export default defineEventHandler(async (event) => {
     : []
 
   for (const ant of activas) {
-    // 1. Marcar local cancelled con razón upgrade (libera el unique index)
+    // 1. Cancelar en MP PRIMERO. Si MP responde error explícito (4xx),
+    //    abortamos: no podemos marcar local cancelada y dejar MP cobrando.
+    //    5xx/timeout son reintentables — los logueamos pero seguimos.
+    let mpCancelOk = true
+    try {
+      const mpCancelRes = await fetch(`https://api.mercadopago.com/preapproval/${ant.mp_preapproval_id}`, {
+        method:  'PUT',
+        headers: {
+          Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'cancelled' }),
+      })
+      if (!mpCancelRes.ok && mpCancelRes.status >= 400 && mpCancelRes.status < 500) {
+        // Error explícito de MP: abortar. No marcamos local, no creamos nueva.
+        console.error('[create-preapproval] MP rechazó cancelar previa:', mpCancelRes.status, await mpCancelRes.text())
+        mpCancelOk = false
+      }
+    } catch (err) {
+      // 5xx/timeout: best-effort, seguimos
+      console.error('[create-preapproval] MP cancel timeout/5xx:', err)
+    }
+
+    if (!mpCancelOk) {
+      setResponseStatus(event, 502)
+      return { ok: false, error: 'previous_cancel_failed' }
+    }
+
+    // 2. Marcar local cancelled con razón upgrade (libera el unique index)
     await fetch(
       `${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${ant.id}`,
       {
@@ -86,17 +114,6 @@ export default defineEventHandler(async (event) => {
         }),
       },
     )
-
-    // 2. Cancelar en MP. Si falla seguimos: la sub local ya está marcada y el
-    // webhook eventualmente reconciliará si MP envía un evento más adelante.
-    await fetch(`https://api.mercadopago.com/preapproval/${ant.mp_preapproval_id}`, {
-      method:  'PUT',
-      headers: {
-        Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ status: 'cancelled' }),
-    }).catch(() => { /* best-effort */ })
   }
 
   const preapproval = {
@@ -123,6 +140,37 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!mpRes.ok) {
+    // Crear nueva falló. Las anteriores quedaron cancelled con
+    // cancel_reason='upgrade', pero como NO va a haber sub nueva, el webhook
+    // cancelled NO bajaría el plan a Free. Revertimos a cancel_reason='user'
+    // para que el downgrade ocurra normalmente.
+    for (const ant of activas) {
+      await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${ant.id}`, {
+        method:  'PATCH',
+        headers: {
+          apikey:         SUPABASE_SERVICE_KEY,
+          Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer:         'return=minimal',
+        },
+        body: JSON.stringify({ cancel_reason: 'user' }),
+      }).catch(() => { /* best-effort */ })
+    }
+
+    // Asignamos plan free directamente — la sub anterior quedó cancelled en MP
+    // y la nueva no se creó.
+    if (activas.length > 0) {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_set_user_plan`, {
+        method:  'POST',
+        headers: {
+          apikey:         SUPABASE_SERVICE_KEY,
+          Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ target_id: user.id, new_plan: 'free' }),
+      }).catch(() => { /* best-effort */ })
+    }
+
     setResponseStatus(event, 502)
     return { ok: false, error: 'preapproval_creation_failed' }
   }
