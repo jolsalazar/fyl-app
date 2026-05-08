@@ -77,7 +77,7 @@
         <label class="terms-check">
           <input type="checkbox" v-model="aceptaTerminos" :disabled="loading" />
           <span class="check-box"></span>
-          <span>Acepto los <NuxtLink to="/terminos" target="_blank">términos y condiciones</NuxtLink> y la <NuxtLink to="/privacidad" target="_blank">política de privacidad</NuxtLink></span>
+          <span>Acepto los <a href="https://fondosylicitaciones.cl/terminos" target="_blank" rel="noopener">términos y condiciones</a> y la <a href="https://fondosylicitaciones.cl/privacidad" target="_blank" rel="noopener">política de privacidad</a></span>
         </label>
 
         <div v-if="error" class="error-banner">{{ error }}</div>
