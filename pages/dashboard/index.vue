@@ -24,6 +24,15 @@
         </button>
       </div>
 
+      <!-- Banner: promo a punto de terminar -->
+      <NuxtLink v-if="avisoPromoVisible" to="/dashboard/suscripcion" class="banner-promo">
+        <span class="banner-promo-icon">⏳</span>
+        <span class="banner-promo-text">
+          Tu promo termina el <strong>{{ avisoPromoFecha }}</strong> — luego pasa a ${{ avisoPromoMonto }}/mes.
+          <span class="banner-promo-cta">Ver detalles →</span>
+        </span>
+      </NuxtLink>
+
       <!-- Filtros -->
       <div class="filtros">
         <div class="search-wrap">
@@ -225,6 +234,19 @@ const loadingMas = ref(false)
 const items = ref<any[]>([])
 const total = ref<number | null>(null)
 const offset = ref(0)
+
+// Banner aviso promo: visible si subscripción tiene promo a 14 días o menos
+const promoEndsAt = ref<string | null>(null)
+const promoRegular = ref<number>(0)
+const avisoPromoVisible = computed(() => {
+  if (!promoEndsAt.value) return false
+  const dias = (new Date(promoEndsAt.value).getTime() - Date.now()) / (24 * 60 * 60 * 1000)
+  return dias > 0 && dias <= 14
+})
+const avisoPromoFecha = computed(() => promoEndsAt.value
+  ? new Date(promoEndsAt.value).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })
+  : '')
+const avisoPromoMonto = computed(() => promoRegular.value.toLocaleString('es-CL'))
 
 const busqueda = ref((route.query.q as string) || '')
 const filtroEstado = ref((route.query.estado as string) || 'abierto')
@@ -432,6 +454,17 @@ onMounted(async () => {
     router.replace({ query: { ...route.query, sub: undefined } })
   }
 
+  // Cargar estado de suscripción para banner de aviso (no bloqueante)
+  $fetch<{ ok: boolean; suscripcion: { promo_applied: boolean; promo_ends_at: string | null; regular_amount: number; status: string } | null }>('/api/suscripcion/estado')
+    .then(res => {
+      const s = res.suscripcion
+      if (s && s.status === 'authorized' && !s.promo_applied && s.promo_ends_at) {
+        promoEndsAt.value  = s.promo_ends_at
+        promoRegular.value = s.regular_amount
+      }
+    })
+    .catch(() => { /* silencioso */ })
+
   const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
   const [, { data: guardados }, { data: guardadosCountData }, { data: popularesData }, { count: cNuevos }, { data: postulaciones }] = await Promise.all([
@@ -503,6 +536,25 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   border: 1px solid #bbf7d0;
   padding: 0.1rem 0.5rem; border-radius: 999px;
 }
+
+.banner-promo {
+  display: flex; align-items: center; gap: 0.75rem;
+  background: linear-gradient(90deg, #eff6ff 0%, #ede9fe 100%);
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+  text-decoration: none;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  transition: box-shadow 0.15s, transform 0.1s;
+}
+.banner-promo:hover { box-shadow: 0 2px 12px rgba(29,78,216,0.12); }
+.banner-promo-icon { font-size: 1.1rem; flex-shrink: 0; }
+.banner-promo-text { flex: 1; }
+.banner-promo-text strong { font-weight: 700; }
+.banner-promo-cta { font-weight: 700; color: #1d4ed8; margin-left: 0.5rem; white-space: nowrap; }
 
 .btn-config {
   display: inline-flex;
