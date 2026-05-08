@@ -11,7 +11,7 @@
 //
 // Precios: definidos acá temporalmente. Mover a tabla `planes` en DB cuando exista.
 
-import { PLANES_CONFIG, esPlanValido, type Plan } from '~~/utils/planes'
+import { PLANES_CONFIG, esPlanValido, getPrecioInicial, type Plan } from '~~/utils/planes'
 import { serverSupabaseUser } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
@@ -36,13 +36,16 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'invalid_plan' }
   }
 
+  // getPrecioInicial devuelve precio_promo si el plan tiene promo, sino precio regular.
+  // Provisorio: este endpoint cobra UN MES. Fase 2 migra a /preapproval para suscripción
+  // recurrente con cambio automático promo→regular a los 90 días.
   const preference = {
     items: [
       {
         title:       `Plan ${PLANES_CONFIG[plan].nombre}`,
         quantity:    1,
         currency_id: 'CLP',
-        unit_price:  PLANES_CONFIG[plan].precio,
+        unit_price:  getPrecioInicial(plan),
       },
     ],
     payer: {

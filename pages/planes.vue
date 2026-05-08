@@ -23,6 +23,7 @@
         <div class="plan-top">
           <div class="plan-name">Free</div>
           <div class="plan-price"><span class="price-num">$0</span><span class="price-per">/mes</span></div>
+          <p class="price-promo-note price-promo-spacer" aria-hidden="true">&nbsp;<br>&nbsp;</p>
           <p class="plan-desc">Para explorar el ecosistema de fondos y mantenerte informado.</p>
         </div>
         <ul class="features">
@@ -44,7 +45,11 @@
       <div class="plan-card" :class="{ current: plan === 'starter' }">
         <div class="plan-top">
           <div class="plan-name">Starter</div>
-          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.starter.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
+          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.starter.precio_promo.toLocaleString() }}</span><span class="price-per">/mes</span></div>
+          <p class="price-promo-note">
+            los primeros 3 meses<br>
+            <span class="price-regular">luego ${{ PLANES_CONFIG.starter.precio_regular.toLocaleString() }}/mes</span>
+          </p>
           <p class="plan-desc">Para emprendedores activos que quieren estar siempre al tanto.</p>
         </div>
         <ul class="features">
@@ -71,7 +76,11 @@
         <div class="featured-badge">Más popular</div>
         <div class="plan-top">
           <div class="plan-name">Advanced</div>
-          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.advanced.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
+          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.advanced.precio_promo.toLocaleString() }}</span><span class="price-per">/mes</span></div>
+          <p class="price-promo-note">
+            los primeros 3 meses<br>
+            <span class="price-regular">luego ${{ PLANES_CONFIG.advanced.precio_regular.toLocaleString() }}/mes</span>
+          </p>
           <p class="plan-desc">Para quienes postulan activamente y quieren postular solo donde califican.</p>
         </div>
         <ul class="features">
@@ -99,6 +108,7 @@
         <div class="plan-top">
           <div class="plan-name">Agency</div>
           <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.agency.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
+          <p class="price-promo-note price-promo-spacer" aria-hidden="true">&nbsp;<br>&nbsp;</p>
           <p class="plan-desc">Para consultoras y agencias que gestionan múltiples clientes y proyectos.</p>
         </div>
         <ul class="features">
@@ -222,6 +232,9 @@ h1 { font-size: 1.75rem; font-weight: 800; color: #0f172a; letter-spacing: -0.03
 .plan-name { font-size: 0.875rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 0.5rem; }
 .plan-price { display: flex; align-items: baseline; gap: 0.2rem; margin-bottom: 0.625rem; }
 .price-num { font-size: 2rem; font-weight: 800; color: #0f172a; letter-spacing: -0.04em; line-height: 1; }
+.price-promo-note { font-size: 0.7rem; color: #94a3b8; line-height: 1.5; margin: 0.5rem 0 0.625rem; font-weight: 500; }
+.price-promo-note .price-regular { color: #475569; font-weight: 600; }
+.price-promo-spacer { visibility: hidden; }
 .price-per { font-size: 0.875rem; color: #94a3b8; }
 .plan-desc { font-size: 0.8375rem; color: #64748b; line-height: 1.55; }
 
