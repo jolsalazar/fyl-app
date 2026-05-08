@@ -11,12 +11,17 @@ export function esPlanValido(p: string): p is Plan {
   return (PLANES_VALIDOS as readonly string[]).includes(p)
 }
 
+// Tolerancia de timestamp para anti-replay. MP firma con `ts` y rechazamos
+// firmas más viejas (o más nuevas — clock skew) que esto.
+const FIRMA_TOLERANCIA_SEGUNDOS = 300 // 5 minutos
+
 /**
  * Verifica la firma `x-signature` que MercadoPago envía con cada webhook.
  *
  * El header viene como: `ts=<timestamp>,v1=<hash hex>`
  * El template firmado es:   `id:<dataId>;request-id:<xRequestId>;ts:<ts>;`
- * y el HMAC-SHA256 usa el webhook secret configurado en el panel de MP.
+ * Donde dataId proviene de los QUERY PARAMS (?data.id=...), NO del body JSON.
+ * El HMAC-SHA256 usa el webhook secret configurado en el panel de MP.
  */
 export async function verificarFirmaMercadoPago(opts: {
   signatureHeader: string | undefined | null
@@ -35,6 +40,12 @@ export async function verificarFirmaMercadoPago(opts: {
   ) as { ts?: string; v1?: string }
 
   if (!partes.ts || !partes.v1) return false
+
+  // Anti-replay: rechazar firmas fuera de la ventana de tolerancia.
+  const tsNum = parseInt(partes.ts, 10)
+  if (isNaN(tsNum)) return false
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (Math.abs(nowSec - tsNum) > FIRMA_TOLERANCIA_SEGUNDOS) return false
 
   const template = `id:${dataId};request-id:${requestId};ts:${partes.ts};`
 
@@ -173,6 +184,7 @@ export async function obtenerSuscripcion(opts: {
     promo_applied:     boolean
     promo_ends_at:     string | null
     failed_payments:   number
+    cancel_reason:     'user' | 'upgrade' | 'failed_payments' | null
   }>
   return rows[0] ?? null
 }

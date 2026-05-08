@@ -95,10 +95,11 @@ export default defineEventHandler(async (event) => {
       continue
     }
 
-    // 2. Actualizar registro local (idempotente: el WHERE asegura que no
-    //    procesamos dos veces la misma suscripción).
+    // 2. Actualizar registro local. El WHERE garantiza idempotencia y
+    //    seguridad: solo actualiza si la suscripción sigue authorized
+    //    (el usuario podría haber cancelado entre el SELECT y este UPDATE).
     const updateRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${sub.id}&promo_applied=eq.false`,
+      `${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${sub.id}&promo_applied=eq.false&status=eq.authorized`,
       {
         method:  'PATCH',
         headers: {

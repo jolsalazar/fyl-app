@@ -26,6 +26,7 @@ import {
   verificarFirmaMercadoPago,
   type Plan,
 } from '~~/server/utils/mercadopago'
+import { DURACION_PROMO_DIAS, getPrecioRegular, tienePromo } from '~~/utils/planes'
 
 const MAX_FAILED_PAYMENTS = 3 // tras 3 cobros consecutivos rechazados → downgrade a free
 
@@ -41,8 +42,18 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody<{ type?: string; action?: string; data?: { id?: string | number } }>(event) ?? {}
-  const dataId = body?.data?.id != null ? String(body.data.id) : null
-  const type   = body.type ?? ''
+
+  // MercadoPago firma `data.id` desde QUERY PARAMS, no desde body. Body puede
+  // no traerlo o tener otro valor en algunos eventos. Preferimos query y caemos
+  // al body solo como fallback defensivo (legacy).
+  const query        = getQuery(event)
+  const dataIdQuery  = query['data.id']
+  const dataIdQueryS = Array.isArray(dataIdQuery) ? dataIdQuery[0] : dataIdQuery
+  const dataIdBody   = body?.data?.id
+  const dataId       = dataIdQueryS
+    ? String(dataIdQueryS)
+    : (dataIdBody != null ? String(dataIdBody) : null)
+  const type         = body.type ?? (typeof query.type === 'string' ? query.type : '')
 
   if (!dataId) {
     return { ok: true, ignored: true, reason: 'no_data_id' }
@@ -81,7 +92,110 @@ export default defineEventHandler(async (event) => {
     }
 
     // authorized: activar el plan y marcar la suscripción como activa.
+    // Reconciliación: si NO existe registro local (falló el INSERT en
+    // create-preapproval o el flujo se inició por otro canal), creamos la
+    // sub aquí. Antes cancelamos otras activas del mismo user para respetar
+    // el unique partial index `(user_id) where status in (pending,authorized)`.
     if (sub.status === 'authorized') {
+      const local = await obtenerSuscripcion({
+        supabaseUrl:    SUPABASE_URL,
+        serviceRoleKey: SUPABASE_SERVICE_KEY,
+        preapprovalId:  sub.id,
+      })
+
+      if (!local) {
+        // Cancelar otras activas del user (con cancel_reason='upgrade' para
+        // que el webhook cancelled de esas no baje a Free).
+        const otrasUrl = `${SUPABASE_URL}/rest/v1/subscriptions` +
+          `?user_id=eq.${userId}` +
+          `&status=in.(pending,authorized)` +
+          `&select=id,mp_preapproval_id`
+        const otrasRes = await fetch(otrasUrl, {
+          headers: {
+            apikey:        SUPABASE_SERVICE_KEY,
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          },
+        })
+        const otras = otrasRes.ok
+          ? await otrasRes.json() as Array<{ id: string; mp_preapproval_id: string }>
+          : []
+        for (const o of otras) {
+          await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${o.id}`, {
+            method:  'PATCH',
+            headers: {
+              apikey:         SUPABASE_SERVICE_KEY,
+              Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+              'Content-Type': 'application/json',
+              Prefer:         'return=minimal',
+            },
+            body: JSON.stringify({
+              status:        'cancelled',
+              cancel_reason: 'upgrade',
+              cancelled_at:  new Date().toISOString(),
+            }),
+          })
+          await fetch(`https://api.mercadopago.com/preapproval/${o.mp_preapproval_id}`, {
+            method:  'PUT',
+            headers: {
+              Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ status: 'cancelled' }),
+          }).catch(() => { /* best-effort */ })
+        }
+
+        // INSERT del registro local con datos derivados de MP + planes.ts
+        const planTipado    = plan as Plan
+        const currentAmount = sub.auto_recurring?.transaction_amount ?? getPrecioRegular(planTipado)
+        const regularAmount = getPrecioRegular(planTipado)
+        const promoEndsAt   = tienePromo(planTipado)
+          ? new Date(Date.now() + DURACION_PROMO_DIAS * 24 * 60 * 60 * 1000).toISOString()
+          : null
+
+        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
+          method:  'POST',
+          headers: {
+            apikey:         SUPABASE_SERVICE_KEY,
+            Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer:         'return=minimal',
+          },
+          body: JSON.stringify({
+            user_id:           userId,
+            plan,
+            mp_preapproval_id: sub.id,
+            status:            'authorized',
+            current_amount:    currentAmount,
+            regular_amount:    regularAmount,
+            promo_applied:     false,
+            promo_ends_at:     promoEndsAt,
+            started_at:        new Date().toISOString(),
+          }),
+        })
+        if (!insertRes.ok) {
+          console.error('[webhook] reconcile insert failed:', await insertRes.text())
+          setResponseStatus(event, 500)
+          return { ok: false, error: 'reconcile_insert_failed' }
+        }
+      } else {
+        // Caso normal: la sub ya existía como pending → la marcamos authorized
+        const ok = await actualizarSuscripcion({
+          supabaseUrl:    SUPABASE_URL,
+          serviceRoleKey: SUPABASE_SERVICE_KEY,
+          preapprovalId:  sub.id,
+          patch: {
+            status:           'authorized',
+            started_at:       new Date().toISOString(),
+            failed_payments:  0,
+          },
+        })
+        if (!ok) {
+          setResponseStatus(event, 500)
+          return { ok: false, error: 'subscription_update_failed' }
+        }
+      }
+
+      // Asignar plan al usuario
       const asignado = await asignarPlanUsuario({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
@@ -93,23 +207,23 @@ export default defineEventHandler(async (event) => {
         return { ok: false, error: 'plan_assign_failed' }
       }
 
-      await actualizarSuscripcion({
-        supabaseUrl:    SUPABASE_URL,
-        serviceRoleKey: SUPABASE_SERVICE_KEY,
-        preapprovalId:  sub.id,
-        patch: {
-          status:           'authorized',
-          started_at:       new Date().toISOString(),
-          failed_payments:  0,
-        },
-      })
-      return { ok: true, processed: true, action: 'authorized' }
+      return { ok: true, processed: true, action: 'authorized', reconciled: !local }
     }
 
     // paused/cancelled: actualizar estado. El downgrade a free se hace
     // explícitamente solo cuando se cancela (no en paused — paused puede ser
     // temporal por fallo de cobro y se reintenta).
     if (sub.status === 'cancelled') {
+      // Leer el registro local ANTES de actualizar para conocer cancel_reason.
+      // Si la cancelación fue por upgrade, NO bajar el plan a Free — la sub
+      // nueva (pending/authorized) asignará el plan correcto.
+      const local = await obtenerSuscripcion({
+        supabaseUrl:    SUPABASE_URL,
+        serviceRoleKey: SUPABASE_SERVICE_KEY,
+        preapprovalId:  sub.id,
+      })
+      const esUpgrade = local?.cancel_reason === 'upgrade'
+
       await actualizarSuscripcion({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
@@ -119,14 +233,16 @@ export default defineEventHandler(async (event) => {
           cancelled_at: new Date().toISOString(),
         },
       })
-      // Downgrade a free al cancelar
-      await asignarPlanUsuario({
-        supabaseUrl:    SUPABASE_URL,
-        serviceRoleKey: SUPABASE_SERVICE_KEY,
-        userId,
-        plan: 'free' as Plan,
-      })
-      return { ok: true, processed: true, action: 'cancelled' }
+
+      if (!esUpgrade) {
+        await asignarPlanUsuario({
+          supabaseUrl:    SUPABASE_URL,
+          serviceRoleKey: SUPABASE_SERVICE_KEY,
+          userId,
+          plan: 'free' as Plan,
+        })
+      }
+      return { ok: true, processed: true, action: 'cancelled', upgrade: esUpgrade }
     }
 
     if (sub.status === 'paused') {
@@ -177,18 +293,37 @@ export default defineEventHandler(async (event) => {
       const fallidos = (sub.failed_payments ?? 0) + 1
       const llegoAlLimite = fallidos >= MAX_FAILED_PAYMENTS
 
+      // Si llegamos al límite, cancelamos la preapproval en MP también — sino
+      // MP seguiría reintentando aunque ya bajamos al usuario a Free. La marca
+      // local pasa a 'cancelled' (no 'paused') con cancel_reason='failed_payments'
+      // para que el webhook cancelled que llegará después sea idempotente.
+      const patch: Record<string, unknown> = { failed_payments: fallidos }
+      if (llegoAlLimite) {
+        patch.status        = 'cancelled'
+        patch.cancel_reason = 'failed_payments'
+        patch.cancelled_at  = new Date().toISOString()
+      }
+
       await actualizarSuscripcion({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
         preapprovalId:  pay.preapproval_id,
-        patch: {
-          failed_payments: fallidos,
-          ...(llegoAlLimite ? { status: 'paused' } : {}),
-        },
+        patch,
       })
 
-      // Tras 3 fallos consecutivos: downgrade a free
       if (llegoAlLimite) {
+        // Cancelar en MP (best-effort: si falla, marcamos local igual y
+        // dependemos de que MP eventualmente nos avise vía preapproval webhook)
+        await fetch(`https://api.mercadopago.com/preapproval/${pay.preapproval_id}`, {
+          method:  'PUT',
+          headers: {
+            Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ status: 'cancelled' }),
+        }).catch(err => console.error('[webhook] cancel MP after failed payments:', err))
+
+        // Downgrade a Free
         await asignarPlanUsuario({
           supabaseUrl:    SUPABASE_URL,
           serviceRoleKey: SUPABASE_SERVICE_KEY,

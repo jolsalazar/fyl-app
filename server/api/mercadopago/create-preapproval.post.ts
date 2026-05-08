@@ -47,6 +47,58 @@ export default defineEventHandler(async (event) => {
     ? new Date(Date.now() + DURACION_PROMO_DIAS * 24 * 60 * 60 * 1000).toISOString()
     : null
 
+  // ── Upgrade/downgrade: cancelar suscripciones activas previas del usuario.
+  // El unique partial index (user_id where status in pending/authorized) impide
+  // INSERTar la nueva si quedan activas. Marcamos cancel_reason='upgrade' para
+  // que el webhook cancelled NO baje el plan a Free (la nueva sub asignará el
+  // plan correcto cuando se autorice).
+  const queryActivas = `${SUPABASE_URL}/rest/v1/subscriptions` +
+    `?user_id=eq.${user.id}` +
+    `&status=in.(pending,authorized)` +
+    `&select=id,mp_preapproval_id`
+
+  const activasRes = await fetch(queryActivas, {
+    headers: {
+      apikey:        SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+    },
+  })
+  const activas = activasRes.ok
+    ? await activasRes.json() as Array<{ id: string; mp_preapproval_id: string }>
+    : []
+
+  for (const ant of activas) {
+    // 1. Marcar local cancelled con razón upgrade (libera el unique index)
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${ant.id}`,
+      {
+        method:  'PATCH',
+        headers: {
+          apikey:         SUPABASE_SERVICE_KEY,
+          Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer:         'return=minimal',
+        },
+        body: JSON.stringify({
+          status:        'cancelled',
+          cancel_reason: 'upgrade',
+          cancelled_at:  new Date().toISOString(),
+        }),
+      },
+    )
+
+    // 2. Cancelar en MP. Si falla seguimos: la sub local ya está marcada y el
+    // webhook eventualmente reconciliará si MP envía un evento más adelante.
+    await fetch(`https://api.mercadopago.com/preapproval/${ant.mp_preapproval_id}`, {
+      method:  'PUT',
+      headers: {
+        Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'cancelled' }),
+    }).catch(() => { /* best-effort */ })
+  }
+
   const preapproval = {
     reason:             `Plan ${PLANES_CONFIG[plan as Plan].nombre} — Fondos y Licitaciones`,
     external_reference: `${user.id}:${plan}`,
