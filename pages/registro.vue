@@ -23,6 +23,20 @@
         </div>
       </div>
 
+      <!-- Email ya registrado: ofrecer login con plan preservado -->
+      <div v-else-if="emailExistente" class="info-banner">
+        <div class="info-icon">i</div>
+        <div>
+          <strong>Ya tienes una cuenta</strong>
+          <p>El email <strong>{{ email }}</strong> ya está registrado. Inicia sesión para continuar{{ plan && plan !== 'free' ? ` con el plan ${planInfo.nombre}` : '' }}.</p>
+          <NuxtLink :to="loginUrl" class="btn-login-existente">
+            Iniciar sesión
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </NuxtLink>
+          <button type="button" class="btn-otro-email" @click="emailExistente = false">Usar otro email</button>
+        </div>
+      </div>
+
       <form v-else @submit.prevent="handleRegistro">
         <div class="field">
           <label>Email</label>
@@ -75,30 +89,30 @@
       </form>
 
       <p class="footer-link">
-        ¿Ya tienes cuenta? <NuxtLink to="/login">Iniciar sesión</NuxtLink>
+        ¿Ya tienes cuenta? <NuxtLink :to="loginUrl">Iniciar sesión</NuxtLink>
       </p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { PLANES_CONFIG, esPlanValido, type Plan } from '~~/utils/planes'
+
 const supabase = useSupabaseClient()
 const router = useRouter()
 const route = useRoute()
 
 const plan = computed(() => {
   const p = route.query.plan as string
-  return ['free', 'starter', 'advanced', 'agency'].includes(p) ? p : null
+  return esPlanValido(p) ? p : null
 })
 
 const planInfo = computed(() => {
-  const planes: Record<string, { nombre: string; icon: string }> = {
-    free:     { nombre: 'Free',     icon: '🌱' },
-    starter:  { nombre: 'Starter', icon: '🚀' },
-    advanced: { nombre: 'Advanced',icon: '⭐' },
-    agency:   { nombre: 'Agency',  icon: '🏢' },
+  const p = plan.value ?? 'free'
+  return {
+    nombre: PLANES_CONFIG[p as Plan].nombre,
+    icon: PLANES_CONFIG[p as Plan].icon,
   }
-  return planes[plan.value ?? 'free']
 })
 
 const email           = ref('')
@@ -144,14 +158,36 @@ async function handleRegistro() {
     password: password.value,
   })
 
-  if (plan.value && plan.value !== 'free') {
-    try { localStorage.setItem('plan_intencion', plan.value) } catch {}
-  }
-
   if (authError) {
-    error.value = 'No se pudo crear la cuenta. Intenta de nuevo.'
+    // Detectar email ya registrado para ofrecer login con el plan preservado
+    const msg = authError.message?.toLowerCase() ?? ''
+    if (msg.includes('already') || msg.includes('registered') || msg.includes('exists')) {
+      emailExistente.value = true
+    } else {
+      error.value = 'No se pudo crear la cuenta. Intenta de nuevo.'
+    }
     loading.value = false
     return
+  }
+
+  // Guardar intención de plan vía endpoint server-side (no UPDATE directo,
+  // así no falla silenciosamente si RLS bloquea o columna no existe)
+  if (data.session && plan.value && plan.value !== 'free') {
+    let intencionGuardada = false
+    try {
+      const res = await $fetch<{ ok: boolean }>('/api/intencion-plan', {
+        method: 'POST',
+        body: { plan: plan.value },
+      })
+      intencionGuardada = res.ok === true
+    } catch {
+      intencionGuardada = false
+    }
+
+    // Fallback en localStorage para que onboarding pueda recuperarla
+    if (!intencionGuardada) {
+      try { localStorage.setItem('plan_intencion', plan.value) } catch {}
+    }
   }
 
   if (data.user) {
@@ -168,6 +204,13 @@ async function handleRegistro() {
 
   loading.value = false
 }
+
+const emailExistente = ref(false)
+const loginUrl = computed(() => {
+  return plan.value && plan.value !== 'free'
+    ? `/login?plan=${plan.value}`
+    : '/login'
+})
 </script>
 
 <style scoped>
@@ -373,6 +416,49 @@ input:disabled { opacity: 0.6; }
   flex-shrink: 0;
 }
 .success-banner strong { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; }
+
+.info-banner {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.info-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+  font-style: italic;
+}
+.info-banner strong { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; }
+.info-banner p { margin-bottom: 0.75rem; }
+.btn-login-existente {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: #2563eb; color: white; padding: 0.5rem 0.875rem;
+  border-radius: 8px; text-decoration: none; font-weight: 600;
+  font-size: 0.8125rem; margin-right: 0.5rem;
+  transition: background 0.15s;
+}
+.btn-login-existente:hover { background: #1d4ed8; }
+.btn-otro-email {
+  width: auto !important; padding: 0.5rem 0.875rem !important;
+  background: transparent !important; color: #1e40af !important;
+  font-size: 0.8125rem !important; font-weight: 600 !important;
+  border: 1px solid #bfdbfe !important;
+}
+.btn-otro-email:hover:not(:disabled) {
+  background: #dbeafe !important;
+}
 
 button {
   width: 100%;

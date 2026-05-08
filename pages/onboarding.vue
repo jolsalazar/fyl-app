@@ -226,6 +226,22 @@
           </div>
         </template>
 
+        <!-- Error al iniciar pago -->
+        <template v-else-if="errorPago">
+          <div class="error-icon-wrap">⚠️</div>
+          <h1>No pudimos iniciar el pago</h1>
+          <p class="step-desc">
+            Hubo un problema al conectar con MercadoPago. Tu cuenta y configuración están guardadas — solo falta el pago.
+          </p>
+          <div class="match-cta-wrap">
+            <button class="btn-primary btn-lg" :disabled="redirigiendo" @click="reintentarPago">
+              <span v-if="redirigiendo" class="spinner-match" style="width:14px;height:14px;border-width:2px;"></span>
+              Reintentar pago
+            </button>
+            <NuxtLink to="/dashboard" class="btn-ghost">Ir al dashboard</NuxtLink>
+          </div>
+        </template>
+
         <!-- Normal: sin plan intención -->
         <template v-else-if="!planIntencion">
           <div class="confetti-wrap">🎉</div>
@@ -287,24 +303,25 @@
 
 <script setup lang="ts">
 import { calcularMatch, type Perfil } from '~/composables/useMatch'
+import { PLANES_CONFIG, esPlanValido, type Plan } from '~~/utils/planes'
 
 definePageMeta({ middleware: 'auth' })
 
 const supabase = useSupabaseClient()
 const { contratar: contratarPlan } = useContratarPlan()
+const { show: toast } = useToast()
 const paso     = ref(1)
 const guardando       = ref(false)
 const calculandoMatch = ref(false)
 const redirigiendo    = ref(false)
+const errorPago       = ref(false)
 const matchResults    = ref<{ item: any; match: ReturnType<typeof calcularMatch> }[]>([])
 const tagInput  = ref('')
 const email     = ref('')
 
-// Si el usuario llegó desde la web (fyl) eligiendo un plan pago, registro.vue lo dejó
-// guardado en localStorage. Lo leemos para ofrecer "Contratar Plan X" al final del onboarding.
-const planIntencion      = ref<string | null>(null)
-const PLAN_NOMBRES: Record<string, string> = { starter: 'Starter', advanced: 'Advanced', agency: 'Agency' }
-const planIntencionLabel = computed(() => planIntencion.value ? PLAN_NOMBRES[planIntencion.value] ?? '' : '')
+// Intención de plan cargada desde profiles.intended_plan en Supabase
+const planIntencion      = ref<Plan | null>(null)
+const planIntencionLabel = computed(() => planIntencion.value ? PLANES_CONFIG[planIntencion.value].nombre : '')
 
 const perfil = ref({
   tipo_persona:       null as string | null,
@@ -361,7 +378,34 @@ function removeTag(i: number) {
 async function saltar() {
   const { data: { user } } = await supabase.auth.getUser()
   await supabase.from('profiles').update({ onboarding_done: true }).eq('id', user!.id)
+
+  // Si llegó desde la web con intención de plan pagado, respetar esa intención
+  // y redirigir a checkout en lugar de saltarse el pago
+  if (planIntencion.value && esPlanValido(planIntencion.value)) {
+    paso.value = 5
+    await iniciarPago(planIntencion.value)
+    return
+  }
+
   navigateTo('/dashboard')
+}
+
+// Inicia checkout MP. Si falla, deja al usuario en pantalla de error
+// con opción de reintento (sin atascarlo en "Redirigiendo a pago…").
+async function iniciarPago(plan: 'starter' | 'advanced' | 'agency') {
+  errorPago.value = false
+  redirigiendo.value = true
+  const ok = await contratarPlan(plan)
+  if (!ok) {
+    redirigiendo.value = false
+    errorPago.value = true
+  }
+  // Si ok=true, contratarPlan ya hizo window.location.href → no hace falta más
+}
+
+async function reintentarPago() {
+  if (!planIntencion.value || !esPlanValido(planIntencion.value)) return
+  await iniciarPago(planIntencion.value)
 }
 
 async function finalizar() {
@@ -391,7 +435,8 @@ async function finalizar() {
     .limit(1)
     .maybeSingle()
 
-  await Promise.all([
+  // Guardar todos los datos y validar errores
+  const [proyectoRes, alertaRes, profileRes] = await Promise.all([
     existente
       ? supabase.from('proyectos').update(proyectoPayload).eq('id', existente.id)
       : supabase.from('proyectos').insert(proyectoPayload),
@@ -404,14 +449,24 @@ async function finalizar() {
       activo:   true,
     }),
 
-    supabase.from('profiles').update({ onboarding_done: true }).eq('id', user!.id),
+    supabase.from('profiles').update({
+      onboarding_done: true,
+      intended_plan: planIntencion.value,
+    }).eq('id', user!.id),
   ])
 
-  // Si hay plan intención, redirige a pagar automáticamente
-  if (planIntencion.value && planIntencion.value in PLAN_NOMBRES) {
-    redirigiendo.value = true
+  // Validar que todos los inserts/updates fueron exitosos
+  if (proyectoRes.error || alertaRes.error || profileRes.error) {
+    guardando.value = false
+    toast('Hubo un error guardando tu información. Intenta nuevamente.', 'error')
+    return
+  }
+
+  // Si hay plan intención, redirige a pagar automáticamente.
+  // Si falla, iniciarPago muestra UI de error con opción de reintento.
+  if (planIntencion.value && esPlanValido(planIntencion.value)) {
     paso.value = 5
-    await contratarPlan(planIntencion.value as 'starter' | 'advanced' | 'agency')
+    await iniciarPago(planIntencion.value)
     return
   }
 
@@ -452,10 +507,26 @@ onMounted(async () => {
   const { data: { user } } = await supabase.auth.getUser()
   email.value = user?.email ?? ''
 
-  try {
-    const stored = localStorage.getItem('plan_intencion')
-    if (stored && stored in PLAN_NOMBRES) planIntencion.value = stored
-  } catch {}
+  // Cargar intención de plan: primero desde Supabase (profiles.intended_plan),
+  // si no existe, fallback a localStorage (caso: endpoint falló al registrarse)
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('intended_plan')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profile?.intended_plan && esPlanValido(profile.intended_plan)) {
+      planIntencion.value = profile.intended_plan
+    } else {
+      try {
+        const stored = localStorage.getItem('plan_intencion')
+        if (stored && esPlanValido(stored)) {
+          planIntencion.value = stored
+        }
+      } catch {}
+    }
+  }
 })
 </script>
 
@@ -625,6 +696,7 @@ h1 { font-size: 1.625rem; font-weight: 800; color: #0f172a; letter-spacing: -0.0
 /* Final */
 .step-final { align-items: center; text-align: center; }
 .confetti-wrap { font-size: 4rem; }
+.error-icon-wrap { font-size: 3.5rem; }
 
 /* Match loading */
 .match-loading {

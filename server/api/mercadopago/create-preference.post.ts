@@ -11,22 +11,8 @@
 //
 // Precios: definidos acá temporalmente. Mover a tabla `planes` en DB cuando exista.
 
-import { esPlanValido, type Plan } from '~~/server/utils/mercadopago'
+import { PLANES_CONFIG, esPlanValido, type Plan } from '~~/utils/planes'
 import { serverSupabaseUser } from '#supabase/server'
-
-const PRECIOS_CLP: Record<Plan, number> = {
-  free:     0,
-  starter:  5990,
-  advanced: 19990,
-  agency:   49990,
-}
-
-const NOMBRES: Record<Plan, string> = {
-  free:     'Plan Free',
-  starter:  'Plan Starter',
-  advanced: 'Plan Advanced',
-  agency:   'Plan Agency',
-}
 
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN
@@ -53,10 +39,10 @@ export default defineEventHandler(async (event) => {
   const preference = {
     items: [
       {
-        title:       NOMBRES[plan],
+        title:       `Plan ${PLANES_CONFIG[plan].nombre}`,
         quantity:    1,
         currency_id: 'CLP',
-        unit_price:  PRECIOS_CLP[plan],
+        unit_price:  PLANES_CONFIG[plan].precio,
       },
     ],
     payer: {

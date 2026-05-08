@@ -44,7 +44,7 @@
       <div class="plan-card" :class="{ current: plan === 'starter' }">
         <div class="plan-top">
           <div class="plan-name">Starter</div>
-          <div class="plan-price"><span class="price-num">$5.990</span><span class="price-per">/mes</span></div>
+          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.starter.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
           <p class="plan-desc">Para emprendedores activos que quieren estar siempre al tanto.</p>
         </div>
         <ul class="features">
@@ -71,7 +71,7 @@
         <div class="featured-badge">Más popular</div>
         <div class="plan-top">
           <div class="plan-name">Advanced</div>
-          <div class="plan-price"><span class="price-num">$19.990</span><span class="price-per">/mes</span></div>
+          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.advanced.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
           <p class="plan-desc">Para quienes postulan activamente y quieren postular solo donde califican.</p>
         </div>
         <ul class="features">
@@ -98,7 +98,7 @@
       <div class="plan-card" :class="{ current: plan === 'agency' }">
         <div class="plan-top">
           <div class="plan-name">Agency</div>
-          <div class="plan-price"><span class="price-num">$49.990</span><span class="price-per">/mes</span></div>
+          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.agency.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
           <p class="plan-desc">Para consultoras y agencias que gestionan múltiples clientes y proyectos.</p>
         </div>
         <ul class="features">
@@ -134,6 +134,8 @@
 </template>
 
 <script setup lang="ts">
+import { PLANES_CONFIG } from '~~/utils/planes'
+
 definePageMeta({ middleware: 'auth' })
 
 const { plan, label, esMejor, load } = usePlan()

@@ -6,8 +6,14 @@
       </div>
       <!-- Login -->
       <template v-if="!modoReset">
+        <!-- Badge de plan si viene desde la web a contratar -->
+        <div v-if="planQuery" class="plan-badge-login">
+          <span>📦</span>
+          Iniciar sesión para contratar Plan <strong>{{ planLabel }}</strong>
+        </div>
+
         <h1>Bienvenido de vuelta</h1>
-        <p class="subtitle">Ingresa a tu cuenta para ver tus alertas</p>
+        <p class="subtitle">{{ planQuery ? 'Inicia sesión y continuamos con tu plan' : 'Ingresa a tu cuenta para ver tus alertas' }}</p>
 
         <form @submit.prevent="handleLogin">
           <div class="field">
@@ -74,9 +80,12 @@
 </template>
 
 <script setup lang="ts">
+import { esPlanValido, PLANES_CONFIG, type Plan } from '~~/utils/planes'
+
 const supabase = useSupabaseClient()
 const router = useRouter()
 const route = useRoute()
+const { contratar: contratarPlan } = useContratarPlan()
 
 const email    = ref('')
 const password = ref('')
@@ -86,19 +95,71 @@ const error = ref('')
 const modoReset = ref(false)
 const resetEnviado = ref(false)
 
+// Plan desde query (cuando viene de /registro al detectar email existente, o desde la web)
+const planQuery = computed<Plan | null>(() => {
+  const p = route.query.plan as string
+  return esPlanValido(p) && p !== 'free' ? p : null
+})
+const planLabel = computed(() => planQuery.value ? PLANES_CONFIG[planQuery.value].nombre : '')
+
 async function handleLogin() {
   loading.value = true
   error.value = ''
-  const { error: authError } = await supabase.auth.signInWithPassword({
+  const { data, error: authError } = await supabase.auth.signInWithPassword({
     email: email.value,
     password: password.value,
   })
   if (authError) {
     error.value = 'Email o contraseña incorrectos'
-  } else {
-    const next = route.query.next as string
-    router.push(next && next.startsWith('/') ? next : '/dashboard')
+    loading.value = false
+    return
   }
+
+  // Si vino con ?plan=X, persistir intención y continuar al flujo correcto
+  if (planQuery.value && data.user) {
+    let intencionGuardada = false
+    try {
+      const res = await $fetch<{ ok: boolean }>('/api/intencion-plan', {
+        method: 'POST',
+        body: { plan: planQuery.value },
+      })
+      intencionGuardada = res.ok === true
+    } catch {
+      intencionGuardada = false
+    }
+
+    if (!intencionGuardada) {
+      error.value = `No pudimos guardar tu intención de plan ${planLabel.value}. Reintenta o ve a "Planes" desde el dashboard.`
+      loading.value = false
+      return
+    }
+
+    // Si el usuario ya completó onboarding, ir directo al checkout de pago
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarding_done')
+      .eq('id', data.user.id)
+      .maybeSingle()
+
+    if (profile?.onboarding_done) {
+      const ok = await contratarPlan(planQuery.value)
+      if (!ok) {
+        // No dejar atrapado al usuario en "Ingresando..." si MP falla.
+        // La intención ya quedó guardada, así que /planes recuperará la opción.
+        error.value = 'No pudimos iniciar el pago. Te llevamos a Planes para reintentar.'
+        loading.value = false
+        setTimeout(() => router.push('/planes'), 1500)
+      }
+      return
+    }
+
+    // Sino, ir a onboarding (que detectará intended_plan al final)
+    router.push('/onboarding')
+    return
+  }
+
+  const next = route.query.next as string
+  router.push(next && next.startsWith('/') ? next : '/dashboard')
   loading.value = false
 }
 
@@ -272,6 +333,14 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   flex-shrink: 0;
 }
 .success-banner strong { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; }
+.plan-badge-login {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+  font-size: 0.8125rem; font-weight: 600;
+  padding: 0.6rem 0.875rem; border-radius: 10px;
+  margin-bottom: 1.25rem;
+}
+.plan-badge-login strong { font-weight: 800; }
 .footer-link {
   text-align: center;
   margin-top: 1.5rem;
