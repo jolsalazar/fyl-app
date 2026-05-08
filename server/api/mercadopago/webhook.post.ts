@@ -65,11 +65,15 @@ export default defineEventHandler(async (event) => {
   // event_id para idempotencia: usar body.id (único por evento). data.id es
   // el id del recurso (preapproval, payment) y se REPITE entre eventos
   // distintos del mismo recurso (pending → authorized usan el mismo data.id).
-  // Fallback compuesto si body.id no viene: type:dataId:action.
-  const eventIdRaw = body?.id
-  const eventId    = eventIdRaw != null
+  // Fallback: si body.id no viene, agregamos x-request-id (header de MP que
+  // es único por request) para evitar colisiones cuando dos eventos distintos
+  // del mismo recurso tienen mismo type+action.
+  const headersTmp     = getRequestHeaders(event)
+  const reqIdForEventId = headersTmp['x-request-id'] ?? 'no-req'
+  const eventIdRaw     = body?.id
+  const eventId        = eventIdRaw != null
     ? String(eventIdRaw)
-    : `${type}:${dataId ?? 'no-data'}:${body?.action ?? 'no-action'}`
+    : `${type}:${dataId ?? 'no-data'}:${body?.action ?? 'no-action'}:${reqIdForEventId}`
 
   if (!dataId) {
     return { ok: true, ignored: true, reason: 'no_data_id' }
@@ -265,7 +269,7 @@ export default defineEventHandler(async (event) => {
       })
       const esUpgrade = local?.cancel_reason === 'upgrade'
 
-      await actualizarSuscripcion({
+      const okUpdate = await actualizarSuscripcion({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
         preapprovalId:  sub.id,
@@ -274,25 +278,37 @@ export default defineEventHandler(async (event) => {
           cancelled_at: new Date().toISOString(),
         },
       })
+      if (!okUpdate) {
+        setResponseStatus(event, 500)
+        return { ok: false, error: 'subscription_update_failed' }
+      }
 
       if (!esUpgrade) {
-        await asignarPlanUsuario({
+        const okPlan = await asignarPlanUsuario({
           supabaseUrl:    SUPABASE_URL,
           serviceRoleKey: SUPABASE_SERVICE_KEY,
           userId,
           plan: 'free' as Plan,
         })
+        if (!okPlan) {
+          setResponseStatus(event, 500)
+          return { ok: false, error: 'plan_downgrade_failed' }
+        }
       }
       procesoExitoso = true; return { ok: true, processed: true, action: 'cancelled', upgrade: esUpgrade }
     }
 
     if (sub.status === 'paused') {
-      await actualizarSuscripcion({
+      const okPaused = await actualizarSuscripcion({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
         preapprovalId:  sub.id,
         patch: { status: 'paused' },
       })
+      if (!okPaused) {
+        setResponseStatus(event, 500)
+        return { ok: false, error: 'subscription_update_failed' }
+      }
       procesoExitoso = true; return { ok: true, processed: true, action: 'paused' }
     }
 
@@ -333,20 +349,28 @@ export default defineEventHandler(async (event) => {
         patch.cancel_reason = null
       }
 
-      await actualizarSuscripcion({
+      const okApprovedUpdate = await actualizarSuscripcion({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
         preapprovalId:  pay.preapproval_id,
         patch,
       })
+      if (!okApprovedUpdate) {
+        setResponseStatus(event, 500)
+        return { ok: false, error: 'subscription_update_failed' }
+      }
 
       if (necesitaReactivar && esPlanValido(sub.plan)) {
-        await asignarPlanUsuario({
+        const okPlan = await asignarPlanUsuario({
           supabaseUrl:    SUPABASE_URL,
           serviceRoleKey: SUPABASE_SERVICE_KEY,
           userId:         sub.user_id,
           plan:           sub.plan as Plan,
         })
+        if (!okPlan) {
+          setResponseStatus(event, 500)
+          return { ok: false, error: 'plan_reactivate_failed' }
+        }
       }
 
       procesoExitoso = true; return { ok: true, processed: true, action: 'payment_approved', reactivated: necesitaReactivar }
@@ -367,12 +391,16 @@ export default defineEventHandler(async (event) => {
         patch.cancelled_at  = new Date().toISOString()
       }
 
-      await actualizarSuscripcion({
+      const okRejectedUpdate = await actualizarSuscripcion({
         supabaseUrl:    SUPABASE_URL,
         serviceRoleKey: SUPABASE_SERVICE_KEY,
         preapprovalId:  pay.preapproval_id,
         patch,
       })
+      if (!okRejectedUpdate) {
+        setResponseStatus(event, 500)
+        return { ok: false, error: 'subscription_update_failed' }
+      }
 
       if (llegoAlLimite) {
         // Cancelar en MP (best-effort: si falla, marcamos local igual y
@@ -387,12 +415,16 @@ export default defineEventHandler(async (event) => {
         }).catch(err => console.error('[webhook] cancel MP after failed payments:', err))
 
         // Downgrade a Free
-        await asignarPlanUsuario({
+        const okDowngrade = await asignarPlanUsuario({
           supabaseUrl:    SUPABASE_URL,
           serviceRoleKey: SUPABASE_SERVICE_KEY,
           userId:         sub.user_id,
           plan:           'free' as Plan,
         })
+        if (!okDowngrade) {
+          setResponseStatus(event, 500)
+          return { ok: false, error: 'plan_downgrade_failed' }
+        }
       }
 
       procesoExitoso = true; return { ok: true, processed: true, action: 'payment_rejected', failed: fallidos, downgraded: llegoAlLimite }
@@ -437,6 +469,11 @@ export default defineEventHandler(async (event) => {
   procesoExitoso = true
   return { ok: true, ignored: true, type }
 
+  } catch (err) {
+    // Log con contexto antes de propagar (Nitro responde 500). Sin esto
+    // perderíamos type/eventId/dataId al diagnosticar fallos en producción.
+    console.error('[webhook] handler error:', { type, eventId, dataId, err })
+    throw err
   } finally {
     // Rollback: si el handler falló (no marcó procesoExitoso) eliminamos el
     // registro de evento procesado para que MP pueda reintentar.

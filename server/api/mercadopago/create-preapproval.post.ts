@@ -67,10 +67,44 @@ export default defineEventHandler(async (event) => {
     ? await activasRes.json() as Array<{ id: string; mp_preapproval_id: string }>
     : []
 
+  // Track de las que ya cancelamos para hacer rollback si falla a mitad.
+  const yaCanceladas: typeof activas = []
+
+  async function rollbackCanceladas() {
+    // Si abortamos a mitad del bucle (o falla crear nueva más adelante),
+    // las que ya cancelamos quedan con cancel_reason='upgrade' aunque NO
+    // habrá upgrade real. Convertir a 'user' para que el webhook cancelled
+    // SÍ baje el plan a Free, y forzar downgrade para no esperar al webhook.
+    for (const c of yaCanceladas) {
+      await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${c.id}`, {
+        method:  'PATCH',
+        headers: {
+          apikey:         SUPABASE_SERVICE_KEY,
+          Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer:         'return=minimal',
+        },
+        body: JSON.stringify({ cancel_reason: 'user' }),
+      }).catch(() => { /* best-effort */ })
+    }
+    if (yaCanceladas.length > 0) {
+      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_set_user_plan`, {
+        method:  'POST',
+        headers: {
+          apikey:         SUPABASE_SERVICE_KEY,
+          Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ target_id: user.id, new_plan: 'free' }),
+      }).catch(() => { /* best-effort */ })
+    }
+  }
+
   for (const ant of activas) {
-    // 1. Cancelar en MP PRIMERO. Si MP responde error explícito (4xx),
-    //    abortamos: no podemos marcar local cancelada y dejar MP cobrando.
-    //    5xx/timeout son reintentables — los logueamos pero seguimos.
+    // 1. Cancelar en MP PRIMERO. Si MP responde cualquier error explícito
+    //    (4xx o 5xx), abortar: no podemos asumir que MP procesó la
+    //    cancelación. Si seguimos, MP podría cobrar tanto la vieja como
+    //    la nueva. Solo errores de red (catch) son best-effort.
     let mpCancelOk = true
     try {
       const mpCancelRes = await fetch(`https://api.mercadopago.com/preapproval/${ant.mp_preapproval_id}`, {
@@ -81,17 +115,19 @@ export default defineEventHandler(async (event) => {
         },
         body: JSON.stringify({ status: 'cancelled' }),
       })
-      if (!mpCancelRes.ok && mpCancelRes.status >= 400 && mpCancelRes.status < 500) {
-        // Error explícito de MP: abortar. No marcamos local, no creamos nueva.
+      if (!mpCancelRes.ok) {
         console.error('[create-preapproval] MP rechazó cancelar previa:', mpCancelRes.status, await mpCancelRes.text())
         mpCancelOk = false
       }
     } catch (err) {
-      // 5xx/timeout: best-effort, seguimos
-      console.error('[create-preapproval] MP cancel timeout/5xx:', err)
+      // Error de red (sin status). Tratamos como best-effort: continuamos
+      // asumiendo que MP eventualmente procesará / mirará el state después.
+      console.error('[create-preapproval] MP cancel network error:', err)
     }
 
     if (!mpCancelOk) {
+      // Rollback de las que ya cancelamos correctamente
+      await rollbackCanceladas()
       setResponseStatus(event, 502)
       return { ok: false, error: 'previous_cancel_failed' }
     }
@@ -114,6 +150,7 @@ export default defineEventHandler(async (event) => {
         }),
       },
     )
+    yaCanceladas.push(ant)
   }
 
   const preapproval = {
@@ -140,37 +177,9 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!mpRes.ok) {
-    // Crear nueva falló. Las anteriores quedaron cancelled con
-    // cancel_reason='upgrade', pero como NO va a haber sub nueva, el webhook
-    // cancelled NO bajaría el plan a Free. Revertimos a cancel_reason='user'
-    // para que el downgrade ocurra normalmente.
-    for (const ant of activas) {
-      await fetch(`${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${ant.id}`, {
-        method:  'PATCH',
-        headers: {
-          apikey:         SUPABASE_SERVICE_KEY,
-          Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer:         'return=minimal',
-        },
-        body: JSON.stringify({ cancel_reason: 'user' }),
-      }).catch(() => { /* best-effort */ })
-    }
-
-    // Asignamos plan free directamente — la sub anterior quedó cancelled en MP
-    // y la nueva no se creó.
-    if (activas.length > 0) {
-      await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_set_user_plan`, {
-        method:  'POST',
-        headers: {
-          apikey:         SUPABASE_SERVICE_KEY,
-          Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ target_id: user.id, new_plan: 'free' }),
-      }).catch(() => { /* best-effort */ })
-    }
-
+    // Crear nueva falló. Reusamos el rollback que convierte cancel_reason
+    // 'upgrade'→'user' y fuerza downgrade a Free de las que ya cancelamos.
+    await rollbackCanceladas()
     setResponseStatus(event, 502)
     return { ok: false, error: 'preapproval_creation_failed' }
   }
