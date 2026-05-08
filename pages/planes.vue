@@ -137,7 +137,7 @@
 definePageMeta({ middleware: 'auth' })
 
 const { plan, label, esMejor, load } = usePlan()
-const { show: toast } = useToast()
+const { contratar: contratarPlan } = useContratarPlan()
 const route   = useRoute()
 const router  = useRouter()
 
@@ -147,21 +147,8 @@ const contratando = ref<'starter' | 'advanced' | 'agency' | null>(null)
 async function contratar(p: 'starter' | 'advanced' | 'agency') {
   if (contratando.value) return
   contratando.value = p
-  try {
-    const res = await $fetch<{ ok: boolean; init_point?: string; error?: string }>(
-      '/api/mercadopago/create-preference',
-      { method: 'POST', body: { plan: p } },
-    )
-    if (res.ok && res.init_point) {
-      window.location.href = res.init_point
-      return
-    }
-    toast('No se pudo iniciar el pago. Intenta nuevamente o escríbenos.', 'error')
-  } catch {
-    toast('No se pudo iniciar el pago. Intenta nuevamente o escríbenos.', 'error')
-  } finally {
-    contratando.value = null
-  }
+  await contratarPlan(p)
+  contratando.value = null
 }
 
 onMounted(() => {

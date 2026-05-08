@@ -216,59 +216,67 @@
 
       <!-- ── PASO 5: ¡Listo! + matches ──────────────────────────── -->
       <div v-else-if="paso === 5" key="5" class="step step-final">
-        <div class="confetti-wrap">🎉</div>
-        <h1>¡Todo listo!</h1>
-
-        <!-- Loading matches -->
-        <div v-if="calculandoMatch" class="match-loading">
-          <div class="spinner-match"></div>
-          <span>Calculando fondos que calzan con tu perfil…</span>
-        </div>
-
-        <!-- Resultados de match -->
-        <template v-else-if="matchResults.length">
-          <p class="step-desc">
-            Encontramos <strong>{{ matchResults.length }} fondos abiertos</strong> que calzan con tu proyecto. Aquí una vista previa:
-          </p>
-
-          <div class="match-preview-list">
-            <div v-for="r in matchResults" :key="r.item.id" class="match-preview-card">
-              <div class="match-preview-top">
-                <div :class="['match-donut-sm', r.match.nivel]">{{ r.match.score }}%</div>
-                <div class="match-preview-info">
-                  <p class="match-preview-titulo">{{ r.item.titulo }}</p>
-                  <p class="match-preview-org">{{ r.item.organizador }}</p>
-                </div>
-              </div>
-              <div class="match-razones-sm">
-                <span v-for="rz in r.match.razones.slice(0, 2)" :key="rz.texto" :class="['razon-chip', rz.tipo]">
-                  {{ rz.tipo === 'positivo' ? '✓' : rz.tipo === 'negativo' ? '✗' : '·' }} {{ rz.texto }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div class="match-cta-wrap">
-            <NuxtLink :to="planIntencion ? '/planes' : '/planes'" class="btn-primary btn-lg">
-              {{ planIntencion ? `Contratar Plan ${planIntencionLabel}` : 'Ver mi match completo' }}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            </NuxtLink>
-            <NuxtLink to="/dashboard" class="btn-ghost">Ir a mi dashboard</NuxtLink>
+        <!-- Redirigiendo a pago -->
+        <template v-if="redirigiendo">
+          <div class="confetti-wrap">🎉</div>
+          <h1>¡Configuración lista!</h1>
+          <div class="match-loading">
+            <div class="spinner-match"></div>
+            <span>Redirigiendo a pago…</span>
           </div>
         </template>
 
-        <!-- Fallback sin matches -->
-        <template v-else>
-          <p class="step-desc">Tu perfil y primera alerta están configurados. Desde mañana recibirás un email con las oportunidades nuevas.</p>
-          <NuxtLink v-if="planIntencion" to="/planes" class="btn-primary btn-lg">
-            Contratar Plan {{ planIntencionLabel }}
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </NuxtLink>
-          <NuxtLink v-else to="/dashboard" class="btn-primary btn-lg">
-            Ir a mi dashboard
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </NuxtLink>
-          <NuxtLink v-if="planIntencion" to="/dashboard" class="btn-ghost" style="margin-top: 0.5rem;">Saltar y entrar al dashboard</NuxtLink>
+        <!-- Normal: sin plan intención -->
+        <template v-else-if="!planIntencion">
+          <div class="confetti-wrap">🎉</div>
+          <h1>¡Todo listo!</h1>
+
+          <!-- Loading matches -->
+          <div v-if="calculandoMatch" class="match-loading">
+            <div class="spinner-match"></div>
+            <span>Calculando fondos que calzan con tu perfil…</span>
+          </div>
+
+          <!-- Resultados de match -->
+          <template v-else-if="matchResults.length">
+            <p class="step-desc">
+              Encontramos <strong>{{ matchResults.length }} fondos abiertos</strong> que calzan con tu proyecto. Aquí una vista previa:
+            </p>
+
+            <div class="match-preview-list">
+              <div v-for="r in matchResults" :key="r.item.id" class="match-preview-card">
+                <div class="match-preview-top">
+                  <div :class="['match-donut-sm', r.match.nivel]">{{ r.match.score }}%</div>
+                  <div class="match-preview-info">
+                    <p class="match-preview-titulo">{{ r.item.titulo }}</p>
+                    <p class="match-preview-org">{{ r.item.organizador }}</p>
+                  </div>
+                </div>
+                <div class="match-razones-sm">
+                  <span v-for="rz in r.match.razones.slice(0, 2)" :key="rz.texto" :class="['razon-chip', rz.tipo]">
+                    {{ rz.tipo === 'positivo' ? '✓' : rz.tipo === 'negativo' ? '✗' : '·' }} {{ rz.texto }}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="match-cta-wrap">
+              <NuxtLink to="/planes" class="btn-primary btn-lg">
+                Ver mi match completo
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </NuxtLink>
+              <NuxtLink to="/dashboard" class="btn-ghost">Ir a mi dashboard</NuxtLink>
+            </div>
+          </template>
+
+          <!-- Fallback sin matches -->
+          <template v-else>
+            <p class="step-desc">Tu perfil y primera alerta están configurados. Desde mañana recibirás un email con las oportunidades nuevas.</p>
+            <NuxtLink to="/dashboard" class="btn-primary btn-lg">
+              Ir a mi dashboard
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </NuxtLink>
+          </template>
         </template>
       </div>
       </transition>
@@ -283,9 +291,11 @@ import { calcularMatch, type Perfil } from '~/composables/useMatch'
 definePageMeta({ middleware: 'auth' })
 
 const supabase = useSupabaseClient()
+const { contratar: contratarPlan } = useContratarPlan()
 const paso     = ref(1)
 const guardando       = ref(false)
 const calculandoMatch = ref(false)
+const redirigiendo    = ref(false)
 const matchResults    = ref<{ item: any; match: ReturnType<typeof calcularMatch> }[]>([])
 const tagInput  = ref('')
 const email     = ref('')
@@ -396,6 +406,14 @@ async function finalizar() {
 
     supabase.from('profiles').update({ onboarding_done: true }).eq('id', user!.id),
   ])
+
+  // Si hay plan intención, redirige a pagar automáticamente
+  if (planIntencion.value && planIntencion.value in PLAN_NOMBRES) {
+    redirigiendo.value = true
+    paso.value = 5
+    await contratarPlan(planIntencion.value as 'starter' | 'advanced' | 'agency')
+    return
+  }
 
   guardando.value = false
   paso.value = 5
