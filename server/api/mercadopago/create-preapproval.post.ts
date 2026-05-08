@@ -177,11 +177,11 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!mpRes.ok) {
-    // Crear nueva falló. Reusamos el rollback que convierte cancel_reason
-    // 'upgrade'→'user' y fuerza downgrade a Free de las que ya cancelamos.
+    const mpError = await mpRes.text().catch(() => '(no body)')
+    console.error('[create-preapproval] MP rechazó preapproval:', mpRes.status, mpError)
     await rollbackCanceladas()
-    setResponseStatus(event, 502)
-    return { ok: false, error: 'preapproval_creation_failed' }
+    setResponseStatus(event, 422)
+    return { ok: false, error: 'preapproval_creation_failed', mp_status: mpRes.status, mp_detail: mpError }
   }
 
   const mpData = await mpRes.json() as {
