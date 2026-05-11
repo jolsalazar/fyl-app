@@ -1,6 +1,6 @@
 // Cancela la suscripción activa del usuario logueado:
 // 1. Lee la subscription en authorized del usuario
-// 2. PUT a MP /preapproval/{id} con status=cancelled (deja de cobrar mensualmente)
+// 2. PUT a MP /preapproval/{id} para cancelar (deja de cobrar mensualmente)
 // 3. UPDATE subscription local: status=cancelled, cancelled_at=now()
 // 4. Downgrade plan del usuario a 'free' inmediatamente
 //
@@ -12,7 +12,7 @@
 //   SUPABASE_URL
 //   SUPABASE_SERVICE_KEY  (downgrade requiere admin_set_user_plan via service_role)
 
-import { asignarPlanUsuario } from '~~/server/utils/mercadopago'
+import { asignarPlanUsuario, cancelarPreapprovalMercadoPago } from '~~/server/utils/mercadopago'
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
@@ -50,15 +50,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Cancelar en MercadoPago
-  const mpRes = await fetch(`https://api.mercadopago.com/preapproval/${sub.mp_preapproval_id}`, {
-    method:  'PUT',
-    headers: {
-      Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ status: 'cancelled' }),
-  })
+  const mpRes = await cancelarPreapprovalMercadoPago(sub.mp_preapproval_id, MP_ACCESS_TOKEN)
   if (!mpRes.ok) {
+    console.error('[cancelar] MP rechazó cancelar:', mpRes.status, mpRes.body)
     setResponseStatus(event, 502)
     return { ok: false, error: 'mp_cancel_failed' }
   }

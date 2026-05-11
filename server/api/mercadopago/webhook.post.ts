@@ -18,6 +18,7 @@
 import {
   actualizarSuscripcion,
   asignarPlanUsuario,
+  cancelarPreapprovalMercadoPago,
   eliminarEventoProcesado,
   esPlanValido,
   obtenerAuthorizedPaymentMercadoPago,
@@ -77,6 +78,19 @@ export default defineEventHandler(async (event) => {
 
   if (!dataId) {
     return { ok: true, ignored: true, reason: 'no_data_id' }
+  }
+
+  // El botón "Probar" del panel de Mercado Pago envía una notificación sintética
+  // con data.id=123456. No corresponde a una preapproval real y puede fallar la
+  // firma por usar datos fijos del simulador. La aceptamos solo como healthcheck;
+  // no activa planes ni consulta MP.
+  const esPruebaPanelMercadoPago =
+    dataId === '123456' &&
+    String(body?.id ?? '') === '123456' &&
+    body?.action === 'updated' &&
+    (body?.type === 'subscription_preapproval' || body?.type === 'preapproval')
+  if (esPruebaPanelMercadoPago) {
+    return { ok: true, test: true, ignored: true }
   }
 
   // Validación de firma — crítica para evitar que cualquiera active planes falsos.
@@ -175,14 +189,7 @@ export default defineEventHandler(async (event) => {
               cancelled_at:  new Date().toISOString(),
             }),
           })
-          await fetch(`https://api.mercadopago.com/preapproval/${o.mp_preapproval_id}`, {
-            method:  'PUT',
-            headers: {
-              Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ status: 'cancelled' }),
-          }).catch(() => { /* best-effort */ })
+          await cancelarPreapprovalMercadoPago(o.mp_preapproval_id, MP_ACCESS_TOKEN).catch(() => { /* best-effort */ })
         }
 
         // INSERT del registro local con datos derivados de MP + planes.ts.
@@ -405,14 +412,8 @@ export default defineEventHandler(async (event) => {
       if (llegoAlLimite) {
         // Cancelar en MP (best-effort: si falla, marcamos local igual y
         // dependemos de que MP eventualmente nos avise vía preapproval webhook)
-        await fetch(`https://api.mercadopago.com/preapproval/${pay.preapproval_id}`, {
-          method:  'PUT',
-          headers: {
-            Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ status: 'cancelled' }),
-        }).catch(err => console.error('[webhook] cancel MP after failed payments:', err))
+        await cancelarPreapprovalMercadoPago(pay.preapproval_id, MP_ACCESS_TOKEN)
+          .catch(err => console.error('[webhook] cancel MP after failed payments:', err))
 
         // Downgrade a Free
         const okDowngrade = await asignarPlanUsuario({

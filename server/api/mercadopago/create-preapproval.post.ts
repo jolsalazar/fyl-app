@@ -12,6 +12,7 @@
 //   SUPABASE_SERVICE_KEY     Service role para escritura sin RLS
 
 import { PLANES_CONFIG, esPlanValido, getPrecioInicial, getPrecioRegular, tienePromo, DURACION_PROMO_DIAS, type Plan } from '~~/utils/planes'
+import { cancelarPreapprovalMercadoPago } from '~~/server/utils/mercadopago'
 import { serverSupabaseUser } from '#supabase/server'
 
 const SUBSCRIPTION_YEARS = 10
@@ -143,16 +144,9 @@ export default defineEventHandler(async (event) => {
     //    la nueva. Solo errores de red (catch) son best-effort.
     let mpCancelOk = true
     try {
-      const mpCancelRes = await fetch(`https://api.mercadopago.com/preapproval/${ant.mp_preapproval_id}`, {
-        method:  'PUT',
-        headers: {
-          Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: 'cancelled' }),
-      })
+      const mpCancelRes = await cancelarPreapprovalMercadoPago(ant.mp_preapproval_id, MP_ACCESS_TOKEN)
       if (!mpCancelRes.ok) {
-        console.error('[create-preapproval] MP rechazó cancelar previa:', mpCancelRes.status, await mpCancelRes.text())
+        console.error('[create-preapproval] MP rechazó cancelar previa:', mpCancelRes.status, mpCancelRes.body)
         mpCancelOk = false
       }
     } catch (err) {

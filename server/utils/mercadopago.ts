@@ -126,6 +126,31 @@ export async function obtenerPreapprovalMercadoPago(preapprovalId: string, acces
   }>
 }
 
+/** Cancela una preapproval en MP. La doc oficial alterna entre `cancelled` y `canceled`; probamos ambos. */
+export async function cancelarPreapprovalMercadoPago(preapprovalId: string, accessToken: string) {
+  async function request(status: 'cancelled' | 'canceled') {
+    const res = await fetch(`https://api.mercadopago.com/preapproval/${preapprovalId}`, {
+      method:  'PUT',
+      headers: {
+        Authorization:  `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status }),
+    })
+    return {
+      ok:     res.ok,
+      status: res.status,
+      body:   res.ok ? '' : await res.text().catch(() => ''),
+    }
+  }
+
+  const first = await request('cancelled')
+  if (first.ok) return first
+
+  const second = await request('canceled')
+  return second.ok ? second : first
+}
+
 /** Obtiene el detalle de un authorized_payment (cobro mensual de una suscripción). */
 export async function obtenerAuthorizedPaymentMercadoPago(paymentId: string, accessToken: string) {
   const res = await fetch(`https://api.mercadopago.com/authorized_payments/${paymentId}`, {

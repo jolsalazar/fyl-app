@@ -1,6 +1,6 @@
 # Suscripciones recurrentes — Deploy y testing
 
-Guía operativa para activar el flujo de pagos recurrentes con MercadoPago en producción.
+Guía operativa para activar el flujo de pagos recurrentes con MercadoPago en local/sandbox y producción.
 
 ## 1. Variables de entorno requeridas
 
@@ -26,6 +26,29 @@ RESEND_API_KEY=<api key de Resend>      # ya existente para welcome email
 
 `mpEnabled` (frontend) se deriva automáticamente de `MP_ACCESS_TOKEN`. Si está
 seteado, los botones de "Contratar" aparecen activos.
+
+### Localhost / sandbox Mercado Pago
+
+Para probar desde localhost, Mercado Pago igualmente necesita una URL pública
+para llamar el webhook. Usar ngrok, Cloudflare Tunnel o equivalente y configurar:
+
+```bash
+APP_URL=https://<tunel-publico>
+MP_ACCESS_TOKEN=<access token TEST del usuario de prueba vendedor>
+MP_WEBHOOK_SECRET=<secret del webhook de la app del vendedor de prueba>
+```
+
+En el panel de Mercado Pago, configurar el webhook de la aplicación sandbox con:
+
+- **URL**: `https://<tunel-publico>/api/mercadopago/webhook`
+- **Eventos**: `payment`, `preapproval`, `subscription_authorized_payment`
+
+Para el checkout de prueba se usan dos cuentas de prueba:
+
+- **Vendedor**: dueño de la aplicación y de las credenciales `TEST-*`.
+- **Comprador**: usuario con el que se inicia sesión en Mercado Pago al pagar.
+
+No usar la misma cuenta como vendedor y comprador durante el flujo de sandbox.
 
 ## 2. Migraciones
 
