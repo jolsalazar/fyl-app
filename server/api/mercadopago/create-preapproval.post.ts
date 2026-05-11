@@ -15,7 +15,7 @@ import { PLANES_CONFIG, esPlanValido, getPrecioInicial, getPrecioRegular, tieneP
 import { cancelarPreapprovalMercadoPago } from '~~/server/utils/mercadopago'
 import { serverSupabaseUser } from '#supabase/server'
 
-const SUBSCRIPTION_YEARS = 10
+const DEFAULT_SUBSCRIPTION_YEARS = 2
 
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
@@ -23,6 +23,10 @@ export default defineEventHandler(async (event) => {
   const APP_URL              = process.env.APP_URL?.replace(/\/+$/, '')
   const SUPABASE_URL         = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
+  const subscriptionYearsRaw = Number(process.env.MP_SUBSCRIPTION_YEARS ?? DEFAULT_SUBSCRIPTION_YEARS)
+  const SUBSCRIPTION_YEARS   = Number.isFinite(subscriptionYearsRaw)
+    ? Math.max(1, Math.min(subscriptionYearsRaw, 5))
+    : DEFAULT_SUBSCRIPTION_YEARS
 
   if (!MP_ACCESS_TOKEN || !APP_URL || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     setResponseStatus(event, 503)
@@ -228,7 +232,20 @@ export default defineEventHandler(async (event) => {
     })
     await rollbackCanceladas()
     setResponseStatus(event, 422)
-    return { ok: false, error: 'preapproval_creation_failed', mp_status: mpRes.status, mp_request_id: mpRequestId, mp_detail: mpError }
+    return {
+      ok:            false,
+      error:         'preapproval_creation_failed',
+      mp_status:     mpRes.status,
+      mp_request_id: mpRequestId,
+      mp_detail:     mpError,
+      mp_payload: {
+        payer_email:    preapproval.payer_email,
+        transaction_amount: preapproval.auto_recurring.transaction_amount,
+        currency_id:    preapproval.auto_recurring.currency_id,
+        end_date:       preapproval.auto_recurring.end_date,
+        status:         preapproval.status,
+      },
+    }
   }
 
   const mpData = await mpRes.json() as {
