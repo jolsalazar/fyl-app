@@ -49,8 +49,7 @@ export default defineEventHandler(async (event) => {
   const precioInicial = getPrecioInicial(plan as Plan)
   const precioRegular = getPrecioRegular(plan as Plan)
   const hayPromo      = tienePromo(plan as Plan)
-  const esSandboxMp   = MP_ACCESS_TOKEN.startsWith('TEST-')
-  const payerEmail    = esSandboxMp && MP_TEST_PAYER_EMAIL ? MP_TEST_PAYER_EMAIL : user.email
+  const payerEmail    = MP_TEST_PAYER_EMAIL || user.email
   const subscriptionEndDate = new Date()
   subscriptionEndDate.setFullYear(subscriptionEndDate.getFullYear() + SUBSCRIPTION_YEARS)
 
