@@ -38,14 +38,20 @@ export function usePlan() {
     if (!user) { _loading.value = false; return }
     const { data } = await supabase
       .from('profiles')
-      .select('plan')
+      .select('plan, plan_expires_at')
       .eq('id', user.id)
       .maybeSingle()
 
     // Normalizar nombres viejos por si la migración no corrió en producción
     const LEGACY: Record<string, Plan> = { pro: 'advanced', agencia: 'agency' }
     const raw = data?.plan ?? 'free'
-    _plan.value    = (LEGACY[raw] ?? (raw in PLAN_CONFIG ? raw : 'free')) as Plan
+    const normalized = (LEGACY[raw] ?? (raw in PLAN_CONFIG ? raw : 'free')) as Plan
+    const expired = Boolean(
+      data?.plan_expires_at &&
+      new Date(data.plan_expires_at).getTime() <= Date.now() &&
+      normalized !== 'free',
+    )
+    _plan.value    = expired ? 'free' : normalized
     _loading.value = false
     _loaded.value  = true
   }

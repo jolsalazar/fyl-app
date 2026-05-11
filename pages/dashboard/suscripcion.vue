@@ -51,7 +51,7 @@
           </div>
 
           <div v-if="proximoCobro" class="row">
-            <span class="row-label">{{ proximoCobroEsEstimado ? 'Próximo cobro estimado' : 'Próximo cobro' }}</span>
+            <span class="row-label">{{ sub.source === 'one_time_payment' ? 'Vigente hasta' : (proximoCobroEsEstimado ? 'Próximo cobro estimado' : 'Próximo cobro') }}</span>
             <span class="row-value">{{ fechaFmt(proximoCobro) }}</span>
           </div>
 
@@ -93,7 +93,7 @@
         </section>
 
         <!-- Acciones para suscripción activa -->
-        <section v-if="sub.status === 'authorized'" class="actions-card">
+        <section v-if="sub.status === 'authorized' && sub.source !== 'one_time_payment'" class="actions-card">
           <div v-if="!confirmandoCancelar">
             <button class="btn-cancelar" @click="confirmandoCancelar = true">
               Cancelar suscripción
@@ -141,6 +141,7 @@ type Subscription = {
   last_payment_at:  string | null
   cancelled_at:     string | null
   created_at:       string
+  source?:           'preapproval' | 'one_time_payment'
 }
 
 const sub                  = ref<Subscription | null>(null)
@@ -158,6 +159,11 @@ const planNombre = computed(() => sub.value && esPlanValido(sub.value.plan)
 // pudo obtener); si no, estimar (último cobro o inicio) + 1 mes.
 const proximoCobro = computed(() => {
   if (!sub.value || sub.value.status !== 'authorized') return null
+  if (sub.value.source === 'one_time_payment' && sub.value.started_at) {
+    const d = new Date(sub.value.started_at)
+    d.setDate(d.getDate() + 30)
+    return d.toISOString()
+  }
   if (nextPaymentDate.value) return nextPaymentDate.value
   const base = sub.value.last_payment_at ?? sub.value.started_at
   if (!base) return null

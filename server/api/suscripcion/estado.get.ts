@@ -34,11 +34,44 @@ export default defineEventHandler(async (event) => {
 
   const lista   = subs ?? []
   const activas = lista.filter(s => s.status === 'authorized' || s.status === 'pending')
-  const principal = activas[0] ?? lista[0] ?? null
+  let principal = activas[0] ?? lista[0] ?? null
+
+  if (!principal) {
+    const { data: pagos, error: pagosError } = await supabase
+      .from('one_time_plan_payments')
+      .select('id, plan, amount, paid_at, expires_at, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (pagosError) {
+      setResponseStatus(event, 500)
+      return { ok: false, error: 'payments_query_failed' }
+    }
+
+    const pago = pagos?.[0]
+    if (pago && new Date(pago.expires_at).getTime() > Date.now()) {
+      principal = {
+        id:                pago.id,
+        plan:              pago.plan,
+        status:            'authorized',
+        mp_preapproval_id:  '',
+        current_amount:    pago.amount,
+        regular_amount:    pago.amount,
+        promo_applied:     true,
+        promo_ends_at:     null,
+        started_at:        pago.paid_at,
+        last_payment_at:   pago.paid_at,
+        cancelled_at:      null,
+        created_at:        pago.created_at,
+        source:            'one_time_payment',
+      } as typeof principal & { source: string }
+    }
+  }
 
   // Para sub authorized: intentar enriquecer con next_payment_date real de MP
   let nextPaymentDate: string | null = null
-  if (principal?.status === 'authorized' && process.env.MP_ACCESS_TOKEN) {
+  if (principal?.status === 'authorized' && principal.mp_preapproval_id && process.env.MP_ACCESS_TOKEN) {
     const mpSub = await obtenerPreapprovalMercadoPago(
       principal.mp_preapproval_id,
       process.env.MP_ACCESS_TOKEN,

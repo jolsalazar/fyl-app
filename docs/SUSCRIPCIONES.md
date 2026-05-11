@@ -1,6 +1,34 @@
 # Suscripciones recurrentes — Deploy y testing
 
-Guía operativa para activar el flujo de pagos recurrentes con MercadoPago en local/sandbox y producción.
+Guía operativa para activar pagos mensuales con MercadoPago.
+
+## Decisión actual: pago mensual no recurrente
+
+Desde mayo de 2026 el checkout principal usa **Checkout Pro pago único**:
+
+- Endpoint frontend: `/api/mercadopago/create-preference`
+- Webhook procesado: `payment`
+- Efecto local: plan activo por 30 días en `profiles.plan_expires_at`
+- Tabla de historial: `one_time_plan_payments`
+
+El flujo recurrente con `/preapproval` queda documentado abajo como referencia,
+pero no es el flujo activo del botón "Contratar".
+
+Motivo: en pruebas reales con Mercado Pago Chile, el flujo de suscripciones
+recurrentes tuvo demasiada fricción:
+
+- El sandbox exige vendedor/comprador de prueba y no entrega consistentemente el
+  email del comprador requerido por `payer_email`.
+- `/preapproval` devolvió `500 Internal server error` con varios emails de
+  prueba válidos o aparentemente válidos.
+- Al mezclar comprador test con collector real devolvió `Both payer and collector must be real or test users`.
+- Con credenciales productivas el checkout recurrente quedó bloqueado en la
+  autorización de tarjeta, mostrando cargos temporales de validación ($950) y
+  botón deshabilitado.
+
+Próximo paso comercial recomendado: constituir/usar empresa y evaluar un PSP o
+adquirente que soporte suscripción con RUT empresa y menor fricción. Mientras
+tanto, vender mensualidades manuales renovables por Mercado Pago.
 
 ## 1. Variables de entorno requeridas
 
@@ -17,6 +45,9 @@ SUPABASE_KEY=<anon/public key>          # ya existente, frontend
 # App
 APP_URL=https://app.fondosylicitaciones.cl
 
+# Prueba controlada en producción (opcional, remover al terminar)
+MP_TEST_AMOUNT=1000
+
 # Cron (autenticación de endpoints /api/cron/*)
 CRON_SECRET=<openssl rand -hex 32>
 
@@ -27,7 +58,7 @@ RESEND_API_KEY=<api key de Resend>      # ya existente para welcome email
 `mpEnabled` (frontend) se deriva automáticamente de `MP_ACCESS_TOKEN`. Si está
 seteado, los botones de "Contratar" aparecen activos.
 
-### Localhost / sandbox Mercado Pago
+### Localhost / sandbox Mercado Pago para recurrente (referencia)
 
 Para probar desde localhost, Mercado Pago igualmente necesita una URL pública
 para llamar el webhook. Usar ngrok, Cloudflare Tunnel o equivalente y configurar:
@@ -71,9 +102,9 @@ Panel MP → **Webhooks** → **Configurar**:
 
 - **URL**: `https://app.fondosylicitaciones.cl/api/mercadopago/webhook`
 - **Eventos a suscribir**:
-  - `payment` (mantenido para compat con pagos únicos legacy)
-  - `preapproval` (cambios de estado de la suscripción)
-  - `subscription_authorized_payment` (cobros mensuales)
+  - `payment` (flujo activo mensual no recurrente)
+  - `preapproval` (referencia recurrente, no usado por el botón actual)
+  - `subscription_authorized_payment` (referencia recurrente)
 - Copiar el "secret" generado y guardarlo como `MP_WEBHOOK_SECRET`
 
 ## 4. Cron diario
@@ -101,6 +132,7 @@ GitHub Actions / Vercel Cron / Cloudflare Cron — POST diario a:
 
 - `https://app.fondosylicitaciones.cl/api/cron/aplicar-cambio-promo` (03:00 UTC)
 - `https://app.fondosylicitaciones.cl/api/cron/enviar-aviso-promo`   (14:00 UTC)
+- `https://app.fondosylicitaciones.cl/api/cron/expirar-planes`       (05:00 UTC)
 
 Header obligatorio: `x-cron-secret: <CRON_SECRET>`
 
@@ -130,71 +162,46 @@ jobs:
             https://app.fondosylicitaciones.cl/api/cron/enviar-aviso-promo
 ```
 
-## 5. Smoke test en sandbox MP
+## 5. Smoke test pago mensual no recurrente
 
-MP tiene cuentas de prueba para sandbox. Crear desde panel MP > "Cuentas de prueba".
+Para una prueba productiva controlada, setear temporalmente:
 
-### Test 1 — Happy path: contratar Starter
-1. Iniciar sesión con un usuario de test
-2. Ir a `/planes` → click "Contratar Starter"
-3. Verificar redirect a checkout MP (sandbox)
-4. Pagar con tarjeta de prueba (`4509 9535 6623 3704`, CVV 123, vencimiento futuro)
-5. Volver a la app → debe mostrar `?sub=pending` y toast "Activando…"
-6. Esperar webhook (~5-10s)
-7. Verificar en `/dashboard/suscripcion`:
-   - Status: Activa
-   - Monto: $5.990
-   - Promo válida hasta: +90 días
-8. Verificar en BD:
+```bash
+MP_TEST_AMOUNT=1000
+```
+
+Luego:
+
+1. Iniciar sesión con un usuario real sin alias `+` en el email.
+2. Ir a `/planes` → click "Contratar Starter".
+3. Verificar redirect a Checkout Pro.
+4. Pagar $1.000.
+5. Volver a la app → debe mostrar `?pago=ok`.
+6. Esperar webhook (~5-10s).
+7. Verificar en BD:
    ```sql
-   select * from subscriptions where user_id = '<id>';
-   select plan from profiles where id = '<id>';  -- debe ser 'starter'
+   select plan, plan_expires_at from profiles where id = '<id>';
+   select * from one_time_plan_payments where user_id = '<id>' order by created_at desc;
    ```
+8. Remover `MP_TEST_AMOUNT` y redeploy antes de vender.
 
-### Test 2 — Cancelación
-1. En `/dashboard/suscripcion` → click "Cancelar suscripción"
-2. Confirmar
-3. Verificar:
-   - Toast "Suscripción cancelada"
-   - Status: Cancelada
-   - Plan en profiles: `free`
-   - En MP: la preapproval debe quedar en `cancelled`
+### Vencimiento manual
 
-### Test 3 — Cambio promo→regular (manual, simular)
-1. UPDATE manual en BD para acelerar:
-   ```sql
-   update subscriptions
-      set promo_ends_at = now() - interval '1 minute'
-    where user_id = '<id>' and status = 'authorized';
-   ```
-2. Llamar manualmente al cron:
-   ```bash
-   curl -X POST \
-     -H "x-cron-secret: $CRON_SECRET" \
-     https://app.fondosylicitaciones.cl/api/cron/aplicar-cambio-promo
-   ```
-3. Verificar respuesta `{ ok: true, exitosos: 1 }`
-4. Verificar:
-   - `subscriptions.current_amount = regular_amount`
-   - `subscriptions.promo_applied = true`
-   - Email recibido con confirmación
-   - En MP el `transaction_amount` cambió
+Para simular vencimiento:
 
-### Test 4 — Aviso pre-cambio
-1. UPDATE manual para que esté a 5 días del cambio:
-   ```sql
-   update subscriptions
-      set promo_ends_at = now() + interval '5 days',
-          aviso_promo_enviado_at = null
-    where user_id = '<id>';
-   ```
-2. Llamar al cron:
-   ```bash
-   curl -X POST \
-     -H "x-cron-secret: $CRON_SECRET" \
-     https://app.fondosylicitaciones.cl/api/cron/enviar-aviso-promo
-   ```
-3. Verificar email recibido + `aviso_promo_enviado_at` actualizado
+```sql
+update profiles
+   set plan_expires_at = now() - interval '1 minute'
+ where id = '<id>';
+```
+
+Luego llamar:
+
+```bash
+curl -X POST \
+  -H "x-cron-secret: $CRON_SECRET" \
+  https://app.fondosylicitaciones.cl/api/cron/expirar-planes
+```
 
 ## 6. Troubleshooting
 
@@ -202,13 +209,12 @@ MP tiene cuentas de prueba para sandbox. Crear desde panel MP > "Cuentas de prue
 |---------|----------------|-------------|
 | Webhook responde 401 `invalid_signature` | `MP_WEBHOOK_SECRET` mal configurado | Re-copiar del panel MP |
 | `mercadopago_not_configured` | Falta env var | Verificar todas las MP_* y SUPABASE_* |
-| Subscription queda en `pending` | Webhook no llega | Revisar URL en panel MP, eventos suscritos |
+| Plan no se activa después de pagar | Webhook `payment` no llega | Revisar URL en panel MP, evento `payment` y firma |
 | Cron 401 `unauthorized` | `CRON_SECRET` no coincide | Verificar header `x-cron-secret` |
-| PATCH MP devuelve 404 | preapproval_id inválido | Verificar que existe en panel MP |
+| Plan pagado sigue activo después de vencer | Cron `expirar-planes` no corre | Revisar cron externo/pg_cron |
 | Email no llega | `RESEND_API_KEY` faltante o dominio no verificado | Logs de Resend dashboard |
 
 ## 7. Monitoreo recomendado
 
 - Revisar `cron.job_run_details` semanalmente (si pg_cron)
-- Alerta si `subscriptions.failed_payments >= 2` (cliente próximo a perder plan)
-- Métricas: contratadas/mes, canceladas/mes, churn, downgrade por fallo
+- Métricas: pagos mensuales, renovaciones, vencimientos, upgrades/downgrades manuales

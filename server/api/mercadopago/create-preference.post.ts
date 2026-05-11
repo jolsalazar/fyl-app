@@ -1,4 +1,5 @@
-// Crea una preferencia de pago en MercadoPago para que el usuario logueado contrate un plan.
+// Crea una preferencia de pago mensual NO recurrente en MercadoPago para que
+// el usuario logueado contrate un plan por 30 días.
 // El frontend hace POST { plan: 'starter' | 'advanced' | 'agency' } y recibe { init_point }
 // para redirigir al checkout de MP.
 //
@@ -9,14 +10,13 @@
 //   MP_ACCESS_TOKEN      Access token del vendedor
 //   APP_URL              URL pública de la app (para back_urls de MP)
 //
-// Precios: definidos acá temporalmente. Mover a tabla `planes` en DB cuando exista.
-
 import { PLANES_CONFIG, esPlanValido, getPrecioInicial, type Plan } from '~~/utils/planes'
 import { serverSupabaseUser } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN
-  const APP_URL         = process.env.APP_URL
+  const MP_TEST_AMOUNT  = process.env.MP_TEST_AMOUNT
+  const APP_URL         = process.env.APP_URL?.replace(/\/+$/, '')
 
   if (!MP_ACCESS_TOKEN || !APP_URL) {
     setResponseStatus(event, 503)
@@ -37,15 +37,19 @@ export default defineEventHandler(async (event) => {
   }
 
   // getPrecioInicial devuelve precio_promo si el plan tiene promo, sino precio regular.
-  // Provisorio: este endpoint cobra UN MES. Fase 2 migra a /preapproval para suscripción
-  // recurrente con cambio automático promo→regular a los 90 días.
+  // MP_TEST_AMOUNT permite una prueba productiva controlada (mínimo MP CLP: 950).
+  const montoOverride = MP_TEST_AMOUNT ? Number(MP_TEST_AMOUNT) : NaN
+  const unitPrice = Number.isFinite(montoOverride) && montoOverride >= 950
+    ? Math.round(montoOverride)
+    : getPrecioInicial(plan)
+
   const preference = {
     items: [
       {
         title:       `Plan ${PLANES_CONFIG[plan].nombre}`,
         quantity:    1,
         currency_id: 'CLP',
-        unit_price:  getPrecioInicial(plan),
+        unit_price:  unitPrice,
       },
     ],
     payer: {
@@ -72,8 +76,27 @@ export default defineEventHandler(async (event) => {
   })
 
   if (!res.ok) {
+    const mpError = await res.text().catch(() => '(no body)')
+    const mpRequestId = res.headers.get('x-request-id') ?? res.headers.get('x-correlation-id')
+    console.error('[create-preference] MP rechazó preference:', {
+      status: res.status,
+      mpRequestId,
+      detail: mpError,
+      payload: {
+        payer_email: user.email,
+        unit_price: unitPrice,
+        currency_id: 'CLP',
+        external_reference: preference.external_reference,
+      },
+    })
     setResponseStatus(event, 502)
-    return { ok: false, error: 'preference_creation_failed' }
+    return {
+      ok:            false,
+      error:         'preference_creation_failed',
+      mp_status:     res.status,
+      mp_request_id: mpRequestId,
+      mp_detail:     mpError,
+    }
   }
 
   const data = await res.json() as { id: string; init_point: string; sandbox_init_point: string }
