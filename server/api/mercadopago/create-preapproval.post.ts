@@ -206,7 +206,6 @@ export default defineEventHandler(async (event) => {
     headers: {
       Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
-      ...(esSandboxMp ? { 'X-scope': 'stage' } : {}),
     },
     body: JSON.stringify(preapproval),
   })
