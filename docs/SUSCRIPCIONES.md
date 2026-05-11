@@ -38,6 +38,7 @@ MP_ACCESS_TOKEN=<access token TEST del usuario de prueba vendedor>
 MP_WEBHOOK_SECRET=<secret del webhook de la app del vendedor de prueba>
 MP_TEST_PAYER_EMAIL=<email del comprador de prueba, opcional pero recomendado>
 MP_SUBSCRIPTION_YEARS=2
+MP_TEST_AMOUNT=1000 # opcional: override temporal, minimo CLP 950
 ```
 
 En el panel de Mercado Pago, configurar el webhook de la aplicación sandbox con:

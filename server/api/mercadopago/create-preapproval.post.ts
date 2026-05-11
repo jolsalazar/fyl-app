@@ -20,6 +20,7 @@ const DEFAULT_SUBSCRIPTION_YEARS = 2
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
   const MP_TEST_PAYER_EMAIL  = process.env.MP_TEST_PAYER_EMAIL
+  const MP_TEST_AMOUNT       = process.env.MP_TEST_AMOUNT
   const APP_URL              = process.env.APP_URL?.replace(/\/+$/, '')
   const SUPABASE_URL         = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
@@ -46,7 +47,10 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'invalid_plan' }
   }
 
-  const precioInicial = getPrecioInicial(plan as Plan)
+  const montoOverride = MP_TEST_AMOUNT ? Number(MP_TEST_AMOUNT) : NaN
+  const precioInicial = Number.isFinite(montoOverride) && montoOverride >= 950
+    ? Math.round(montoOverride)
+    : getPrecioInicial(plan as Plan)
   const precioRegular = getPrecioRegular(plan as Plan)
   const hayPromo      = tienePromo(plan as Plan)
   const payerEmail    = MP_TEST_PAYER_EMAIL || user.email
