@@ -36,6 +36,7 @@ para llamar el webhook. Usar ngrok, Cloudflare Tunnel o equivalente y configurar
 APP_URL=https://<tunel-publico>
 MP_ACCESS_TOKEN=<access token TEST del usuario de prueba vendedor>
 MP_WEBHOOK_SECRET=<secret del webhook de la app del vendedor de prueba>
+MP_TEST_PAYER_EMAIL=<email del comprador de prueba, opcional pero recomendado>
 ```
 
 En el panel de Mercado Pago, configurar el webhook de la aplicación sandbox con:
@@ -47,6 +48,7 @@ Para el checkout de prueba se usan dos cuentas de prueba:
 
 - **Vendedor**: dueño de la aplicación y de las credenciales `TEST-*`.
 - **Comprador**: usuario con el que se inicia sesión en Mercado Pago al pagar.
+  Usar el campo `email` del usuario de prueba, no el `nickname`/usuario `TESTUSER...`.
 
 No usar la misma cuenta como vendedor y comprador durante el flujo de sandbox.
 

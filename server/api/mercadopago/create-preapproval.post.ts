@@ -19,6 +19,7 @@ const SUBSCRIPTION_YEARS = 10
 
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
+  const MP_TEST_PAYER_EMAIL  = process.env.MP_TEST_PAYER_EMAIL
   const APP_URL              = process.env.APP_URL?.replace(/\/+$/, '')
   const SUPABASE_URL         = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
@@ -44,6 +45,8 @@ export default defineEventHandler(async (event) => {
   const precioInicial = getPrecioInicial(plan as Plan)
   const precioRegular = getPrecioRegular(plan as Plan)
   const hayPromo      = tienePromo(plan as Plan)
+  const esSandboxMp   = MP_ACCESS_TOKEN.startsWith('TEST-')
+  const payerEmail    = esSandboxMp && MP_TEST_PAYER_EMAIL ? MP_TEST_PAYER_EMAIL : user.email
   const subscriptionEndDate = new Date()
   subscriptionEndDate.setFullYear(subscriptionEndDate.getFullYear() + SUBSCRIPTION_YEARS)
 
@@ -186,7 +189,7 @@ export default defineEventHandler(async (event) => {
   const preapproval = {
     reason:             `Plan ${PLANES_CONFIG[plan as Plan].nombre} - Fondos y Licitaciones`,
     external_reference: `${user.id}:${plan}`,
-    payer_email:        user.email,
+    payer_email:        payerEmail,
     back_url:           `${APP_URL}/dashboard`,
     auto_recurring: {
       frequency:          1,
@@ -203,6 +206,7 @@ export default defineEventHandler(async (event) => {
     headers: {
       Authorization:  `Bearer ${MP_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
+      ...(esSandboxMp ? { 'X-scope': 'stage' } : {}),
     },
     body: JSON.stringify(preapproval),
   })
@@ -217,7 +221,7 @@ export default defineEventHandler(async (event) => {
       payload: {
         reason: preapproval.reason,
         external_reference: preapproval.external_reference,
-        payer_email_domain: user.email.split('@')[1] ?? null,
+        payer_email: preapproval.payer_email,
         back_url: preapproval.back_url,
         auto_recurring: preapproval.auto_recurring,
         status: preapproval.status,
