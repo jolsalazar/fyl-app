@@ -15,7 +15,6 @@ import { serverSupabaseUser } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN
-  const MP_TEST_AMOUNT  = process.env.MP_TEST_AMOUNT
   const APP_URL         = process.env.APP_URL?.replace(/\/+$/, '')
 
   if (!MP_ACCESS_TOKEN || !APP_URL) {
@@ -37,11 +36,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // getPrecioInicial devuelve precio_promo si el plan tiene promo, sino precio regular.
-  // MP_TEST_AMOUNT permite una prueba productiva controlada (mínimo MP CLP: 950).
-  const montoOverride = MP_TEST_AMOUNT ? Number(MP_TEST_AMOUNT) : NaN
-  const unitPrice = Number.isFinite(montoOverride) && montoOverride >= 950
-    ? Math.round(montoOverride)
-    : getPrecioInicial(plan)
+  const unitPrice = getPrecioInicial(plan)
 
   const preference = {
     items: [

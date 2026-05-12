@@ -452,26 +452,6 @@ export default defineEventHandler(async (event) => {
       return { ok: false, error: 'invalid_external_reference' }
     }
 
-    const perfilRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=plan,plan_expires_at`,
-      {
-        headers: {
-          apikey:        SUPABASE_SERVICE_KEY,
-          Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-        },
-      },
-    )
-    const perfiles = perfilRes.ok
-      ? await perfilRes.json() as Array<{ plan: string; plan_expires_at: string | null }>
-      : []
-    const perfil = perfiles[0]
-    const paidAt = pago.date_approved ? new Date(pago.date_approved) : new Date()
-    const currentExpiry = perfil?.plan_expires_at ? new Date(perfil.plan_expires_at) : null
-    const base = perfil?.plan === plan && currentExpiry && currentExpiry.getTime() > paidAt.getTime()
-      ? currentExpiry
-      : paidAt
-    const expiresAt = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000)
-
     const asignado = await asignarPlanUsuario({
       supabaseUrl:    SUPABASE_URL,
       serviceRoleKey: SUPABASE_SERVICE_KEY,
@@ -483,44 +463,7 @@ export default defineEventHandler(async (event) => {
       return { ok: false, error: 'rpc_failed' }
     }
 
-    await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}`, {
-      method:  'PATCH',
-      headers: {
-        apikey:         SUPABASE_SERVICE_KEY,
-        Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer:         'return=minimal',
-      },
-      body: JSON.stringify({
-        plan_status:     'active',
-        plan_expires_at: expiresAt.toISOString(),
-      }),
-    })
-
-    const paymentInsertRes = await fetch(`${SUPABASE_URL}/rest/v1/one_time_plan_payments`, {
-      method:  'POST',
-      headers: {
-        apikey:         SUPABASE_SERVICE_KEY,
-        Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer:         'resolution=ignore-duplicates,return=minimal',
-      },
-      body: JSON.stringify({
-        user_id:       userId,
-        plan,
-        mp_payment_id: String(pago.id),
-        status:        pago.status,
-        amount:        pago.transaction_amount,
-        currency_id:   'CLP',
-        paid_at:       paidAt.toISOString(),
-        expires_at:    expiresAt.toISOString(),
-      }),
-    })
-    if (!paymentInsertRes.ok) {
-      console.error('[webhook] one_time_plan_payments insert failed:', await paymentInsertRes.text())
-    }
-
-    procesoExitoso = true; return { ok: true, processed: true, type: 'payment', userId, plan, expires_at: expiresAt.toISOString() }
+    procesoExitoso = true; return { ok: true, processed: true, type: 'payment', userId, plan }
   }
 
   // Ignorar cualquier otro tipo (merchant_order, plans, etc.)

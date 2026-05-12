@@ -1,5 +1,5 @@
 // Configuración única de planes — fuente de verdad para precios y nombres.
-// Usado por: planes.vue (UI), create-preference.post.ts (cobro), registro.vue (badge),
+// Usado por: planes.vue (UI), create-preapproval.post.ts (suscripción), registro.vue (badge),
 // onboarding.vue (intención), web Astro (display + JSON-LD).
 //
 // Convención de promo: Starter y Advanced tienen precio promocional durante los
