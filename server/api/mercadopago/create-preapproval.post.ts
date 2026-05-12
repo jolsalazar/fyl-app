@@ -96,7 +96,7 @@ export default defineEventHandler(async (event) => {
   const queryActivas = `${SUPABASE_URL}/rest/v1/subscriptions` +
     `?user_id=eq.${user.id}` +
     `&status=in.(pending,authorized)` +
-    `&select=id,mp_preapproval_id`
+    `&select=id,mp_preapproval_id,status`
 
   const activasRes = await fetch(queryActivas, {
     headers: {
@@ -105,7 +105,7 @@ export default defineEventHandler(async (event) => {
     },
   })
   const activas = activasRes.ok
-    ? await activasRes.json() as Array<{ id: string; mp_preapproval_id: string }>
+    ? await activasRes.json() as Array<{ id: string; mp_preapproval_id: string; status: string }>
     : []
 
   // Track de las que ya cancelamos para hacer rollback si falla a mitad.
@@ -147,9 +147,13 @@ export default defineEventHandler(async (event) => {
     //    cancelación. Si seguimos, MP podría cobrar tanto la vieja como
     //    la nueva. Solo errores de red (catch) son best-effort.
     let mpCancelOk = true
+    let mpCancelStatus: number | null = null
+    let mpCancelBody = ''
     try {
       const mpCancelRes = await cancelarPreapprovalMercadoPago(ant.mp_preapproval_id, MP_ACCESS_TOKEN)
       if (!mpCancelRes.ok) {
+        mpCancelStatus = mpCancelRes.status
+        mpCancelBody = mpCancelRes.body
         console.error('[create-preapproval] MP rechazó cancelar previa:', mpCancelRes.status, mpCancelRes.body)
         mpCancelOk = false
       }
@@ -160,10 +164,29 @@ export default defineEventHandler(async (event) => {
     }
 
     if (!mpCancelOk) {
+      // Durante las pruebas podemos quedar con preapprovals pending creadas con
+      // otro vendedor/token. MP no permite cancelarlas con el token actual
+      // ("Invalid action for user"), pero al estar pending no hay cobro activo.
+      // Las cerramos localmente para liberar el índice y permitir crear la real.
+      const isInvalidSellerPending =
+        ant.status === 'pending' &&
+        mpCancelStatus === 401 &&
+        mpCancelBody.includes('Invalid action for user')
+
+      if (isInvalidSellerPending) {
+        console.error('[create-preapproval] cancelando localmente preapproval pending de otro vendedor:', ant.mp_preapproval_id)
+      } else {
       // Rollback de las que ya cancelamos correctamente
-      await rollbackCanceladas()
-      setResponseStatus(event, 502)
-      return { ok: false, error: 'previous_cancel_failed' }
+        await rollbackCanceladas()
+        setResponseStatus(event, 409)
+        return {
+          ok: false,
+          error: 'previous_cancel_failed',
+          detail: ant.status === 'authorized'
+            ? 'previous_subscription_authorized_with_different_seller'
+            : 'previous_subscription_could_not_be_cancelled',
+        }
+      }
     }
 
     // 2. Marcar local cancelled con razón upgrade (libera el unique index)
