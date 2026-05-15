@@ -7,6 +7,7 @@
 //
 // Variables de entorno requeridas:
 //   MP_ACCESS_TOKEN          Access token del vendedor
+//   MP_PAYER_EMAIL_OVERRIDE  (opcional) Email pagador para pruebas con test users
 //   APP_URL                  URL pública de la app (back_url)
 //   SUPABASE_URL             Para insertar la subscription
 //   SUPABASE_SERVICE_KEY     Service role para escritura sin RLS
@@ -19,6 +20,7 @@ const DEFAULT_SUBSCRIPTION_YEARS = 2
 
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
+  const MP_PAYER_EMAIL_OVERRIDE = process.env.MP_PAYER_EMAIL_OVERRIDE?.trim()
   const APP_URL              = process.env.APP_URL?.replace(/\/+$/, '')
   const SUPABASE_URL         = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
@@ -213,7 +215,7 @@ export default defineEventHandler(async (event) => {
   const preapproval = {
     reason:             `Plan ${PLANES_CONFIG[plan as Plan].nombre} - Fondos y Licitaciones`,
     external_reference: `${user.id}:${plan}`,
-    payer_email:        user.email,
+    payer_email:        MP_PAYER_EMAIL_OVERRIDE || user.email,
     back_url:           `${APP_URL}/dashboard`,
     auto_recurring: {
       frequency:          1,
