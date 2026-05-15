@@ -17,8 +17,9 @@ import { cancelarPreapprovalMercadoPago } from '~~/server/utils/mercadopago'
 import { serverSupabaseUser } from '#supabase/server'
 
 export default defineEventHandler(async (event) => {
-  const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
-  const APP_URL              = process.env.APP_URL?.replace(/\/+$/, '')
+  const MP_ACCESS_TOKEN         = process.env.MP_ACCESS_TOKEN
+  const MP_PAYER_EMAIL_OVERRIDE = process.env.MP_PAYER_EMAIL_OVERRIDE?.trim() || undefined
+  const APP_URL                 = process.env.APP_URL?.replace(/\/+$/, '')
   const SUPABASE_URL         = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
 
@@ -203,9 +204,10 @@ export default defineEventHandler(async (event) => {
     yaCanceladas.push(ant)
   }
 
-  const preapproval: Record<string, unknown> = {
+  const preapproval = {
     reason:             `Plan ${PLANES_CONFIG[plan as Plan].nombre} - Fondos y Licitaciones`,
     external_reference: `${user.id}:${plan}`,
+    payer_email:        MP_PAYER_EMAIL_OVERRIDE ?? user.email,
     back_url:           `${APP_URL}/dashboard`,
     auto_recurring: {
       frequency:          1,
@@ -233,11 +235,12 @@ export default defineEventHandler(async (event) => {
       mpRequestId,
       detail: mpError,
       payload: {
-        reason: preapproval.reason,
+        reason:             preapproval.reason,
         external_reference: preapproval.external_reference,
-        back_url: preapproval.back_url,
-        auto_recurring: preapproval.auto_recurring,
-        status: preapproval.status,
+        payer_email:        preapproval.payer_email,
+        back_url:           preapproval.back_url,
+        auto_recurring:     preapproval.auto_recurring,
+        status:             preapproval.status,
       },
     })
     await rollbackCanceladas()
@@ -249,8 +252,9 @@ export default defineEventHandler(async (event) => {
       mp_request_id: mpRequestId,
       mp_detail:     mpError,
       mp_payload: {
-        transaction_amount: (preapproval.auto_recurring as any)?.transaction_amount,
-        currency_id:        (preapproval.auto_recurring as any)?.currency_id,
+        payer_email:        preapproval.payer_email,
+        transaction_amount: preapproval.auto_recurring.transaction_amount,
+        currency_id:        preapproval.auto_recurring.currency_id,
         status:             preapproval.status,
       },
     }
