@@ -16,18 +16,12 @@ import { PLANES_CONFIG, esPlanValido, getPrecioInicial, getPrecioRegular, tieneP
 import { cancelarPreapprovalMercadoPago } from '~~/server/utils/mercadopago'
 import { serverSupabaseUser } from '#supabase/server'
 
-const DEFAULT_SUBSCRIPTION_YEARS = 2
-
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
   const MP_PAYER_EMAIL_OVERRIDE = process.env.MP_PAYER_EMAIL_OVERRIDE?.trim()
   const APP_URL              = process.env.APP_URL?.replace(/\/+$/, '')
   const SUPABASE_URL         = process.env.SUPABASE_URL
   const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY
-  const subscriptionYearsRaw = Number(process.env.MP_SUBSCRIPTION_YEARS ?? DEFAULT_SUBSCRIPTION_YEARS)
-  const SUBSCRIPTION_YEARS   = Number.isFinite(subscriptionYearsRaw)
-    ? Math.max(1, Math.min(subscriptionYearsRaw, 5))
-    : DEFAULT_SUBSCRIPTION_YEARS
 
   if (!MP_ACCESS_TOKEN || !APP_URL || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     setResponseStatus(event, 503)
@@ -50,8 +44,6 @@ export default defineEventHandler(async (event) => {
   const precioInicial = getPrecioInicial(plan as Plan)
   const precioRegular = getPrecioRegular(plan as Plan)
   const hayPromo      = tienePromo(plan as Plan)
-  const subscriptionEndDate = new Date()
-  subscriptionEndDate.setFullYear(subscriptionEndDate.getFullYear() + SUBSCRIPTION_YEARS)
 
   const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=id`
   const profileRes = await fetch(profileUrl, {
@@ -220,7 +212,6 @@ export default defineEventHandler(async (event) => {
     auto_recurring: {
       frequency:          1,
       frequency_type:     'months',
-      end_date:           subscriptionEndDate.toISOString(),
       transaction_amount: precioInicial,
       currency_id:        'CLP',
     },
