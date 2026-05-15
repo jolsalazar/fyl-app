@@ -30,6 +30,16 @@
           <strong>Detectamos múltiples suscripciones activas en tu cuenta.</strong>
           <p>Por favor escríbenos a <a href="mailto:hola@fondosylicitaciones.cl">hola@fondosylicitaciones.cl</a> para que lo revisemos.</p>
         </div>
+        <!-- Estado pendiente: el usuario llegó al checkout pero aún no autorizó -->
+        <section v-if="sub.status === 'pending'" class="card aviso-card">
+          <div class="card-header">
+            <h2>Plan {{ planNombre }}</h2>
+            <span class="badge badge-paused">Pendiente</span>
+          </div>
+          <p>Tu suscripción está esperando autorización en MercadoPago. Si ya completaste el pago, puede tardar unos minutos en activarse.</p>
+          <p style="margin-top:0.5rem">Si no completaste el pago, <NuxtLink to="/planes" class="link">haz clic aquí para intentarlo de nuevo</NuxtLink>.</p>
+        </section>
+
         <!-- Estado activo -->
         <section v-if="sub.status === 'authorized'" class="card">
           <div class="card-header">
@@ -294,6 +304,7 @@ h1 { font-size: 1.625rem; font-weight: 800; color: #0f172a; letter-spacing: -0.0
 .aviso-card { background: #fffbeb; border-color: #fde68a; }
 .aviso-card p { font-size: 0.875rem; color: #92400e; }
 .aviso-card a { color: #92400e; text-decoration: underline; }
+.link { color: inherit; text-decoration: underline; }
 
 .actions-card {
   background: white; border: 1px solid #e2e8f0;
