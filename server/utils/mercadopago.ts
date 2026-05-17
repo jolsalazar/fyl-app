@@ -49,7 +49,9 @@ export async function verificarFirmaMercadoPago(opts: {
   const nowSec = Math.floor(Date.now() / 1000)
   if (Math.abs(nowSec - tsNum) > FIRMA_TOLERANCIA_SEGUNDOS) return false
 
-  const template = `id:${dataId};request-id:${requestId};ts:${partes.ts};`
+  // MP firma con `data.id` en lowercase cuando es alfanumérico (preapprovals).
+  // Doc: "if the data.id_url is alphanumeric, it must be sent in lowercase".
+  const template = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${partes.ts};`
 
   const enc = new TextEncoder()
   const key = await crypto.subtle.importKey(
