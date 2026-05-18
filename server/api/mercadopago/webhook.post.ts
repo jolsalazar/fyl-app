@@ -1,8 +1,12 @@
 // Webhook de MercadoPago: recibe notificaciones, valida firma, y procesa según el type:
 //
 //   type='payment'                        → pago único (legacy create-preference)
-//   type='preapproval'                    → cambio de estado de suscripción
+//   type='preapproval' | 'subscription_preapproval'
+//                                         → cambio de estado de suscripción
 //                                            (pending → authorized → paused/cancelled)
+//                                            ambos aliases existen: 'preapproval' es la
+//                                            integración legacy; 'subscription_preapproval'
+//                                            lo envía el panel nuevo ("Planes y suscripciones")
 //   type='subscription_authorized_payment'→ cobro mensual recurrente de una suscripción
 //
 // Variables de entorno requeridas:
@@ -128,7 +132,9 @@ export default defineEventHandler(async (event) => {
   try {
 
   // ── PREAPPROVAL: cambio de estado de la suscripción ───────────────────────
-  if (type === 'preapproval') {
+  // MP envía `subscription_preapproval` desde el panel nuevo ("Planes y suscripciones")
+  // y `preapproval` desde la integración legacy. Manejamos ambos como el mismo evento.
+  if (type === 'preapproval' || type === 'subscription_preapproval') {
     const sub = await obtenerPreapprovalMercadoPago(dataId, MP_ACCESS_TOKEN)
     if (!sub) {
       setResponseStatus(event, 502)
