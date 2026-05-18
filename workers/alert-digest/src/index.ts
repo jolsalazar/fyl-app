@@ -128,15 +128,24 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
     }
   }
 
+  // Recordatorios de cierre próximo (guardados + match alto). Se usan también
+  // como "trigger de email": si no hay matches nuevos pero hay cierres pendientes,
+  // igual mandamos el email para no perder ese aviso.
+  const proyectoBase = alertas.find(a => a.proyecto)?.proyecto ?? null
+  const closures = await findClosingReminders(env, userId, proyectoBase, idsPostulados)
+  if (closures.length) {
+    log.push(`  ${authUser.email} | ${closures.length} cierre(s) próximo(s)`)
+  }
+
   // Alertas sin match: avanzar el cursor inmediatamente (no hay riesgo de pérdida).
   for (const alerta of sinMatch) {
     await sbPatch(env, `/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
   }
 
-  if (!resultados.length) return false
+  if (!resultados.length && !closures.length) return false
 
   const total = resultados.reduce((s, r) => s + r.items.length, 0)
-  const emailOk = await sendEmail(env, authUser.email, total, resultados)
+  const emailOk = await sendEmail(env, authUser.email, total, resultados, closures)
 
   if (!emailOk) {
     log.push(`  ${authUser.email} | envío Resend falló — no se actualiza last_notified_at, se reintenta en el próximo cron`)
@@ -154,12 +163,79 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
   )
   await sbInsert(env, '/rest/v1/alert_notifications', notifs)
 
+  // Marcar los cierres como ya recordados para no volver a mandarlos.
+  if (closures.length) {
+    await sbInsert(env, '/rest/v1/closing_reminders_sent',
+      closures.map(c => ({ user_id: userId, convocatoria_id: c.id }))
+    )
+  }
+
   // Recién acá avanzamos el cursor de las alertas que sí dispararon email.
   for (const { alerta } of resultados) {
     await sbPatch(env, `/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
   }
 
   return true
+}
+
+// ── Recordatorios de cierre próximo ───────────────────────────────
+// Convocatorias que cierran en los próximos 3 días (1..3 días desde hoy)
+// para las que el usuario no recibió aún el recordatorio, filtradas por:
+// - guardados del usuario, O
+// - match >= SCORE_RECORDATORIO con el proyecto del usuario
+// Excluye las que ya postuló.
+const SCORE_RECORDATORIO = 70
+const DIAS_AVISO = 3
+
+async function findClosingReminders(
+  env: Env,
+  userId: string,
+  proyecto: Perfil | null,
+  idsPostulados: string[],
+): Promise<any[]> {
+  const hoy   = new Date()
+  const desde = new Date(hoy.getTime() + 86400000).toISOString().split('T')[0]                  // +1 día
+  const hasta = new Date(hoy.getTime() + DIAS_AVISO * 86400000).toISOString().split('T')[0]     // +3 días
+
+  const params = new URLSearchParams()
+  params.set('estado', 'eq.abierto')
+  params.set('fecha_cierre_postulacion', `gte.${desde}`)
+  params.append('fecha_cierre_postulacion', `lte.${hasta}`)
+  params.set('select', 'id,titulo,fuente,tipo,monto_rango,fecha_cierre_postulacion,link_postulacion,descripcion_breve,foco,alcance,perfil_tipo_persona,perfil_nivel_desarrollo,perfil_antiguedad_empresa,perfil_nivel_ventas')
+  params.set('order',  'fecha_cierre_postulacion.asc')
+  params.set('limit',  '200')
+  if (idsPostulados.length) params.set('id', `not.in.(${idsPostulados.join(',')})`)
+
+  const candidatos = await sbGet<any[]>(env, `/rest/v1/convocatorias?${params.toString()}`) ?? []
+  if (!candidatos.length) return []
+
+  const [guardados, recordados] = await Promise.all([
+    sbGet<{ convocatoria_id: string }[]>(env, `/rest/v1/guardados?user_id=eq.${userId}&select=convocatoria_id`),
+    sbGet<{ convocatoria_id: string }[]>(env, `/rest/v1/closing_reminders_sent?user_id=eq.${userId}&select=convocatoria_id`),
+  ])
+  // Si la tabla de control no existe (migración aún no aplicada), abortar antes de
+  // mandar duplicados todos los días. sbGet devuelve null en error HTTP.
+  if (recordados === null) {
+    console.error('closing_reminders_sent no accesible — skipping reminders')
+    return []
+  }
+  const guardadosSet  = new Set((guardados ?? []).map(g => g.convocatoria_id))
+  const recordadosSet = new Set(recordados.map(r => r.convocatoria_id))
+
+  const perfil: Perfil | null = proyecto ? {
+    tipo_persona:    proyecto.tipo_persona    ?? null,
+    estado_proyecto: proyecto.estado_proyecto ?? null,
+    foco:            proyecto.foco            ?? [],
+    alcance:         proyecto.alcance         ?? [],
+    monto_minimo:    proyecto.monto_minimo    ?? null,
+  } : null
+
+  return candidatos.filter(c => {
+    if (recordadosSet.has(c.id)) return false
+    if (guardadosSet.has(c.id))  return true
+    if (!perfil) return false
+    return calcularMatch(perfil, c).score >= SCORE_RECORDATORIO
+  })
 }
 
 // ── Matching query ────────────────────────────────────────────────
@@ -237,9 +313,10 @@ async function sendEmail(
   env: Env,
   to: string,
   total: number,
-  resultados: Array<{ alerta: any; items: any[] }>
+  resultados: Array<{ alerta: any; items: any[] }>,
+  closures: any[],
 ): Promise<boolean> {
-  const plural = total !== 1
+  const subject = buildSubject(total, closures.length)
   const res = await fetch('https://api.resend.com/emails', {
     method:  'POST',
     headers: {
@@ -249,11 +326,21 @@ async function sendEmail(
     body: JSON.stringify({
       from:    'Fondos y Licitaciones <alertas@fondosylicitaciones.cl>',
       to:      [to],
-      subject: `${total} nueva${plural ? 's' : ''} oportunidad${plural ? 'es' : ''} para ti`,
-      html:    buildEmail(env, to, total, resultados),
+      subject,
+      html:    buildEmail(env, to, total, resultados, closures),
     }),
   })
   return res.ok
+}
+
+function buildSubject(nuevos: number, cierres: number): string {
+  if (nuevos && cierres) {
+    return `${nuevos} nueva${nuevos !== 1 ? 's' : ''} · ${cierres} cierra${cierres !== 1 ? 'n' : ''} pronto`
+  }
+  if (cierres) {
+    return `${cierres} fondo${cierres !== 1 ? 's' : ''} cierra${cierres !== 1 ? 'n' : ''} en los próximos ${DIAS_AVISO} días`
+  }
+  return `${nuevos} nueva${nuevos !== 1 ? 's' : ''} oportunidad${nuevos !== 1 ? 'es' : ''} para ti`
 }
 
 // ── HTML del email ────────────────────────────────────────────────
@@ -261,10 +348,20 @@ function buildEmail(
   env: Env,
   email: string,
   total: number,
-  resultados: Array<{ alerta: any; items: any[] }>
+  resultados: Array<{ alerta: any; items: any[] }>,
+  closures: any[],
 ): string {
   const plural    = total !== 1
   const secciones = resultados.map(r => buildSeccion(env, r.alerta, r.items)).join('')
+  const cierres   = closures.length ? buildSeccionCierres(env, closures) : ''
+
+  // Si solo hay cierres (sin nuevas), el bloque introductorio cambia.
+  const heading = total > 0
+    ? `${total} nueva${plural ? 's' : ''} oportunidad${plural ? 'es' : ''} para ti`
+    : `${closures.length} fondo${closures.length !== 1 ? 's' : ''} cierra${closures.length !== 1 ? 'n' : ''} pronto`
+  const intro = total > 0
+    ? `${plural ? 'Estas convocatorias abrieron' : 'Esta convocatoria abrió'} desde tu última notificación y coincide${plural ? 'n' : ''} con tus alertas.`
+    : `${closures.length === 1 ? 'Este fondo cierra' : 'Estos fondos cierran'} en los próximos ${DIAS_AVISO} días. Los guardaste o tienen alto match con tu proyecto.`
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -280,12 +377,13 @@ function buildEmail(
 
   <tr><td style="background:white;padding:36px 36px 28px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
     <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;color:#0f172a;letter-spacing:-0.025em;">
-      ${total} nueva${plural ? 's' : ''} oportunidad${plural ? 'es' : ''} para ti
+      ${heading}
     </h1>
     <p style="margin:0 0 28px;font-size:15px;color:#64748b;line-height:1.6;">
-      ${plural ? 'Estas convocatorias abrieron' : 'Esta convocatoria abrió'} desde tu última notificación y coincide${plural ? 'n' : ''} con tus alertas.
+      ${intro}
     </p>
 
+    ${cierres}
     ${secciones}
 
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;padding-top:28px;border-top:1px solid #f1f5f9;">
@@ -310,6 +408,54 @@ function buildEmail(
 </table>
 </body>
 </html>`
+}
+
+function buildSeccionCierres(env: Env, items: any[]): string {
+  const cards = items.map(item => buildCardCierre(env, item)).join('<tr><td height="8"></td></tr>')
+  return `
+<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+  <tr><td style="padding-bottom:10px;">
+    <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#dc2626;">
+      ⏰ &nbsp;Cierran pronto
+    </span>
+  </td></tr>
+  ${cards}
+</table>`
+}
+
+function buildCardCierre(env: Env, item: any): string {
+  const fuente = FUENTE_LABELS[item.fuente] ?? item.fuente ?? ''
+  const dias = item.fecha_cierre_postulacion
+    ? Math.max(0, Math.ceil((new Date(item.fecha_cierre_postulacion).getTime() - Date.now()) / 86400000))
+    : null
+  const cierreLabel = dias === 0 ? 'Cierra hoy'
+    : dias === 1 ? 'Cierra mañana'
+    : dias !== null ? `Cierra en ${dias} días`
+    : ''
+  const detalle = `${env.APP_URL}/r?to=${encodeURIComponent(`/dashboard/oportunidades/${item.id}`)}&conv=${item.id}&closing=1`
+  const link    = item.link_postulacion || detalle
+
+  return `
+<tr><td style="border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:11px;padding:16px 20px;background:#fef2f2;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td>
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#0ea5e9;">${esc(fuente)}</span>
+      <span style="font-size:10px;font-weight:700;color:#dc2626;margin-left:8px;">${esc(cierreLabel)}</span>
+    </td></tr>
+    <tr><td height="6"></td></tr>
+    <tr><td style="font-size:15px;font-weight:700;color:#0f172a;line-height:1.35;">${esc(item.titulo ?? '')}</td></tr>
+    <tr><td height="12"></td></tr>
+    <tr><td align="right">
+      <a href="${detalle}" style="display:inline-block;background:#0f172a;color:white;font-size:12px;font-weight:700;text-decoration:none;padding:7px 16px;border-radius:8px;">
+        Ver detalle →
+      </a>
+      ${item.link_postulacion ? `
+      <a href="${link}" style="display:inline-block;background:#dc2626;color:white;font-size:12px;font-weight:700;text-decoration:none;padding:7px 16px;border-radius:8px;margin-left:6px;">
+        Postular ya →
+      </a>` : ''}
+    </td></tr>
+  </table>
+</td></tr>`
 }
 
 function buildSeccion(env: Env, alerta: any, items: any[]): string {
