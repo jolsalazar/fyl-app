@@ -128,11 +128,12 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
     }
   }
 
-  // Recordatorios de cierre próximo (guardados + match alto). Se usan también
-  // como "trigger de email": si no hay matches nuevos pero hay cierres pendientes,
-  // igual mandamos el email para no perder ese aviso.
+  // Recordatorios de cierre próximo. Se usan también como "trigger de email":
+  // si no hay matches nuevos pero hay cierres pendientes, igual mandamos el email
+  // para no perder ese aviso. Tres caminos para entrar: guardados explícitos,
+  // pasa filtros de una alerta activa, o match >= SCORE_RECORDATORIO.
   const proyectoBase = alertas.find(a => a.proyecto)?.proyecto ?? null
-  const closures = await findClosingReminders(env, userId, proyectoBase, idsPostulados)
+  const closures = await findClosingReminders(env, userId, proyectoBase, alertas, idsPostulados)
   if (closures.length) {
     log.push(`  ${authUser.email} | ${closures.length} cierre(s) próximo(s)`)
   }
@@ -179,18 +180,46 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
 }
 
 // ── Recordatorios de cierre próximo ───────────────────────────────
-// Convocatorias que cierran en los próximos 3 días (1..3 días desde hoy)
-// para las que el usuario no recibió aún el recordatorio, filtradas por:
-// - guardados del usuario, O
+// Convocatorias que cierran en los próximos DIAS_AVISO días para las que el
+// usuario no recibió aún el recordatorio, filtradas por al menos uno:
+// - guardados explícitos del usuario
+// - pasa los filtros de alguna alerta activa (intención explícita)
 // - match >= SCORE_RECORDATORIO con el proyecto del usuario
-// Excluye las que ya postuló.
-const SCORE_RECORDATORIO = 70
+// Excluye las que ya postuló y las ya recordadas.
+const SCORE_RECORDATORIO = 50
 const DIAS_AVISO = 3
+
+function pasaFiltrosAlerta(conv: any, alerta: any): boolean {
+  if (alerta.tipos?.length            && !alerta.tipos.includes(conv.tipo))                       return false
+  if (alerta.fuentes?.length          && !alerta.fuentes.includes(conv.fuente))                   return false
+  if (alerta.alcance_interes?.length  && !alerta.alcance_interes.includes(conv.alcance))          return false
+
+  if (alerta.monto_rangos?.length) {
+    if (!alerta.monto_rangos.includes(conv.monto_rango)) return false
+  } else if (alerta.monto_minimo) {
+    const uIdx = MONTO_ORDER.indexOf(alerta.monto_minimo)
+    const cIdx = MONTO_ORDER.indexOf(conv.monto_rango ?? '')
+    if (cIdx < 0 || cIdx < uIdx) return false
+  }
+
+  if (alerta.foco?.length) {
+    const convFoco = (conv.foco ?? []) as string[]
+    if (!(alerta.foco as string[]).some((f: string) => convFoco.includes(f))) return false
+  }
+
+  if (alerta.palabras_clave?.length) {
+    const txt = `${conv.titulo ?? ''} ${conv.descripcion_breve ?? ''}`.toLowerCase()
+    if (!(alerta.palabras_clave as string[]).some((k: string) => txt.includes(k.toLowerCase()))) return false
+  }
+
+  return true
+}
 
 async function findClosingReminders(
   env: Env,
   userId: string,
   proyecto: Perfil | null,
+  alertas: any[],
   idsPostulados: string[],
 ): Promise<any[]> {
   const hoy   = new Date()
@@ -233,6 +262,7 @@ async function findClosingReminders(
   return candidatos.filter(c => {
     if (recordadosSet.has(c.id)) return false
     if (guardadosSet.has(c.id))  return true
+    if (alertas.some(a => pasaFiltrosAlerta(c, a))) return true
     if (!perfil) return false
     return calcularMatch(perfil, c).score >= SCORE_RECORDATORIO
   })
