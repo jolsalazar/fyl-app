@@ -74,6 +74,10 @@
               <span v-for="f in (item.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
             </div>
             <div class="card-links">
+              <button :class="['btn-postule', item.postulado ? 'postulado' : '']" @click="togglePostulado(item)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                {{ item.postulado ? 'Ya postulé' : 'Marcar como postulado' }}
+              </button>
               <a v-if="item.link_postulacion" :href="item.link_postulacion" target="_blank" class="ver-link primary">
                 Postular
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -96,10 +100,15 @@ const items = ref<any[]>([])
 const loading = ref(true)
 
 onMounted(async () => {
-  const { data: guardados } = await supabase
-    .from('guardados')
-    .select('convocatoria_id, created_at')
-    .order('created_at', { ascending: false })
+  const [{ data: guardados }, { data: postuladas }] = await Promise.all([
+    supabase
+      .from('guardados')
+      .select('convocatoria_id, created_at')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('postulaciones')
+      .select('convocatoria_id'),
+  ])
 
   if (!guardados?.length) { loading.value = false; return }
 
@@ -110,7 +119,13 @@ onMounted(async () => {
     .in('id', ids)
 
   const map = Object.fromEntries((convocatorias ?? []).map(c => [c.id, c]))
-  items.value = guardados.map(g => ({ ...map[g.convocatoria_id], convocatoria_id: g.convocatoria_id, guardado_at: g.created_at })).filter(i => i.titulo)
+  const postuladasSet = new Set((postuladas ?? []).map(p => p.convocatoria_id))
+  items.value = guardados.map(g => ({
+    ...map[g.convocatoria_id],
+    convocatoria_id: g.convocatoria_id,
+    guardado_at:     g.created_at,
+    postulado:       postuladasSet.has(g.convocatoria_id),
+  })).filter(i => i.titulo)
   loading.value = false
 })
 
@@ -118,6 +133,19 @@ async function quitar(convocatoriaId: string) {
   await supabase.from('guardados').delete().eq('convocatoria_id', convocatoriaId)
   items.value = items.value.filter(i => i.convocatoria_id !== convocatoriaId)
   toast('Eliminado de guardados', 'info')
+}
+
+async function togglePostulado(item: any) {
+  const id = item.convocatoria_id
+  if (item.postulado) {
+    await supabase.from('postulaciones').delete().eq('convocatoria_id', id)
+    item.postulado = false
+    toast('Ya no marcada como postulada', 'info')
+  } else {
+    await supabase.from('postulaciones').insert({ convocatoria_id: id })
+    item.postulado = true
+    toast('Marcada como postulada', 'success')
+  }
 }
 
 function fuenteLabel(f: string) {
@@ -223,6 +251,18 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .ver-link:hover { color: #64748b; }
 .ver-link.primary { color: #0ea5e9; background: #f0f9ff; padding: 0.35rem 0.75rem; border-radius: 8px; border: 1px solid #bae6fd; }
 .ver-link.primary:hover { background: #e0f2fe; }
+
+.btn-postule {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.8125rem; font-weight: 600; font-family: inherit;
+  background: white; color: #64748b;
+  border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 0.35rem 0.75rem; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-postule:hover { border-color: #16a34a; color: #16a34a; background: #f0fdf4; }
+.btn-postule.postulado { background: #f0fdf4; color: #16a34a; border-color: #86efac; }
+.btn-postule.postulado:hover { background: #dcfce7; }
 
 .spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.65s linear infinite; }
 
