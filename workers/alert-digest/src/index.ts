@@ -41,6 +41,11 @@ export default {
 async function runDigest(env: Env) {
   const log: string[] = []
 
+  // 0. Higiene de datos: marcar como 'cerrado' lo que ya pasó su fecha de cierre.
+  // El scraper a veces tarda en reflejar el cierre; esto deja el campo `estado`
+  // alineado con la realidad para reportes, exportes y queries admin.
+  await closeExpired(env, log)
+
   // 1. Usuarios Pro / Agencia
   const profiles = await sbGet<{ id: string }[]>(
     env, '/rest/v1/profiles?plan=in.(starter,advanced,agency)&select=id'
@@ -57,6 +62,29 @@ async function runDigest(env: Env) {
 
   log.push(`Emails enviados: ${totalEmails}`)
   return { ok: true, log }
+}
+
+// ── Higiene de datos ──────────────────────────────────────────────
+async function closeExpired(env: Env, log: string[]) {
+  const hoy = new Date().toISOString().split('T')[0]
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/convocatorias?estado=eq.abierto&fecha_cierre_postulacion=lt.${hoy}`,
+    {
+      method:  'PATCH',
+      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal,count=exact' },
+      body:    JSON.stringify({ estado: 'cerrado' }),
+    }
+  )
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    console.error(`closeExpired failed: ${res.status} ${text}`)
+    log.push(`closeExpired falló: ${res.status}`)
+    return
+  }
+  // Content-Range: "0-N/total" o "*/total" cuando return=minimal
+  const match = (res.headers.get('Content-Range') ?? '').match(/\/(\d+)$/)
+  const count = match ? parseInt(match[1], 10) : 0
+  if (count > 0) log.push(`Cerradas ${count} convocatorias vencidas`)
 }
 
 // ── Procesar un usuario ───────────────────────────────────────────
