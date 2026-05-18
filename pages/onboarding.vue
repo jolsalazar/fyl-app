@@ -43,8 +43,8 @@
           <div class="benefit-item">
             <div class="benefit-icon">📧</div>
             <div>
-              <strong>Email diario con novedades</strong>
-              <p>Cada mañana recibes en <strong>{{ email }}</strong> las oportunidades nuevas.</p>
+              <strong>Aviso por email cuando hay novedades</strong>
+              <p>Te llega un email en <strong>{{ email }}</strong> los días que aparezcan oportunidades que coincidan con tus alertas.</p>
             </div>
           </div>
           <div class="benefit-item">
@@ -287,7 +287,7 @@
 
           <!-- Fallback sin matches -->
           <template v-else>
-            <p class="step-desc">Tu perfil y primera alerta están configurados. Desde mañana recibirás un email con las oportunidades nuevas.</p>
+            <p class="step-desc">Tu perfil y primera alerta están configurados. Te enviaremos un email cuando aparezcan oportunidades nuevas que coincidan con tus filtros.</p>
             <NuxtLink to="/dashboard" class="btn-primary btn-lg">
               Ir a mi dashboard
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>

@@ -10,7 +10,7 @@
             Volver a alertas
           </button>
           <h1>{{ editingAlerta ? `Editar "${editingAlerta.nombre || 'Alerta'}"` : 'Nueva alerta' }}</h1>
-          <p class="form-desc">Define los criterios para esta alerta. Te notificaremos cuando aparezcan oportunidades que coincidan.</p>
+          <p class="form-desc">Define los criterios para esta alerta. Te enviaremos un email los días que aparezcan oportunidades nuevas que coincidan — si tus filtros son específicos, puede pasar algún día sin novedades.</p>
 
 
           <div class="form-grid">
