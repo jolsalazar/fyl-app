@@ -42,13 +42,6 @@
               <div class="benefit-item">
                 <span class="benefit-check">✓</span>
                 <div>
-                  <strong>Tendencia semanal</strong>
-                  <p>Evolución del volumen de oportunidades en las últimas 12 semanas.</p>
-                </div>
-              </div>
-              <div class="benefit-item">
-                <span class="benefit-check">✓</span>
-                <div>
                   <strong>Focos más demandados</strong>
                   <p>Qué sectores concentran más fondos abiertos actualmente.</p>
                 </div>
@@ -193,24 +186,6 @@
             </div>
           </div>
 
-          <!-- Actividad semanal -->
-          <div class="section full-width">
-            <h2>Fondos agregados por semana</h2>
-            <div class="timeline-bars">
-              <div v-for="(sem, i) in stats.porSemana" :key="i" class="timeline-col">
-                <div class="timeline-bar-wrap">
-                  <div
-                    class="timeline-bar"
-                    :style="{ height: pct(sem.count, maxSemana) + '%' }"
-                    :title="`${sem.count} fondos`"
-                  ></div>
-                </div>
-                <span class="timeline-label">{{ sem.label }}</span>
-                <span class="timeline-count">{{ sem.count }}</span>
-              </div>
-            </div>
-          </div>
-
         </div>
       </template>
 
@@ -239,15 +214,10 @@ const stats = ref({
   porMonto:        [] as StatItem[],
   topOrganizadores:[] as StatItem[],
   porFoco:         [] as StatItem[],
-  porSemana:       [] as { label: string; count: number }[],
 })
 
 const fechaActualizacion = computed(() =>
   new Date().toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })
-)
-
-const maxSemana = computed(() =>
-  Math.max(1, ...stats.value.porSemana.map(s => s.count))
 )
 
 function pct(val: number, max: number) {
@@ -277,18 +247,16 @@ onMounted(async () => {
 
   const ahora    = new Date()
   const en7dias  = new Date(ahora.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
-  const hace12semanas = new Date(ahora.getTime() - 84 * 24 * 60 * 60 * 1000).toISOString()
 
   // Carga en paralelo
   const [
     { data: abiertos },
     { count: cLicit },
     { count: cSemana },
-    { data: historico },
   ] = await Promise.all([
     supabase
       .from('convocatorias')
-      .select('fuente, tipo, monto_rango, organizador, foco, fecha_cierre_postulacion, fecha_scrapeado')
+      .select('fuente, tipo, monto_rango, organizador, foco, fecha_cierre_postulacion')
       .eq('estado', 'abierto'),
     supabase
       .from('convocatorias')
@@ -301,11 +269,6 @@ onMounted(async () => {
       .eq('estado', 'abierto')
       .lte('fecha_cierre_postulacion', en7dias)
       .gte('fecha_cierre_postulacion', ahora.toISOString()),
-    supabase
-      .from('convocatorias')
-      .select('created_at')
-      .gte('created_at', hace12semanas)
-      .order('created_at', { ascending: true }),
   ])
 
   const convs = abiertos ?? []
@@ -361,39 +324,6 @@ onMounted(async () => {
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 24)
-
-  // Actividad por semana (últimas 12 semanas) — basado en created_at (alta real,
-  // no fecha_scrapeado que se actualiza cada re-visita del scraper y distorsiona).
-  function lunesDe(d: Date): Date {
-    const out = new Date(d)
-    out.setHours(0, 0, 0, 0)
-    const dow = out.getDay()
-    out.setDate(out.getDate() - dow + (dow === 0 ? -6 : 1))
-    return out
-  }
-
-  // Generamos 12 lunes consecutivos (el más reciente primero, después invertimos)
-  // para que las semanas sin altas igual aparezcan como columnas en 0.
-  const lunesActual = lunesDe(ahora)
-  const buckets: { key: string; label: string; count: number }[] = []
-  for (let i = 11; i >= 0; i--) {
-    const lun = new Date(lunesActual)
-    lun.setDate(lunesActual.getDate() - i * 7)
-    buckets.push({
-      key:   lun.toISOString().slice(0, 10),
-      label: lun.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' }),
-      count: 0,
-    })
-  }
-  const idxByKey = Object.fromEntries(buckets.map((b, i) => [b.key, i]))
-
-  for (const c of historico ?? []) {
-    const lun = lunesDe(new Date(c.created_at))
-    const key = lun.toISOString().slice(0, 10)
-    const idx = idxByKey[key]
-    if (idx !== undefined) buckets[idx].count++
-  }
-  stats.value.porSemana = buckets.map(({ label, count }) => ({ label, count }))
 
   loading.value = false
 })
@@ -460,20 +390,6 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 }
 .foco-chip:hover { background: #f0f9ff; border-color: #bae6fd; color: #0ea5e9; }
 .foco-count { font-size: 0.65rem; font-weight: 700; color: #94a3b8; }
-
-/* Timeline barras */
-.timeline-bars {
-  display: flex; gap: 0.5rem; align-items: flex-end;
-  height: 160px; padding-bottom: 1.5rem; overflow-x: auto;
-}
-.timeline-col { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; min-width: 52px; flex: 1; height: 100%; }
-.timeline-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
-.timeline-bar {
-  width: 100%; background: #0ea5e9; border-radius: 6px 6px 0 0;
-  min-height: 4px; transition: height 0.4s ease;
-}
-.timeline-label { font-size: 0.65rem; color: #94a3b8; white-space: nowrap; }
-.timeline-count { font-size: 0.7rem; font-weight: 700; color: #64748b; }
 
 /* Skeleton */
 @keyframes shimmer { from { background-position: -600px 0; } to { background-position: 600px 0; } }
