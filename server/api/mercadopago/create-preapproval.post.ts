@@ -130,7 +130,7 @@ export default defineEventHandler(async (event) => {
           Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ target_id: user.id, new_plan: 'free' }),
+        body: JSON.stringify({ target_id: user.id, new_plan: 'free', source: 'create_preapproval' }),
       }).catch(() => { /* best-effort */ })
     }
   }

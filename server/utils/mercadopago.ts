@@ -78,16 +78,25 @@ export async function obtenerPagoMercadoPago(paymentId: string, accessToken: str
   })
   if (!res.ok) return null
   return res.json() as Promise<{
-    id:                 number
-    status:             string  // 'approved' | 'pending' | 'rejected' | ...
-    status_detail:      string
-    external_reference: string  // formato esperado: `${user_id}:${plan}`
-    payer?:             { email?: string }
-    transaction_amount: number
-    date_created?:      string  // ISO timestamp
-    date_approved?:     string  // ISO timestamp (null hasta que se aprueba)
+    id:                  number
+    status:              string  // 'approved' | 'pending' | 'rejected' | 'refunded' | 'charged_back' | ...
+    status_detail:       string
+    external_reference:  string  // formato esperado: `${user_id}:${plan}`
+    payer?:              { email?: string }
+    transaction_amount:  number
+    date_created?:       string  // ISO timestamp
+    date_approved?:      string  // ISO timestamp (null hasta que se aprueba)
+    money_release_date?: string  // ISO timestamp — cuándo MP libera el dinero al vendedor
+    fee_details?:        Array<{ type: string; amount: number; fee_payer?: string }>
+    transaction_details?: {
+      net_received_amount?: number
+      total_paid_amount?:   number
+    }
   }>
 }
+
+/** Fuente del cambio de plan — alimenta plan_changes para reportes de finanzas. */
+export type PlanChangeSource = 'webhook' | 'cancel' | 'admin' | 'create_preapproval'
 
 /** Asigna un plan a un usuario llamando a la RPC admin_set_user_plan con service_role. */
 export async function asignarPlanUsuario(opts: {
@@ -95,6 +104,7 @@ export async function asignarPlanUsuario(opts: {
   serviceRoleKey:     string
   userId:             string
   plan:               Plan
+  source?:            PlanChangeSource   // default 'admin' del lado SQL; explícito recomendado
 }): Promise<boolean> {
   const res = await fetch(`${opts.supabaseUrl}/rest/v1/rpc/admin_set_user_plan`, {
     method:  'POST',
@@ -103,9 +113,92 @@ export async function asignarPlanUsuario(opts: {
       Authorization:  `Bearer ${opts.serviceRoleKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ target_id: opts.userId, new_plan: opts.plan }),
+    body: JSON.stringify({
+      target_id: opts.userId,
+      new_plan:  opts.plan,
+      ...(opts.source ? { source: opts.source } : {}),
+    }),
   })
   return res.ok
+}
+
+/**
+ * Upsert de un pago MP en public.payments (idempotente por mp_payment_id).
+ * Extrae fee_details / net_received_amount reales si vienen — sino quedan 0
+ * y se pueden recalcular después con el backfill.
+ *
+ * Llamarlo desde el webhook tras confirmar status=approved (o status final
+ * conocido). Para pagos pending iniciales conviene NO persistir todavía:
+ * esperar al evento de aprobación para no contaminar reportes.
+ */
+export async function persistirPagoMercadoPago(opts: {
+  supabaseUrl:    string
+  serviceRoleKey: string
+  pago: {
+    id:                  number
+    status:              string
+    status_detail?:      string
+    external_reference?: string
+    transaction_amount:  number
+    date_approved?:      string
+    money_release_date?: string
+    fee_details?:        Array<{ type: string; amount: number; fee_payer?: string }>
+    transaction_details?: {
+      net_received_amount?: number
+    }
+  }
+  userId?:          string | null
+  preapprovalId?:   string | null
+}): Promise<boolean> {
+  const { pago } = opts
+
+  // Sumar comisiones MP base (no IVA). MP usa type='mercadopago_fee' y a veces
+  // 'application_fee' o 'financing_fee'. Sumamos TODO lo que no sea tax.
+  const feeDetails = pago.fee_details ?? []
+  const feeBase = feeDetails
+    .filter(f => f.type !== 'tax' && (f.fee_payer === undefined || f.fee_payer === 'collector'))
+    .reduce((acc, f) => acc + (f.amount ?? 0), 0)
+  const taxes = feeDetails
+    .filter(f => f.type === 'tax' && (f.fee_payer === undefined || f.fee_payer === 'collector'))
+    .reduce((acc, f) => acc + (f.amount ?? 0), 0)
+
+  const net = pago.transaction_details?.net_received_amount
+    ?? Math.max(0, pago.transaction_amount - feeBase - taxes)
+
+  const row = {
+    mp_payment_id:       String(pago.id),
+    mp_preapproval_id:   opts.preapprovalId ?? null,
+    user_id:             opts.userId ?? null,
+    transaction_amount:  Math.round(pago.transaction_amount),
+    fee_amount:          Math.round(feeBase),
+    taxes_amount:        Math.round(taxes),
+    net_received_amount: Math.round(net),
+    status:              pago.status,
+    status_detail:       pago.status_detail ?? null,
+    external_reference:  pago.external_reference ?? null,
+    date_approved:       pago.date_approved ?? null,
+    money_release_date:  pago.money_release_date ?? null,
+  }
+
+  // Upsert por mp_payment_id: PostgREST acepta on_conflict + Prefer: resolution=merge-duplicates.
+  const res = await fetch(
+    `${opts.supabaseUrl}/rest/v1/payments?on_conflict=mp_payment_id`,
+    {
+      method:  'POST',
+      headers: {
+        apikey:         opts.serviceRoleKey,
+        Authorization:  `Bearer ${opts.serviceRoleKey}`,
+        'Content-Type': 'application/json',
+        Prefer:         'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(row),
+    },
+  )
+  if (!res.ok) {
+    console.error('[mp] persistirPagoMercadoPago failed:', res.status, await res.text())
+    return false
+  }
+  return true
 }
 
 /** Obtiene el detalle de una preapproval (suscripción) desde MP. */

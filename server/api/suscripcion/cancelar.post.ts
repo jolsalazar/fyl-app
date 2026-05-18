@@ -71,6 +71,7 @@ export default defineEventHandler(async (event) => {
     serviceRoleKey: SUPABASE_SERVICE_KEY,
     userId:         user.id,
     plan:           'free',
+    source:         'cancel',
   })
 
   return { ok: true }

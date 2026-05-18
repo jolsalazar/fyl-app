@@ -29,6 +29,7 @@ import {
   obtenerPagoMercadoPago,
   obtenerPreapprovalMercadoPago,
   obtenerSuscripcion,
+  persistirPagoMercadoPago,
   registrarEventoProcesado,
   verificarFirmaMercadoPago,
   type Plan,
@@ -259,6 +260,7 @@ export default defineEventHandler(async (event) => {
         serviceRoleKey: SUPABASE_SERVICE_KEY,
         userId,
         plan: plan as Plan,
+        source: 'webhook',
       })
       if (!asignado) {
         setResponseStatus(event, 500)
@@ -302,6 +304,7 @@ export default defineEventHandler(async (event) => {
           serviceRoleKey: SUPABASE_SERVICE_KEY,
           userId,
           plan: 'free' as Plan,
+          source: 'webhook',
         })
         if (!okPlan) {
           setResponseStatus(event, 500)
@@ -379,10 +382,26 @@ export default defineEventHandler(async (event) => {
           serviceRoleKey: SUPABASE_SERVICE_KEY,
           userId:         sub.user_id,
           plan:           sub.plan as Plan,
+          source:         'webhook',
         })
         if (!okPlan) {
           setResponseStatus(event, 500)
           return { ok: false, error: 'plan_reactivate_failed' }
+        }
+      }
+
+      // Persistir el pago real en public.payments (con fee_details si los trae
+      // el sub-payment de MP). Fetch del payment id concreto para tener montos.
+      if (pay.payment?.id) {
+        const pagoReal = await obtenerPagoMercadoPago(String(pay.payment.id), MP_ACCESS_TOKEN)
+        if (pagoReal) {
+          await persistirPagoMercadoPago({
+            supabaseUrl:    SUPABASE_URL,
+            serviceRoleKey: SUPABASE_SERVICE_KEY,
+            pago:           pagoReal,
+            userId:         sub.user_id,
+            preapprovalId:  pay.preapproval_id,
+          })
         }
       }
 
@@ -427,10 +446,26 @@ export default defineEventHandler(async (event) => {
           serviceRoleKey: SUPABASE_SERVICE_KEY,
           userId:         sub.user_id,
           plan:           'free' as Plan,
+          source:         'webhook',
         })
         if (!okDowngrade) {
           setResponseStatus(event, 500)
           return { ok: false, error: 'plan_downgrade_failed' }
+        }
+      }
+
+      // Persistir el pago rechazado también — sirve para reportes de cobros
+      // fallidos / churn por fail. fee_amount=0 esperado en rejected.
+      if (pay.payment?.id) {
+        const pagoReal = await obtenerPagoMercadoPago(String(pay.payment.id), MP_ACCESS_TOKEN)
+        if (pagoReal) {
+          await persistirPagoMercadoPago({
+            supabaseUrl:    SUPABASE_URL,
+            serviceRoleKey: SUPABASE_SERVICE_KEY,
+            pago:           pagoReal,
+            userId:         sub.user_id,
+            preapprovalId:  pay.preapproval_id,
+          })
         }
       }
 
@@ -470,6 +505,7 @@ export default defineEventHandler(async (event) => {
       serviceRoleKey: SUPABASE_SERVICE_KEY,
       userId,
       plan: plan as Plan,
+      source: 'webhook',
     })
     if (!asignado) {
       setResponseStatus(event, 500)
@@ -484,7 +520,7 @@ export default defineEventHandler(async (event) => {
       `?user_id=eq.${encodeURIComponent(userId)}` +
       `&plan=eq.${encodeURIComponent(plan)}` +
       `&status=in.(pending,authorized)` +
-      `&select=id,status` +
+      `&select=id,status,mp_preapproval_id` +
       `&order=created_at.desc&limit=1`
     const subsRes = await fetch(subsUrl, {
       headers: {
@@ -493,7 +529,7 @@ export default defineEventHandler(async (event) => {
       },
     })
     const subs = subsRes.ok
-      ? await subsRes.json() as Array<{ id: string; status: string }>
+      ? await subsRes.json() as Array<{ id: string; status: string; mp_preapproval_id: string }>
       : []
     const localSub = subs[0]
 
@@ -532,8 +568,26 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // Persistir el pago real en public.payments. Idempotente por mp_payment_id.
+    // Sirve de fuente para el dashboard de finanzas admin (cobros, fees, neto).
+    const paymentPersisted = await persistirPagoMercadoPago({
+      supabaseUrl:    SUPABASE_URL,
+      serviceRoleKey: SUPABASE_SERVICE_KEY,
+      pago,
+      userId,
+      preapprovalId:  localSub?.mp_preapproval_id ?? null,
+    })
+
     procesoExitoso = true
-    return { ok: true, processed: true, type: 'payment', userId, plan, sub_updated: subUpdated }
+    return {
+      ok:               true,
+      processed:        true,
+      type:             'payment',
+      userId,
+      plan,
+      sub_updated:      subUpdated,
+      payment_persisted: paymentPersisted,
+    }
   }
 
   // Ignorar cualquier otro tipo (merchant_order, plans, etc.)
