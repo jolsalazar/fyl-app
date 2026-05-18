@@ -200,6 +200,12 @@ function toggle(item: any) {
     selected.value = [...selected.value, item]
   }
   persistSelection()
+  // Al llegar al tope, limpiamos la búsqueda para que la tabla quede visible
+  // inmediatamente sin tener que scrollear por encima de la lista de resultados.
+  if (selected.value.length >= MAX) {
+    search.value  = ''
+    results.value = []
+  }
 }
 function remove(id: string) {
   selected.value = selected.value.filter(s => s.id !== id)
