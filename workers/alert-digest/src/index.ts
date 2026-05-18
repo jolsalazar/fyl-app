@@ -164,10 +164,15 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
   )
   await sbInsert(env, '/rest/v1/alert_notifications', notifs)
 
-  // Marcar los cierres como ya recordados para no volver a mandarlos.
+  // Marcar los cierres como ya recordados para no volver a mandar ese mismo
+  // (usuario, fondo, threshold). Una entrada distinta por threshold.
   if (closures.length) {
     await sbInsert(env, '/rest/v1/closing_reminders_sent',
-      closures.map(c => ({ user_id: userId, convocatoria_id: c.id }))
+      closures.map(c => ({
+        user_id:          userId,
+        convocatoria_id:  c.conv.id,
+        dias_anticipados: c.threshold,
+      }))
     )
   }
 
@@ -180,15 +185,15 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
 }
 
 // ── Recordatorios de cierre próximo ───────────────────────────────
-// Convocatorias que cierran en los próximos DIAS_AVISO días para las que el
-// usuario no recibió aún el recordatorio, filtradas por al menos uno:
-// - guardados explícitos del usuario
-// - pasa los filtros de alguna alerta activa (intención explícita)
-// - match >= SCORE_RECORDATORIO con el proyecto del usuario
-// Excluye las que ya postuló y las ya recordadas.
+// Convocatorias que cierran en los próximos días que el usuario configuró
+// (closing_reminder_days en profiles, default [3]). Para cada candidato se
+// elige el threshold más amplio que aún no se haya disparado para ese par
+// (usuario, fondo) — así un usuario con [7,3,1] recibe 3 emails escalonados.
+// Filtros: guardados del usuario, pasa filtro de alerta activa, o match >= 50.
+// Excluye postuladas y las que ya fueron recordadas en ese threshold.
 const SCORE_RECORDATORIO = 50
-const DIAS_AVISO = 3
 const MAX_CIERRES_EMAIL = 10
+const DEFAULT_THRESHOLDS = [3]
 
 function pasaFiltrosAlerta(conv: any, alerta: any): boolean {
   if (alerta.tipos?.length            && !alerta.tipos.includes(conv.tipo))                       return false
@@ -222,10 +227,21 @@ async function findClosingReminders(
   proyecto: Perfil | null,
   alertas: any[],
   idsPostulados: string[],
-): Promise<any[]> {
+): Promise<Array<{ conv: any; threshold: number }>> {
+  // 1) Preferencias del usuario
+  const profile = await sbGet<{ closing_reminder_days: number[] | null }[]>(
+    env, `/rest/v1/profiles?id=eq.${userId}&select=closing_reminder_days`
+  )
+  const thresholds = (profile?.[0]?.closing_reminder_days ?? DEFAULT_THRESHOLDS)
+    .filter((d): d is number => typeof d === 'number' && d > 0)
+    .sort((a, b) => b - a) // descendente: 7, 3, 1
+  if (!thresholds.length) return []
+  const maxThreshold = thresholds[0]
+
+  // 2) Candidatos: cerrar entre mañana y +maxThreshold días
   const hoy   = new Date()
-  const desde = new Date(hoy.getTime() + 86400000).toISOString().split('T')[0]                  // +1 día
-  const hasta = new Date(hoy.getTime() + DIAS_AVISO * 86400000).toISOString().split('T')[0]     // +3 días
+  const desde = new Date(hoy.getTime() + 86400000).toISOString().split('T')[0]
+  const hasta = new Date(hoy.getTime() + maxThreshold * 86400000).toISOString().split('T')[0]
 
   const params = new URLSearchParams()
   params.set('estado', 'eq.abierto')
@@ -239,18 +255,19 @@ async function findClosingReminders(
   const candidatos = await sbGet<any[]>(env, `/rest/v1/convocatorias?${params.toString()}`) ?? []
   if (!candidatos.length) return []
 
+  // 3) Ya enviados (con threshold) y guardados
   const [guardados, recordados] = await Promise.all([
     sbGet<{ convocatoria_id: string }[]>(env, `/rest/v1/guardados?user_id=eq.${userId}&select=convocatoria_id`),
-    sbGet<{ convocatoria_id: string }[]>(env, `/rest/v1/closing_reminders_sent?user_id=eq.${userId}&select=convocatoria_id`),
+    sbGet<{ convocatoria_id: string; dias_anticipados: number }[]>(
+      env, `/rest/v1/closing_reminders_sent?user_id=eq.${userId}&select=convocatoria_id,dias_anticipados`
+    ),
   ])
-  // Si la tabla de control no existe (migración aún no aplicada), abortar antes de
-  // mandar duplicados todos los días. sbGet devuelve null en error HTTP.
   if (recordados === null) {
     console.error('closing_reminders_sent no accesible — skipping reminders')
     return []
   }
   const guardadosSet  = new Set((guardados ?? []).map(g => g.convocatoria_id))
-  const recordadosSet = new Set(recordados.map(r => r.convocatoria_id))
+  const recordadosKey = new Set(recordados.map(r => `${r.convocatoria_id}|${r.dias_anticipados}`))
 
   const perfil: Perfil | null = proyecto ? {
     tipo_persona:    proyecto.tipo_persona    ?? null,
@@ -260,18 +277,24 @@ async function findClosingReminders(
     monto_minimo:    proyecto.monto_minimo    ?? null,
   } : null
 
-  return candidatos
-    .filter(c => {
-      if (recordadosSet.has(c.id)) return false
-      if (guardadosSet.has(c.id))  return true
-      if (alertas.some(a => pasaFiltrosAlerta(c, a))) return true
-      if (!perfil) return false
-      return calcularMatch(perfil, c).score >= SCORE_RECORDATORIO
-    })
-    // Cap por email para no saturar. Como vienen ordenados por fecha de cierre ASC,
-    // los más urgentes salen primero. Los restantes quedan disponibles para el cron
-    // del día siguiente (no se marcan como recordados aún).
-    .slice(0, MAX_CIERRES_EMAIL)
+  // 4) Para cada candidato: ¿pasa los filtros? ¿qué threshold le toca disparar?
+  const out: Array<{ conv: any; threshold: number }> = []
+  for (const c of candidatos) {
+    const pasaFiltro =
+      guardadosSet.has(c.id) ||
+      alertas.some(a => pasaFiltrosAlerta(c, a)) ||
+      (!!perfil && calcularMatch(perfil, c).score >= SCORE_RECORDATORIO)
+    if (!pasaFiltro) continue
+
+    const diasRestantes = Math.ceil((new Date(c.fecha_cierre_postulacion).getTime() - Date.now()) / 86400000)
+    // Buscar el threshold más amplio que cubre los días restantes y que aún no se mandó.
+    // Recorremos descendente para preferir mandar 7d antes que 3d, etc.
+    const t = thresholds.find(t => diasRestantes <= t && !recordadosKey.has(`${c.id}|${t}`))
+    if (t === undefined) continue
+    out.push({ conv: c, threshold: t })
+  }
+
+  return out.slice(0, MAX_CIERRES_EMAIL)
 }
 
 // ── Matching query ────────────────────────────────────────────────
@@ -350,7 +373,7 @@ async function sendEmail(
   to: string,
   total: number,
   resultados: Array<{ alerta: any; items: any[] }>,
-  closures: any[],
+  closures: Array<{ conv: any; threshold: number }>,
 ): Promise<boolean> {
   const subject = buildSubject(total, closures.length)
   const res = await fetch('https://api.resend.com/emails', {
@@ -374,7 +397,7 @@ function buildSubject(nuevos: number, cierres: number): string {
     return `${nuevos} nueva${nuevos !== 1 ? 's' : ''} · ${cierres} cierra${cierres !== 1 ? 'n' : ''} pronto`
   }
   if (cierres) {
-    return `${cierres} fondo${cierres !== 1 ? 's' : ''} cierra${cierres !== 1 ? 'n' : ''} en los próximos ${DIAS_AVISO} días`
+    return `${cierres} fondo${cierres !== 1 ? 's' : ''} cierra${cierres !== 1 ? 'n' : ''} pronto`
   }
   return `${nuevos} nueva${nuevos !== 1 ? 's' : ''} oportunidad${nuevos !== 1 ? 'es' : ''} para ti`
 }
@@ -385,7 +408,7 @@ function buildEmail(
   email: string,
   total: number,
   resultados: Array<{ alerta: any; items: any[] }>,
-  closures: any[],
+  closures: Array<{ conv: any; threshold: number }>,
 ): string {
   const plural    = total !== 1
   const secciones = resultados.map(r => buildSeccion(env, r.alerta, r.items)).join('')
@@ -397,7 +420,7 @@ function buildEmail(
     : `${closures.length} fondo${closures.length !== 1 ? 's' : ''} cierra${closures.length !== 1 ? 'n' : ''} pronto`
   const intro = total > 0
     ? `${plural ? 'Estas convocatorias abrieron' : 'Esta convocatoria abrió'} desde tu última notificación y coincide${plural ? 'n' : ''} con tus alertas.`
-    : `${closures.length === 1 ? 'Este fondo cierra' : 'Estos fondos cierran'} en los próximos ${DIAS_AVISO} días. Los guardaste o tienen alto match con tu proyecto.`
+    : `${closures.length === 1 ? 'Este fondo cierra' : 'Estos fondos cierran'} pronto. Los guardaste o tienen alto match con tu proyecto.`
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -446,8 +469,8 @@ function buildEmail(
 </html>`
 }
 
-function buildSeccionCierres(env: Env, items: any[]): string {
-  const cards = items.map(item => buildCardCierre(env, item)).join('<tr><td height="8"></td></tr>')
+function buildSeccionCierres(env: Env, items: Array<{ conv: any; threshold: number }>): string {
+  const cards = items.map(it => buildCardCierre(env, it.conv)).join('<tr><td height="8"></td></tr>')
   return `
 <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
   <tr><td style="padding-bottom:10px;">

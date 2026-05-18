@@ -190,6 +190,18 @@
               </button>
             </div>
 
+            <!-- Preferencias: avisos de cierre próximo -->
+            <div class="reminder-prefs">
+              <div class="reminder-prefs-title">⏰ Avisarme cuando un fondo cierre en</div>
+              <div class="reminder-prefs-opts">
+                <label v-for="d in REMINDER_OPTS" :key="d" class="reminder-chip" :class="{ active: reminderDays.includes(d) }">
+                  <input type="checkbox" :checked="reminderDays.includes(d)" @change="toggleReminderDay(d)" />
+                  {{ d }} {{ d === 1 ? 'día' : 'días' }}
+                </label>
+              </div>
+              <p class="reminder-prefs-hint" v-if="!reminderDays.length">Ningún recordatorio activo.</p>
+            </div>
+
             <!-- Banner límite de plan -->
             <div v-if="hayPausadasPorPlan || !canAddAlerta(alertas.length)" class="plan-limit-banner">
               <div class="plan-limit-text">
@@ -429,6 +441,21 @@ const loading = ref(true)
 const alertas    = ref<any[]>([])
 const selectedId = ref<string | null>(null)
 
+// Preferencias de recordatorios de cierre (closing_reminder_days)
+const REMINDER_OPTS = [7, 3, 1]
+const reminderDays = ref<number[]>([3])
+async function toggleReminderDay(d: number) {
+  const next = reminderDays.value.includes(d)
+    ? reminderDays.value.filter(x => x !== d)
+    : [...reminderDays.value, d].sort((a, b) => b - a)
+  reminderDays.value = next
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  await supabase.from('profiles')
+    .update({ closing_reminder_days: next } as any)
+    .eq('id', user.id)
+}
+
 const loadingResults = ref(false)
 const notifications  = ref<any[]>([])
 const unreadCounts   = ref<Record<string, number>>({})
@@ -484,13 +511,16 @@ onMounted(async () => {
 
   await loadPlan()
 
-  const [{ data: alertasData }, { data: postulacionesData }] = await Promise.all([
+  const [{ data: alertasData }, { data: postulacionesData }, { data: profileData }] = await Promise.all([
     supabase.from('alert_configs').select('*').eq('user_id', user!.id).order('created_at', { ascending: true }),
     supabase.from('postulaciones').select('convocatoria_id'),
+    supabase.from('profiles').select('closing_reminder_days').eq('id', user!.id).maybeSingle(),
   ])
 
   alertas.value       = alertasData ?? []
   idsPostulados.value = (postulacionesData ?? []).map(p => p.convocatoria_id)
+  const rem = (profileData as any)?.closing_reminder_days
+  if (Array.isArray(rem)) reminderDays.value = rem.slice().sort((a: number, b: number) => b - a)
 
   loadUnreadCounts()
 
@@ -863,6 +893,24 @@ function esUrgente(f: string) {
   padding: 1rem 1.25rem; border-bottom: 1px solid #f1f5f9; flex-shrink: 0;
 }
 .panel-title { font-size: 0.8125rem; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.reminder-prefs {
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 0.75rem 0.875rem; margin-bottom: 0.75rem;
+}
+.reminder-prefs-title { font-size: 0.72rem; font-weight: 700; color: #475569; margin-bottom: 0.5rem; }
+.reminder-prefs-opts  { display: flex; gap: 0.375rem; flex-wrap: wrap; }
+.reminder-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.25rem 0.6rem; border-radius: 999px;
+  background: white; border: 1px solid #e2e8f0; color: #64748b;
+  font-size: 0.75rem; font-weight: 600; cursor: pointer;
+  transition: all 0.15s; user-select: none;
+}
+.reminder-chip:hover  { border-color: #cbd5e1; }
+.reminder-chip.active { background: #f0f9ff; border-color: #bae6fd; color: #0ea5e9; }
+.reminder-chip input  { display: none; }
+.reminder-prefs-hint { font-size: 0.72rem; color: #f59e0b; margin-top: 0.4rem; font-weight: 500; }
 .btn-new {
   width: 26px; height: 26px; background: #0ea5e9; color: white; border: none;
   border-radius: 7px; cursor: pointer; display: flex; align-items: center; justify-content: center;
