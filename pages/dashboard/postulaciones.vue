@@ -37,7 +37,15 @@
 
       <!-- Kanban -->
       <div v-else class="kanban">
-        <div v-for="col in ESTADOS" :key="col.value" class="col" :class="col.value">
+        <div
+          v-for="col in ESTADOS"
+          :key="col.value"
+          class="col"
+          :class="[col.value, { 'col-over': dragOverCol === col.value }]"
+          @dragover.prevent="dragOverCol = col.value"
+          @dragleave="dragOverCol = dragOverCol === col.value ? null : dragOverCol"
+          @drop.prevent="onDrop($event, col.value)"
+        >
           <div class="col-header">
             <span class="col-emoji">{{ col.emoji }}</span>
             <span class="col-title">{{ col.label }}</span>
@@ -45,12 +53,16 @@
           </div>
 
           <div class="col-cards">
-            <div v-if="!itemsPorEstado[col.value]?.length" class="col-empty">—</div>
+            <div v-if="!itemsPorEstado[col.value]?.length" class="col-empty">Arrastrá aquí</div>
 
             <div
               v-for="item in itemsPorEstado[col.value] ?? []"
               :key="item.convocatoria_id"
               class="card"
+              :class="{ 'card-dragging': draggingId === item.convocatoria_id }"
+              draggable="true"
+              @dragstart="onDragStart($event, item)"
+              @dragend="onDragEnd"
             >
               <div class="card-top">
                 <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
@@ -101,8 +113,10 @@ definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
 const { show: toast } = useToast()
-const items   = ref<any[]>([])
-const loading = ref(true)
+const items       = ref<any[]>([])
+const loading     = ref(true)
+const draggingId  = ref<string | null>(null)
+const dragOverCol = ref<string | null>(null)
 
 const ESTADOS = [
   { value: 'por_postular',   label: 'Por postular',    emoji: '📌' },
@@ -154,6 +168,26 @@ onMounted(async () => {
     .filter(i => i.titulo)
   loading.value = false
 })
+
+function onDragStart(e: DragEvent, item: any) {
+  draggingId.value = item.convocatoria_id
+  if (e.dataTransfer) {
+    e.dataTransfer.setData('text/plain', item.convocatoria_id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+}
+function onDragEnd() {
+  draggingId.value  = null
+  dragOverCol.value = null
+}
+function onDrop(e: DragEvent, nuevoEstado: string) {
+  dragOverCol.value = null
+  const id = e.dataTransfer?.getData('text/plain') || draggingId.value
+  if (!id) return
+  const item = items.value.find(i => i.convocatoria_id === id)
+  if (!item || item.estado === nuevoEstado) return
+  cambiarEstado(item, nuevoEstado)
+}
 
 async function cambiarEstado(item: any, nuevo: string) {
   if (item.estado === nuevo) return
@@ -256,9 +290,14 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .card {
   background: white; border: 1px solid #e2e8f0; border-radius: 10px;
   padding: 0.75rem 0.875rem; display: flex; flex-direction: column; gap: 0.5rem;
-  transition: box-shadow 0.15s, border-color 0.15s;
+  transition: box-shadow 0.15s, border-color 0.15s, opacity 0.15s;
+  cursor: grab;
 }
+.card:active { cursor: grabbing; }
 .card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-color: #cbd5e1; }
+.card-dragging { opacity: 0.4; }
+.col-over { background: #e0f2fe; border-color: #7dd3fc; }
+.col-over .col-empty { color: #0284c7; font-weight: 600; }
 
 .card-top { display: flex; justify-content: space-between; align-items: center; }
 .tag-fuente { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
