@@ -188,6 +188,7 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
 // Excluye las que ya postuló y las ya recordadas.
 const SCORE_RECORDATORIO = 50
 const DIAS_AVISO = 3
+const MAX_CIERRES_EMAIL = 10
 
 function pasaFiltrosAlerta(conv: any, alerta: any): boolean {
   if (alerta.tipos?.length            && !alerta.tipos.includes(conv.tipo))                       return false
@@ -259,13 +260,18 @@ async function findClosingReminders(
     monto_minimo:    proyecto.monto_minimo    ?? null,
   } : null
 
-  return candidatos.filter(c => {
-    if (recordadosSet.has(c.id)) return false
-    if (guardadosSet.has(c.id))  return true
-    if (alertas.some(a => pasaFiltrosAlerta(c, a))) return true
-    if (!perfil) return false
-    return calcularMatch(perfil, c).score >= SCORE_RECORDATORIO
-  })
+  return candidatos
+    .filter(c => {
+      if (recordadosSet.has(c.id)) return false
+      if (guardadosSet.has(c.id))  return true
+      if (alertas.some(a => pasaFiltrosAlerta(c, a))) return true
+      if (!perfil) return false
+      return calcularMatch(perfil, c).score >= SCORE_RECORDATORIO
+    })
+    // Cap por email para no saturar. Como vienen ordenados por fecha de cierre ASC,
+    // los más urgentes salen primero. Los restantes quedan disponibles para el cron
+    // del día siguiente (no se marcan como recordados aún).
+    .slice(0, MAX_CIERRES_EMAIL)
 }
 
 // ── Matching query ────────────────────────────────────────────────
