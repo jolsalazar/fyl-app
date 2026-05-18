@@ -144,7 +144,7 @@ async function togglePostulado(item: any) {
   } else {
     await supabase.from('postulaciones').insert({ convocatoria_id: id })
     item.postulado = true
-    toast('Marcada como postulada', 'success')
+    toast('Marcada como postulada', 'ok')
   }
 }
 

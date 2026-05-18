@@ -394,10 +394,14 @@ onMounted(async () => {
   proyectos.value = data ?? []
   loading.value = false
 
-  const primero = proyectos.value[0]
-  if (primero) {
-    selectedProyectoId.value = primero.id
-    await loadMatch(primero.id)
+  // Preferir un proyecto con perfil completo (tipo_persona + estado_proyecto).
+  // Esto evita que un proyecto legacy vacío bloquee el gate cuando el usuario
+  // ya tiene otro proyecto correctamente configurado.
+  const completo = proyectos.value.find(p => p.tipo_persona && p.estado_proyecto)
+  const elegido  = completo ?? proyectos.value[0]
+  if (elegido) {
+    selectedProyectoId.value = elegido.id
+    await loadMatch(elegido.id)
   }
 })
 </script>
