@@ -303,9 +303,9 @@ onMounted(async () => {
       .gte('fecha_cierre_postulacion', ahora.toISOString()),
     supabase
       .from('convocatorias')
-      .select('fecha_scrapeado')
-      .gte('fecha_scrapeado', hace12semanas)
-      .order('fecha_scrapeado', { ascending: true }),
+      .select('created_at')
+      .gte('created_at', hace12semanas)
+      .order('created_at', { ascending: true }),
   ])
 
   const convs = abiertos ?? []
@@ -362,16 +362,38 @@ onMounted(async () => {
     .sort((a, b) => b.count - a.count)
     .slice(0, 24)
 
-  // Actividad por semana (últimas 12 semanas)
-  const semanas: Record<string, number> = {}
-  for (const c of historico ?? []) {
-    const d   = new Date(c.fecha_scrapeado)
-    const lun = new Date(d)
-    lun.setDate(d.getDate() - d.getDay() + (d.getDay() === 0 ? -6 : 1))
-    const key = lun.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })
-    semanas[key] = (semanas[key] ?? 0) + 1
+  // Actividad por semana (últimas 12 semanas) — basado en created_at (alta real,
+  // no fecha_scrapeado que se actualiza cada re-visita del scraper y distorsiona).
+  function lunesDe(d: Date): Date {
+    const out = new Date(d)
+    out.setHours(0, 0, 0, 0)
+    const dow = out.getDay()
+    out.setDate(out.getDate() - dow + (dow === 0 ? -6 : 1))
+    return out
   }
-  stats.value.porSemana = Object.entries(semanas).map(([label, count]) => ({ label, count }))
+
+  // Generamos 12 lunes consecutivos (el más reciente primero, después invertimos)
+  // para que las semanas sin altas igual aparezcan como columnas en 0.
+  const lunesActual = lunesDe(ahora)
+  const buckets: { key: string; label: string; count: number }[] = []
+  for (let i = 11; i >= 0; i--) {
+    const lun = new Date(lunesActual)
+    lun.setDate(lunesActual.getDate() - i * 7)
+    buckets.push({
+      key:   lun.toISOString().slice(0, 10),
+      label: lun.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' }),
+      count: 0,
+    })
+  }
+  const idxByKey = Object.fromEntries(buckets.map((b, i) => [b.key, i]))
+
+  for (const c of historico ?? []) {
+    const lun = lunesDe(new Date(c.created_at))
+    const key = lun.toISOString().slice(0, 10)
+    const idx = idxByKey[key]
+    if (idx !== undefined) buckets[idx].count++
+  }
+  stats.value.porSemana = buckets.map(({ label, count }) => ({ label, count }))
 
   loading.value = false
 })
