@@ -23,6 +23,9 @@
             <span class="stat-num">{{ fmtClp(kpis.mrr_neto) }}</span>
             <span class="stat-label">MRR neto</span>
             <span class="stat-sub">Bruto: {{ fmtClp(kpis.mrr_bruto) }}</span>
+            <span v-if="kpis.mrr_comprometido > kpis.mrr_bruto" class="stat-sub">
+              Comprometido post-promo: <strong>{{ fmtClp(kpis.mrr_comprometido) }}</strong>
+            </span>
           </div>
           <div class="stat-card accent-blue">
             <span class="stat-num">{{ fmtClp(kpis.arr_neto) }}</span>
@@ -145,14 +148,15 @@
 
         <!-- Desglose MRR por plan -->
         <div class="section">
-          <h2>Desglose MRR por plan</h2>
+          <h2>Desglose MRR por plan <span class="h2-sub">basado en subscriptions reales</span></h2>
           <table class="tabla">
             <thead>
               <tr>
                 <th>Plan</th>
                 <th class="col-num">Clientes</th>
                 <th class="col-num">Precio regular</th>
-                <th class="col-num">MRR bruto</th>
+                <th class="col-num">MRR actual</th>
+                <th class="col-num">Comprometido</th>
                 <th class="col-num">Fee estimado</th>
                 <th class="col-num">MRR neto</th>
               </tr>
@@ -162,12 +166,13 @@
                 <td><span class="plan-tag" :class="'plan-' + d.plan">{{ d.plan }}</span></td>
                 <td class="col-num">{{ d.clientes }}</td>
                 <td class="col-num text-muted">{{ fmtClp(d.precio_regular) }}</td>
-                <td class="col-num">{{ fmtClp(d.mrr_bruto) }}</td>
+                <td class="col-num">{{ fmtClp(d.mrr_actual) }}</td>
+                <td class="col-num text-muted">{{ fmtClp(d.mrr_comprometido) }}</td>
                 <td class="col-num text-neg">-{{ fmtClp(d.fee_estimado) }}</td>
-                <td class="col-num text-pos"><strong>{{ fmtClp(d.mrr_neto) }}</strong></td>
+                <td class="col-num text-pos"><strong>{{ fmtClp(d.mrr_neto_actual) }}</strong></td>
               </tr>
               <tr v-if="!desglose.length">
-                <td colspan="6" class="empty">Sin clientes pagando todavía.</td>
+                <td colspan="7" class="empty">Sin clientes pagando todavía.</td>
               </tr>
             </tbody>
           </table>
@@ -222,12 +227,13 @@ definePageMeta({ middleware: ['auth', 'admin'], layout: false })
 const supabase = useSupabaseClient()
 
 interface Kpis {
-  mrr_bruto:      number
-  mrr_neto:       number
-  arr_neto:       number
-  por_liberar:    number
-  clientes_pagos: number
-  clientes_total: number
+  mrr_bruto:        number
+  mrr_neto:         number
+  mrr_comprometido: number   // SUM(regular_amount) — MRR cuando todas las promos terminen
+  arr_neto:         number
+  por_liberar:      number
+  clientes_pagos:   number
+  clientes_total:   number
 }
 interface Movimiento {
   user_id:       string
@@ -250,12 +256,13 @@ interface Cobros {
   mes_anterior_count: number
 }
 interface Desglose {
-  plan:           string
-  clientes:       number
-  precio_regular: number
-  mrr_bruto:      number
-  fee_estimado:   number
-  mrr_neto:       number
+  plan:             string
+  clientes:         number
+  precio_regular:   number
+  mrr_actual:       number   // SUM(current_amount) — con promo si aplica
+  mrr_comprometido: number   // SUM(regular_amount) — post-promo
+  fee_estimado:     number
+  mrr_neto_actual:  number
 }
 interface PorLiberar {
   mp_payment_id:       string
@@ -274,7 +281,7 @@ const warnings    = ref<string[]>([])
 const today = new Date()
 const mesRef = ref(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`)
 
-const kpis        = ref<Kpis>({ mrr_bruto: 0, mrr_neto: 0, arr_neto: 0, por_liberar: 0, clientes_pagos: 0, clientes_total: 0 })
+const kpis        = ref<Kpis>({ mrr_bruto: 0, mrr_neto: 0, mrr_comprometido: 0, arr_neto: 0, por_liberar: 0, clientes_pagos: 0, clientes_total: 0 })
 const movimientos = ref<Movimiento[]>([])
 const cobros      = ref<Cobros>({ mes_bruto: 0, mes_fee: 0, mes_taxes: 0, mes_neto: 0, mes_count: 0, mes_anterior_bruto: 0, mes_anterior_neto: 0, mes_anterior_count: 0 })
 const desglose    = ref<Desglose[]>([])
