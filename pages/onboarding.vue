@@ -473,16 +473,24 @@ async function finalizar() {
   guardando.value = false
   paso.value = 5
 
-  // Calcular matches con el perfil recién guardado
+  await calcularMatches()
+}
+
+// Calcula los matches del perfil actual contra las convocatorias abiertas.
+// Extraído para que también se pueda llamar al recuperar el estado tras un back-nav.
+async function calcularMatches() {
   calculandoMatch.value = true
   try {
     const hoy = new Date().toISOString().split('T')[0]
+    // Solo traer convocatorias que tengan perfil_tipo_persona poblado: si está NULL,
+    // matchTipoPersona no compara y el score queda inflado por ausencia de datos.
     const { data: fondos } = await supabase
       .from('convocatorias')
       .select('id, titulo, organizador, foco, perfil_tipo_persona, perfil_nivel_desarrollo, monto_rango, alcance')
       .eq('estado', 'abierto')
       .or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`)
       .eq('tipo', 'fondo')
+      .not('perfil_tipo_persona', 'is', null)
       .limit(60)
 
     const perfilMatch: Perfil = {
@@ -494,6 +502,9 @@ async function finalizar() {
     }
 
     matchResults.value = (fondos ?? [])
+      // Solo comparar contra fondos con foco poblado — sino la dimensión foco
+      // (peso 25) cae como 'no comparable' y el score se sesga al alza.
+      .filter(f => Array.isArray(f.foco) && f.foco.length > 0)
       .map(f => ({ item: f, match: calcularMatch(perfilMatch, f) }))
       .filter(r => r.match.score >= 40)
       .sort((a, b) => b.match.score - a.match.score)
@@ -526,7 +537,7 @@ onMounted(async () => {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('intended_plan')
+      .select('intended_plan, onboarding_done')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -539,6 +550,33 @@ onMounted(async () => {
           planIntencion.value = stored
         }
       } catch {}
+    }
+
+    // Recuperación post-back: si el usuario ya completó el onboarding y volvió
+    // (ej. desde /planes con la flecha del browser), cargar su proyecto guardado,
+    // saltar a la pantalla final y recalcular matches en lugar de pedirle todo otra vez.
+    if (profile?.onboarding_done) {
+      const { data: proyecto } = await supabase
+        .from('proyectos')
+        .select('tipo_persona, subtipo_natural, edad, antiguedad_empresa, estado_proyecto, foco, palabras_clave')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+
+      if (proyecto?.tipo_persona && proyecto.estado_proyecto) {
+        perfil.value = {
+          tipo_persona:       proyecto.tipo_persona,
+          subtipo_natural:    proyecto.subtipo_natural ?? null,
+          edad:               proyecto.edad ?? null,
+          antiguedad_empresa: proyecto.antiguedad_empresa ?? null,
+          estado_proyecto:    proyecto.estado_proyecto,
+          foco_proyecto:      proyecto.foco ?? [],
+          palabras_clave:     proyecto.palabras_clave ?? [],
+        }
+        paso.value = 5
+        await calcularMatches()
+      }
     }
   }
 })
