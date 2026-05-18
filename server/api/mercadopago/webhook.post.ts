@@ -440,7 +440,14 @@ export default defineEventHandler(async (event) => {
     procesoExitoso = true; return { ok: true, status: pay.status, processed: false }
   }
 
-  // ── PAYMENT: pago único (legacy create-preference, se mantiene por compat) ──
+  // ── PAYMENT: pago aprobado ────────────────────────────────────────────────
+  // Cubre dos casos:
+  //   (a) Pago único legacy (create-preference) — sin sub asociada, solo asigna plan.
+  //   (b) Cobro de un preapproval cuando MP NO envía `subscription_preapproval`.
+  //       Observado en producción MP Chile 2026-05: el panel acepta el topic
+  //       "Planes y suscripciones" pero no dispara los eventos; el único signal
+  //       que llega es `type=payment`. Sin esta rama, la fila en subscriptions
+  //       queda en `pending` para siempre (rompe cancelación, dashboard, crons).
   if (type === 'payment') {
     const pago = await obtenerPagoMercadoPago(dataId, MP_ACCESS_TOKEN)
     if (!pago) {
@@ -469,7 +476,64 @@ export default defineEventHandler(async (event) => {
       return { ok: false, error: 'rpc_failed' }
     }
 
-    procesoExitoso = true; return { ok: true, processed: true, type: 'payment', userId, plan }
+    // Sincronizar subscriptions: buscar la sub activa (pending o authorized) del
+    // user+plan y reflejar el cobro. Si no hay sub local, es pago legacy y no
+    // hacemos nada — solo el asignarPlanUsuario aplica. Idempotente si después
+    // llega `subscription_preapproval authorized` (mismo UPDATE).
+    const subsUrl = `${SUPABASE_URL}/rest/v1/subscriptions` +
+      `?user_id=eq.${encodeURIComponent(userId)}` +
+      `&plan=eq.${encodeURIComponent(plan)}` +
+      `&status=in.(pending,authorized)` +
+      `&select=id,status` +
+      `&order=created_at.desc&limit=1`
+    const subsRes = await fetch(subsUrl, {
+      headers: {
+        apikey:        SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+      },
+    })
+    const subs = subsRes.ok
+      ? await subsRes.json() as Array<{ id: string; status: string }>
+      : []
+    const localSub = subs[0]
+
+    let subUpdated = false
+    if (localSub) {
+      const fechaPago = pago.date_approved ?? pago.date_created ?? new Date().toISOString()
+      const necesitaActivar = localSub.status !== 'authorized'
+      const patch: Record<string, unknown> = {
+        last_payment_at: fechaPago,
+        failed_payments: 0,
+      }
+      if (necesitaActivar) {
+        patch.status     = 'authorized'
+        patch.started_at = fechaPago
+      }
+
+      const updateRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/subscriptions?id=eq.${encodeURIComponent(localSub.id)}`,
+        {
+          method:  'PATCH',
+          headers: {
+            apikey:         SUPABASE_SERVICE_KEY,
+            Authorization:  `Bearer ${SUPABASE_SERVICE_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer:         'return=minimal',
+          },
+          body: JSON.stringify(patch),
+        },
+      )
+      if (updateRes.ok) {
+        subUpdated = true
+      } else {
+        // Best-effort: el plan ya está asignado, no bloqueamos por esto.
+        // Log para diagnosticar drift entre profiles.plan y subscriptions.
+        console.error('[webhook] payment sub update failed:', await updateRes.text())
+      }
+    }
+
+    procesoExitoso = true
+    return { ok: true, processed: true, type: 'payment', userId, plan, sub_updated: subUpdated }
   }
 
   // Ignorar cualquier otro tipo (merchant_order, plans, etc.)

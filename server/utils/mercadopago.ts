@@ -84,6 +84,8 @@ export async function obtenerPagoMercadoPago(paymentId: string, accessToken: str
     external_reference: string  // formato esperado: `${user_id}:${plan}`
     payer?:             { email?: string }
     transaction_amount: number
+    date_created?:      string  // ISO timestamp
+    date_approved?:     string  // ISO timestamp (null hasta que se aprueba)
   }>
 }
 
