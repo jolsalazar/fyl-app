@@ -50,14 +50,16 @@
             los primeros 3 meses<br>
             <span class="price-regular">luego ${{ PLANES_CONFIG.starter.precio_regular.toLocaleString() }}/mes</span>
           </p>
-          <p class="plan-desc">Para emprendedores activos que quieren estar siempre al tanto.</p>
+          <p class="plan-desc">Para emprendedores activos que postulan y quieren herramientas reales de gestión.</p>
         </div>
         <ul class="features">
           <li class="ok">Todo lo del plan Free</li>
-          <li class="ok">Hasta 3 alertas activas</li>
-          <li class="ok">Notificaciones por email (diarias)</li>
-          <li class="ok">Mis Match — score de compatibilidad fondo a fondo</li>
-          <li class="ok">Razones de por qué calificas o no</li>
+          <li class="ok">Hasta 3 alertas y 3 proyectos</li>
+          <li class="ok">Email diario con novedades + recordatorios de cierre (7, 3 y 1 día — configurables)</li>
+          <li class="ok">Mis Match — score de compatibilidad fondo a fondo con razones detalladas</li>
+          <li class="ok">Comparador: hasta 3 fondos lado a lado para priorizar</li>
+          <li class="ok">Pipeline de postulaciones tipo kanban con notas (Por postular → Aprobada)</li>
+          <li class="ok">Mi actividad: KPIs, embudo y tasa real de aprobación</li>
         </ul>
         <div class="plan-action">
           <span v-if="plan === 'starter'" class="btn-current">Plan actual</span>
@@ -81,14 +83,13 @@
             los primeros 3 meses<br>
             <span class="price-regular">luego ${{ PLANES_CONFIG.advanced.precio_regular.toLocaleString() }}/mes</span>
           </p>
-          <p class="plan-desc">Para quienes postulan activamente y quieren postular solo donde califican.</p>
+          <p class="plan-desc">Para quienes gestionan muchos fondos en paralelo y necesitan operar sin techo.</p>
         </div>
         <ul class="features">
           <li class="ok">Todo lo del plan Starter</li>
-          <li class="ok">Alertas ilimitadas</li>
-          <li class="ok">Mis Match — score de compatibilidad fondo a fondo</li>
-          <li class="ok">Razones concretas de por qué calificas o no</li>
-          <li class="ok">Resultados ordenados por compatibilidad</li>
+          <li class="ok">Alertas ilimitadas (vs 3 en Starter)</li>
+          <li class="ok">Proyectos ilimitados (vs 3 en Starter)</li>
+          <li class="ok">Sin restricciones de volumen en match ni comparador</li>
           <li class="no">Gestión multi-cliente</li>
         </ul>
         <div class="plan-action">
