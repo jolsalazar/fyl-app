@@ -1,5 +1,17 @@
-export interface Razon { tipo: 'positivo' | 'neutro' | 'negativo'; texto: string }
-export interface MatchResult { score: number; nivel: 'alto' | 'medio' | 'bajo'; razones: Razon[] }
+// Single source of truth para el cálculo de match proyecto ↔ convocatoria.
+// Importado por: pages/dashboard/match.vue, pages/dashboard/oportunidades/[id].vue,
+// pages/onboarding.vue y workers/alert-digest/src/index.ts.
+
+export interface Razon {
+  tipo:  'positivo' | 'neutro' | 'negativo'
+  texto: string
+}
+
+export interface MatchResult {
+  score:   number
+  nivel:   'alto' | 'medio' | 'bajo'
+  razones: Razon[]
+}
 
 export interface Perfil {
   tipo_persona:    string | null
@@ -11,7 +23,16 @@ export interface Perfil {
 
 export const MONTO_ORDER = ['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M']
 
-function matchTipoPersona(userTipo: string | null, convTipos: string[] | null): Razon | null {
+const MONTO_LABELS: Record<string, string> = {
+  hasta_1M: 'Hasta $1M', '1M_10M': '$1M–$10M', '10M_30M': '$10M–$30M',
+  '30M_60M': '$30M–$60M', '60M_100M': '$60M–$100M', sobre_100M: '+$100M',
+}
+
+const ALCANCE_LABELS: Record<string, string> = {
+  regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional',
+}
+
+function matchTipoPersona(userTipo: string | null, convTipos: string[] | null | undefined): Razon | null {
   if (!userTipo || !convTipos?.length) return null
   const kw = userTipo === 'natural' ? ['natural'] : ['jurídic', 'juridic', 'empresa', 'sociedad']
   const label = userTipo === 'natural' ? 'Persona Natural' : 'Persona Jurídica'
@@ -23,14 +44,14 @@ function matchTipoPersona(userTipo: string | null, convTipos: string[] | null): 
   return { tipo: 'negativo', texto: `Dirigido a ${convTipos.slice(0, 2).join(' / ')}, no a ${label}` }
 }
 
-function matchFoco(userFoco: string[], convFoco: string[] | null): Razon | null {
+function matchFoco(userFoco: string[], convFoco: string[] | null | undefined): Razon | null {
   if (!userFoco?.length || !convFoco?.length) return null
   const overlap = userFoco.filter(f => convFoco.includes(f))
   if (overlap.length) return { tipo: 'positivo', texto: `Tu foco coincide: ${overlap.slice(0, 3).join(', ')}` }
   return { tipo: 'negativo', texto: `Focos del fondo (${convFoco.slice(0, 2).join(', ')}) no coinciden con tu proyecto` }
 }
 
-function matchEstado(userEstado: string | null, convNivel: string | null): Razon | null {
+function matchEstado(userEstado: string | null, convNivel: string | null | undefined): Razon | null {
   if (!userEstado || !convNivel) return null
   const nl = convNivel.toLowerCase()
   const map: Record<string, { kw: string[]; label: string }> = {
@@ -47,21 +68,27 @@ function matchEstado(userEstado: string | null, convNivel: string | null): Razon
   return { tipo: 'neutro', texto: `Nivel requerido: "${convNivel}"` }
 }
 
-function matchMonto(userMinimo: string | null, convRango: string | null): Razon | null {
+function matchMonto(userMinimo: string | null, convRango: string | null | undefined): Razon | null {
   if (!convRango) return null
-  const LABELS: Record<string, string> = { hasta_1M: 'Hasta $1M', '1M_10M': '$1M–$10M', '10M_30M': '$10M–$30M', '30M_60M': '$30M–$60M', '60M_100M': '$60M–$100M', sobre_100M: '+$100M' }
-  if (!userMinimo) return { tipo: 'neutro', texto: `Monto del fondo: ${LABELS[convRango] ?? convRango}` }
+  if (!userMinimo) return { tipo: 'neutro', texto: `Monto del fondo: ${MONTO_LABELS[convRango] ?? convRango}` }
   const uIdx = MONTO_ORDER.indexOf(userMinimo)
   const cIdx = MONTO_ORDER.indexOf(convRango)
-  if (cIdx >= uIdx) return { tipo: 'positivo', texto: `Monto (${LABELS[convRango]}) dentro de tu rango` }
-  return { tipo: 'neutro', texto: `Monto (${LABELS[convRango]}) bajo tu mínimo de interés` }
+  if (cIdx >= uIdx) return { tipo: 'positivo', texto: `Monto (${MONTO_LABELS[convRango]}) dentro de tu rango` }
+  return { tipo: 'neutro', texto: `Monto (${MONTO_LABELS[convRango]}) bajo tu mínimo de interés` }
 }
 
-function matchAlcance(userAlcance: string[], convAlcance: string | null): Razon | null {
+function matchAlcance(userAlcance: string[], convAlcance: string | null | undefined): Razon | null {
   if (!userAlcance?.length || !convAlcance) return null
-  const LABELS: Record<string, string> = { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }
-  if (userAlcance.includes(convAlcance)) return { tipo: 'positivo', texto: `Alcance ${LABELS[convAlcance]} es de tu interés` }
-  return { tipo: 'neutro', texto: `Alcance del fondo: ${LABELS[convAlcance]}` }
+  if (userAlcance.includes(convAlcance)) return { tipo: 'positivo', texto: `Alcance ${ALCANCE_LABELS[convAlcance]} es de tu interés` }
+  return { tipo: 'neutro', texto: `Alcance del fondo: ${ALCANCE_LABELS[convAlcance]}` }
+}
+
+// Peso 0 intencional: convocatorias.perfil_antiguedad_empresa es texto libre, no parseable
+// de forma confiable. Lo mostramos como razón neutra para que el usuario decida. Promover a
+// peso > 0 cuando el scraper extraiga `antiguedad_minima_anos` estructurada.
+function matchAntiguedad(userTipo: string | null, convAntig: string | null | undefined): Razon | null {
+  if (userTipo !== 'juridica' || !convAntig) return null
+  return { tipo: 'neutro', texto: `Antigüedad requerida: "${convAntig}"` }
 }
 
 export function calcularMatch(perfil: Perfil, conv: any): MatchResult {
@@ -69,11 +96,12 @@ export function calcularMatch(perfil: Perfil, conv: any): MatchResult {
   let posibles = 0; let obtenidos = 0
 
   const checks: [Razon | null, number][] = [
-    [matchTipoPersona(perfil.tipo_persona, conv.perfil_tipo_persona), 30],
-    [matchFoco(perfil.foco, conv.foco),                               25],
-    [matchEstado(perfil.estado_proyecto, conv.perfil_nivel_desarrollo), 20],
-    [matchMonto(perfil.monto_minimo, conv.monto_rango),               15],
-    [matchAlcance(perfil.alcance, conv.alcance),                      10],
+    [matchTipoPersona(perfil.tipo_persona, conv.perfil_tipo_persona),     30],
+    [matchFoco(perfil.foco, conv.foco),                                   25],
+    [matchEstado(perfil.estado_proyecto, conv.perfil_nivel_desarrollo),   20],
+    [matchMonto(perfil.monto_minimo, conv.monto_rango),                   15],
+    [matchAlcance(perfil.alcance, conv.alcance),                          10],
+    [matchAntiguedad(perfil.tipo_persona, conv.perfil_antiguedad_empresa), 0],
   ]
 
   for (const [razon, peso] of checks) {
@@ -91,7 +119,10 @@ export function calcularMatch(perfil: Perfil, conv: any): MatchResult {
   const score = posibles > 0 ? Math.round((obtenidos / posibles) * 100) : 50
   const nivel: 'alto' | 'medio' | 'bajo' = score >= 70 ? 'alto' : score >= 40 ? 'medio' : 'bajo'
 
-  razones.sort((a, b) => ({ positivo: 0, neutro: 1, negativo: 2 }[a.tipo] - { positivo: 0, neutro: 1, negativo: 2 }[b.tipo]))
+  razones.sort((a, b) => {
+    const ord = { positivo: 0, neutro: 1, negativo: 2 }
+    return ord[a.tipo] - ord[b.tipo]
+  })
 
   return { score, nivel, razones }
 }

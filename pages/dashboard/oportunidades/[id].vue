@@ -268,6 +268,8 @@
 </template>
 
 <script setup lang="ts">
+import { calcularMatch, cargarPerfil, type MatchResult } from '~/shared/match'
+
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()

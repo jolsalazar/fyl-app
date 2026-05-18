@@ -302,7 +302,7 @@
 </template>
 
 <script setup lang="ts">
-import { calcularMatch, type Perfil } from '~/composables/useMatch'
+import { calcularMatch, type Perfil } from '~/shared/match'
 import { PLANES_CONFIG, esPlanValido, type Plan } from '~~/utils/planes'
 
 definePageMeta({ middleware: 'auth' })

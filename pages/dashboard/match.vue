@@ -274,16 +274,14 @@
 </template>
 
 <script setup lang="ts">
-import { MONTO_ORDER } from '~/composables/useMatch'
+import { calcularMatch, type Razon, type MatchResult } from '~/shared/match'
 
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
 const { plan, load: loadPlan } = usePlan()
 
-// ── Tipos ─────────────────────────────────────────────────────────
-interface Razon { tipo: 'positivo' | 'neutro' | 'negativo'; texto: string }
-interface Resultado { conv: any; score: number; nivel: 'alto' | 'medio' | 'bajo'; razones: Razon[] }
+interface Resultado extends MatchResult { conv: any }
 
 // ── Estado ────────────────────────────────────────────────────────
 const loading             = ref(true)
@@ -303,105 +301,6 @@ const proyecto = ref({
 const perfilCompleto = computed(() =>
   !!proyecto.value.tipo_persona && !!proyecto.value.estado_proyecto
 )
-
-// ── Motor de match ────────────────────────────────────────────────
-function matchTipoPersona(userTipo: string | null, convTipos: string[] | null | undefined): Razon | null {
-  if (!userTipo) return null
-  if (!convTipos?.length) return null
-  const kw = userTipo === 'natural' ? ['natural'] : ['jurídic', 'juridic', 'empresa', 'sociedad']
-  const label = userTipo === 'natural' ? 'Persona Natural' : 'Persona Jurídica'
-  const match = convTipos.some(t => {
-    const tl = t.toLowerCase()
-    return kw.some(k => tl.includes(k)) || tl.includes('ambos') || tl.includes('todos') || tl.includes('cualquier')
-  })
-  if (match) return { tipo: 'positivo', texto: `Acepta ${label}` }
-  return { tipo: 'negativo', texto: `Dirigido a ${convTipos.slice(0, 2).join(' / ')}, no a ${label}` }
-}
-
-function matchFoco(userFoco: string[], convFoco: string[] | null | undefined): Razon | null {
-  if (!userFoco?.length || !convFoco?.length) return null
-  const overlap = userFoco.filter(f => convFoco.includes(f))
-  if (overlap.length)
-    return { tipo: 'positivo', texto: `Tu foco coincide: ${overlap.slice(0, 3).join(', ')}` }
-  return { tipo: 'negativo', texto: `Focos del fondo (${convFoco.slice(0, 2).join(', ')}) no coinciden con tu proyecto` }
-}
-
-function matchEstado(userEstado: string | null, convNivel: string | null | undefined): Razon | null {
-  if (!userEstado || !convNivel) return null
-  const nl = convNivel.toLowerCase()
-  const map: Record<string, { kw: string[]; label: string }> = {
-    solo_idea:     { kw: ['idea', 'ideación', 'concepto', 'sin actividad', 'sin ventas'], label: 'Solo idea' },
-    maqueta:       { kw: ['maqueta', 'diseño', 'modelo', 'boceto'],                       label: 'Maqueta' },
-    prototipo:     { kw: ['prototipo', 'mvp', 'funcional', 'piloto', 'validación'],       label: 'Prototipo' },
-    marcha_blanca: { kw: ['marcha blanca', 'primeras ventas', 'tracción', 'temprana'],    label: 'Marcha blanca' },
-    crecimiento:   { kw: ['escala', 'crecimiento', 'expansión', 'consolidado', 'empresa en marcha', 'con ventas'], label: 'En crecimiento' },
-  }
-  const stage = map[userEstado]
-  if (!stage) return null
-  const match = stage.kw.some(k => nl.includes(k))
-  if (match)   return { tipo: 'positivo', texto: `Tu etapa (${stage.label}) califica para este fondo` }
-  return { tipo: 'neutro', texto: `Nivel requerido: "${convNivel}"` }
-}
-
-function matchMonto(userMinimo: string | null, convRango: string | null | undefined): Razon | null {
-  if (!convRango) return null
-  const LABELS: Record<string, string> = { hasta_1M: 'Hasta $1M', '1M_10M': '$1M–$10M', '10M_30M': '$10M–$30M', '30M_60M': '$30M–$60M', '60M_100M': '$60M–$100M', sobre_100M: '+$100M' }
-  if (!userMinimo) return { tipo: 'neutro', texto: `Monto del fondo: ${LABELS[convRango] ?? convRango}` }
-  const uIdx = MONTO_ORDER.indexOf(userMinimo)
-  const cIdx = MONTO_ORDER.indexOf(convRango)
-  if (cIdx >= uIdx) return { tipo: 'positivo', texto: `Monto (${LABELS[convRango]}) dentro de tu rango` }
-  return { tipo: 'neutro', texto: `Monto (${LABELS[convRango]}) bajo tu mínimo de interés` }
-}
-
-function matchAlcance(userAlcance: string[], convAlcance: string | null | undefined): Razon | null {
-  if (!userAlcance?.length || !convAlcance) return null
-  const LABELS: Record<string, string> = { regional: 'Regional', nacional: 'Nacional', internacional: 'Internacional' }
-  if (userAlcance.includes(convAlcance)) return { tipo: 'positivo', texto: `Alcance ${LABELS[convAlcance]} es de tu interés` }
-  return { tipo: 'neutro', texto: `Alcance del fondo: ${LABELS[convAlcance]}` }
-}
-
-function matchAntigüedad(userTipo: string | null, userAntig: string | null, convAntig: string | null | undefined): Razon | null {
-  if (userTipo !== 'juridica' || !convAntig) return null
-  return { tipo: 'neutro', texto: `Antigüedad requerida: "${convAntig}"` }
-}
-
-function calcularMatch(p: typeof proyecto.value, conv: any): Resultado {
-  const razones: Razon[] = []
-  let posibles = 0; let obtenidos = 0
-
-  const checks: [Razon | null, number][] = [
-    [matchTipoPersona(p.tipo_persona, conv.perfil_tipo_persona),     30],
-    [matchFoco(p.foco, conv.foco),                                   25],
-    [matchEstado(p.estado_proyecto, conv.perfil_nivel_desarrollo),   20],
-    [matchMonto(p.monto_minimo, conv.monto_rango),                   15],
-    [matchAlcance(p.alcance, conv.alcance),                          10],
-    [matchAntigüedad(p.tipo_persona, null, conv.perfil_antiguedad_empresa), 0],
-  ]
-
-  for (const [razon, peso] of checks) {
-    if (!razon) continue
-    razones.push(razon)
-    if (razon.tipo !== 'neutro' && peso > 0) {
-      posibles += peso
-      if (razon.tipo === 'positivo') obtenidos += peso
-    }
-  }
-
-  // Nivel de ventas como informativo
-  if (conv.perfil_nivel_ventas)
-    razones.push({ tipo: 'neutro', texto: `Nivel de ventas requerido: "${conv.perfil_nivel_ventas}"` })
-
-  const score = posibles > 0 ? Math.round((obtenidos / posibles) * 100) : 50
-  const nivel: 'alto' | 'medio' | 'bajo' = score >= 70 ? 'alto' : score >= 40 ? 'medio' : 'bajo'
-
-  // Reordenar: positivos primero, neutros después, negativos al final
-  razones.sort((a, b) => {
-    const ord = { positivo: 0, neutro: 1, negativo: 2 }
-    return ord[a.tipo] - ord[b.tipo]
-  })
-
-  return { conv, score, nivel, razones }
-}
 
 // ── UI helpers ────────────────────────────────────────────────────
 function toggleExpandido(id: string) {
@@ -469,7 +368,7 @@ async function loadMatch(proyectoId: string) {
   const { data: convs } = await q
 
   resultados.value = (convs ?? [])
-    .map(conv => calcularMatch(proyecto.value, conv))
+    .map(conv => ({ conv, ...calcularMatch(proyecto.value, conv) }))
     .sort((a, b) => b.score - a.score)
 
   loading.value = false

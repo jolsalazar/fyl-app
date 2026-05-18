@@ -1,3 +1,5 @@
+import { calcularMatch, type Perfil } from '../../../shared/match'
+
 interface Env {
   SUPABASE_URL:        string
   SUPABASE_SERVICE_KEY: string
@@ -63,9 +65,11 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
   const authUser = await sbAdminGet<{ email: string }>(env, `/auth/v1/admin/users/${userId}`)
   if (!authUser?.email) return false
 
-  // Alertas activas
+  // Alertas activas + datos del proyecto vinculado (para filtrar por compatibilidad real)
   const alertas = await sbGet<any[]>(
-    env, `/rest/v1/alert_configs?user_id=eq.${userId}&activo=eq.true&select=*`
+    env,
+    `/rest/v1/alert_configs?user_id=eq.${userId}&activo=eq.true` +
+    `&select=*,proyecto:proyectos(tipo_persona,estado_proyecto,foco,alcance,monto_minimo)`
   )
   if (!alertas?.length) return false
 
@@ -85,10 +89,12 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
       : new Date(Date.now() - 25 * 60 * 60 * 1000)
 
     const items = await fetchMatches(env, alerta, desde, idsPostulados)
+    const compatibles = filtrarPorCompatibilidad(items, alerta.proyecto)
 
-    if (items.length > 0) {
-      resultados.push({ alerta, items })
-      log.push(`  ${authUser.email} | "${alerta.nombre}": ${items.length} nuevas`)
+    if (compatibles.length > 0) {
+      resultados.push({ alerta, items: compatibles })
+      const filtradas = items.length - compatibles.length
+      log.push(`  ${authUser.email} | "${alerta.nombre}": ${compatibles.length} compatibles${filtradas > 0 ? ` (${filtradas} filtradas por score<40)` : ''}`)
     } else {
       sinMatch.push(alerta)
     }
@@ -136,9 +142,10 @@ async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: s
   const params = new URLSearchParams()
   params.set('estado',     'eq.abierto')
   params.set('created_at', `gt.${desde.toISOString()}`)
-  params.set('select',     'id,titulo,fuente,tipo,monto_rango,fecha_cierre_postulacion,link_postulacion,descripcion_breve,foco')
+  params.set('select',     'id,titulo,fuente,tipo,monto_rango,fecha_cierre_postulacion,link_postulacion,descripcion_breve,foco,alcance,perfil_tipo_persona,perfil_nivel_desarrollo,perfil_antiguedad_empresa,perfil_nivel_ventas')
   params.set('order',      'created_at.desc')
-  params.set('limit',           '5')
+  // Sobre-fetchea: 5 finales se cubren incluso si filtramos algunas por compatibilidad.
+  params.set('limit',      '20')
 
   if (alerta.tipos?.length)           params.set('tipo',    `in.(${alerta.tipos.join(',')})`)
   if (alerta.fuentes?.length)         params.set('fuente',  `in.(${alerta.fuentes.join(',')})`)
@@ -169,6 +176,27 @@ async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: s
 
   const data = await sbGet<any[]>(env, `/rest/v1/convocatorias?${params.toString()}`)
   return data ?? []
+}
+
+// Filtra los candidatos del PostgREST contra el perfil del proyecto vinculado a la alerta.
+// Usa la MISMA lógica que la UI in-app (shared/match.ts). Si la alerta no tiene proyecto
+// ligado, no filtra (back-compat). Si calcularMatch no encuentra dimensiones comparables
+// (convocatoria con perfil_* vacío), devuelve score 50 → no se filtra.
+const SCORE_MIN = 40
+const MAX_POR_ALERTA = 5
+
+function filtrarPorCompatibilidad(items: any[], proyecto: Perfil | null | undefined): any[] {
+  if (!proyecto) return items.slice(0, MAX_POR_ALERTA)
+  const perfil: Perfil = {
+    tipo_persona:    proyecto.tipo_persona    ?? null,
+    estado_proyecto: proyecto.estado_proyecto ?? null,
+    foco:            proyecto.foco            ?? [],
+    alcance:         proyecto.alcance         ?? [],
+    monto_minimo:    proyecto.monto_minimo    ?? null,
+  }
+  return items
+    .filter(c => calcularMatch(perfil, c).score >= SCORE_MIN)
+    .slice(0, MAX_POR_ALERTA)
 }
 
 // ── Enviar email ──────────────────────────────────────────────────
