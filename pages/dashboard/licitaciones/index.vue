@@ -202,7 +202,13 @@ const hayFiltros = computed(() =>
 function buildQuery() {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' })
   q = q.eq('fuente', FUENTE)
-  if (filtroEstado.value) q = q.eq('estado', filtroEstado.value)
+  if (filtroEstado.value) {
+    q = q.eq('estado', filtroEstado.value)
+    if (filtroEstado.value === 'abierto') {
+      const hoy = new Date().toISOString().split('T')[0]
+      q = q.or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`)
+    }
+  }
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
   if (busqueda.value)     q = q.ilike('titulo', `%${busqueda.value}%`)
   if (orden.value === 'cierre') {

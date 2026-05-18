@@ -355,10 +355,12 @@ async function loadMatch(proyectoId: string) {
 
   if (!perfilCompleto.value) { loading.value = false; return }
 
+  const hoy = new Date().toISOString().split('T')[0]
   let q = supabase
     .from('convocatorias')
     .select('id, titulo, descripcion_breve, fuente, tipo, estado, monto_rango, fecha_cierre_postulacion, link_postulacion, foco, alcance, perfil_tipo_persona, perfil_nivel_desarrollo, perfil_antiguedad_empresa, perfil_nivel_ventas, perfil_limite_edad')
     .eq('estado', 'abierto')
+    .or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`)
     .order('fecha_scrapeado', { ascending: false })
     .limit(200)
 

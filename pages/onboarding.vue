@@ -476,10 +476,12 @@ async function finalizar() {
   // Calcular matches con el perfil recién guardado
   calculandoMatch.value = true
   try {
+    const hoy = new Date().toISOString().split('T')[0]
     const { data: fondos } = await supabase
       .from('convocatorias')
       .select('id, titulo, organizador, foco, perfil_tipo_persona, perfil_nivel_desarrollo, monto_rango, alcance')
       .eq('estado', 'abierto')
+      .or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`)
       .eq('tipo', 'fondo')
       .limit(60)
 

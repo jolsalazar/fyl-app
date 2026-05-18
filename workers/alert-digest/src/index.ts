@@ -140,6 +140,7 @@ async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: s
   const keywords = (alerta.palabras_clave ?? []) as string[]
 
   const params = new URLSearchParams()
+  const hoy = new Date().toISOString().split('T')[0]
   params.set('estado',     'eq.abierto')
   params.set('created_at', `gt.${desde.toISOString()}`)
   params.set('select',     'id,titulo,fuente,tipo,monto_rango,fecha_cierre_postulacion,link_postulacion,descripcion_breve,foco,alcance,perfil_tipo_persona,perfil_nivel_desarrollo,perfil_antiguedad_empresa,perfil_nivel_ventas')
@@ -161,13 +162,17 @@ async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: s
   // foco overlap — PostgREST usa cs (contains) para arrays
   if (foco.length) params.set('foco', `cs.{${foco.join(',')}}`)
 
-  // keywords — OR en título y descripción
+  // Filtros que comparten el operador `or` (no emailear vencidas + keywords):
+  // si ambos aplican, los combinamos en un solo `and(or(...),or(...))`.
+  const dateOr = `or(fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null)`
   if (keywords.length) {
-    const or = keywords.flatMap(k => [
+    const keywordsOr = keywords.flatMap(k => [
       `titulo.ilike.*${k}*`,
       `descripcion_breve.ilike.*${k}*`,
     ]).join(',')
-    params.set('or', `(${or})`)
+    params.set('and', `(${dateOr},or(${keywordsOr}))`)
+  } else {
+    params.set('or', `(fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null)`)
   }
 
   // Excluir fondos donde el usuario ya postuló

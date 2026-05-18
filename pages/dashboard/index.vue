@@ -273,7 +273,15 @@ const hayFiltros = computed(() =>
 function buildQuery() {
   let q = supabase.from('convocatorias').select('*', { count: 'exact' })
   q = q.neq('fuente', 'mercadopublico')
-  if (filtroEstado.value) q = q.eq('estado', filtroEstado.value)
+  if (filtroEstado.value) {
+    q = q.eq('estado', filtroEstado.value)
+    // Cuando el usuario filtra "abierto", excluir las que ya pasaron su fecha de cierre
+    // aunque el scraper aún no las haya marcado como cerradas.
+    if (filtroEstado.value === 'abierto') {
+      const hoy = new Date().toISOString().split('T')[0]
+      q = q.or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`)
+    }
+  }
   if (filtroFuente.value) q = q.eq('fuente', filtroFuente.value)
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
   if (busqueda.value)     q = q.ilike('titulo', `%${busqueda.value}%`)

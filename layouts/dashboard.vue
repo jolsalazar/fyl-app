@@ -188,11 +188,14 @@ onMounted(async () => {
 
   const lastVisit = localStorage.getItem('fyl_last_visit')
   if (lastVisit) {
+    const hoy = new Date().toISOString().split('T')[0]
     const [{ count: cFondos }, { count: cLicit }] = await Promise.all([
       supabase.from('convocatorias').select('id', { count: 'exact', head: true })
-        .gt('fecha_scrapeado', lastVisit).eq('estado', 'abierto').neq('fuente', 'mercadopublico'),
+        .gt('fecha_scrapeado', lastVisit).eq('estado', 'abierto').neq('fuente', 'mercadopublico')
+        .or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`),
       supabase.from('convocatorias').select('id', { count: 'exact', head: true })
-        .gt('fecha_scrapeado', lastVisit).eq('estado', 'abierto').eq('fuente', 'mercadopublico'),
+        .gt('fecha_scrapeado', lastVisit).eq('estado', 'abierto').eq('fuente', 'mercadopublico')
+        .or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`),
     ])
     nuevas.value = cFondos ?? 0
     nuevasLicitaciones.value = cLicit ?? 0
@@ -217,8 +220,10 @@ onMounted(async () => {
       const rangos   = [...new Set(cfgs.flatMap((c: any) => c.monto_rangos ?? []))]
       const keywords = [...new Set(cfgs.flatMap((c: any) => c.palabras_clave ?? []))]
 
+      const hoyAlertas = new Date().toISOString().split('T')[0]
       let q = supabase.from('convocatorias').select('id', { count: 'exact', head: true })
         .eq('estado', 'abierto').gt('fecha_scrapeado', lastAlertas)
+        .or(`fecha_cierre_postulacion.gte.${hoyAlertas},fecha_cierre_postulacion.is.null`)
       if (tipos.length)   q = q.in('tipo', tipos)
       if (fuentes.length) q = q.in('fuente', fuentes)
       if (rangos.length)  q = q.in('monto_rango', rangos)
