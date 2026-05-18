@@ -3,8 +3,11 @@
 // pages/onboarding.vue y workers/alert-digest/src/index.ts.
 
 export interface Razon {
-  tipo:  'positivo' | 'neutro' | 'negativo'
-  texto: string
+  tipo:        'positivo' | 'neutro' | 'negativo'
+  texto:       string
+  // Fracción del peso (0..1) que aplica cuando tipo='positivo'. Default 1 (todo o nada).
+  // Permite crédito parcial — ej. coincide solo 1 de 3 focos.
+  peso_ratio?: number
 }
 
 export interface MatchResult {
@@ -47,8 +50,21 @@ function matchTipoPersona(userTipo: string | null, convTipos: string[] | null | 
 function matchFoco(userFoco: string[], convFoco: string[] | null | undefined): Razon | null {
   if (!userFoco?.length || !convFoco?.length) return null
   const overlap = userFoco.filter(f => convFoco.includes(f))
-  if (overlap.length) return { tipo: 'positivo', texto: `Tu foco coincide: ${overlap.slice(0, 3).join(', ')}` }
-  return { tipo: 'negativo', texto: `Focos del fondo (${convFoco.slice(0, 2).join(', ')}) no coinciden con tu proyecto` }
+  if (!overlap.length) {
+    return { tipo: 'negativo', texto: `Focos del fondo (${convFoco.slice(0, 2).join(', ')}) no coinciden con tu proyecto` }
+  }
+  // Crédito parcial: cubierto sobre el set más chico. Si un lado es subconjunto del otro = 100%.
+  const denom = Math.min(userFoco.length, convFoco.length)
+  const ratio = overlap.length / denom
+  const completo = overlap.length >= denom
+  const lista = overlap.slice(0, 3).join(', ')
+  return {
+    tipo: 'positivo',
+    texto: completo
+      ? `Tu foco coincide: ${lista}`
+      : `Coincide ${overlap.length} de ${denom} focos: ${lista}`,
+    peso_ratio: ratio,
+  }
 }
 
 function matchEstado(userEstado: string | null, convNivel: string | null | undefined): Razon | null {
@@ -109,7 +125,7 @@ export function calcularMatch(perfil: Perfil, conv: any): MatchResult {
     razones.push(razon)
     if (razon.tipo !== 'neutro' && peso > 0) {
       posibles += peso
-      if (razon.tipo === 'positivo') obtenidos += peso
+      if (razon.tipo === 'positivo') obtenidos += peso * (razon.peso_ratio ?? 1)
     }
   }
 
