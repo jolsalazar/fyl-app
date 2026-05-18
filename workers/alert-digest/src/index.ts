@@ -134,10 +134,10 @@ async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: s
   const keywords = (alerta.palabras_clave ?? []) as string[]
 
   const params = new URLSearchParams()
-  params.set('estado',         'eq.abierto')
-  params.set('fecha_scrapeado', `gt.${desde.toISOString()}`)
-  params.set('select',          'id,titulo,fuente,tipo,monto_rango,fecha_cierre_postulacion,link_postulacion,descripcion_breve,foco')
-  params.set('order',           'fecha_scrapeado.desc')
+  params.set('estado',     'eq.abierto')
+  params.set('created_at', `gt.${desde.toISOString()}`)
+  params.set('select',     'id,titulo,fuente,tipo,monto_rango,fecha_cierre_postulacion,link_postulacion,descripcion_breve,foco')
+  params.set('order',      'created_at.desc')
   params.set('limit',           '5')
 
   if (alerta.tipos?.length)           params.set('tipo',    `in.(${alerta.tipos.join(',')})`)
@@ -348,21 +348,30 @@ async function sbAdminGet<T>(env: Env, path: string): Promise<T | null> {
   return res.json()
 }
 
-async function sbPatch(env: Env, path: string, body: object) {
-  await fetch(`${env.SUPABASE_URL}${path}`, {
+async function sbPatch(env: Env, path: string, body: object): Promise<boolean> {
+  const res = await fetch(`${env.SUPABASE_URL}${path}`, {
     method:  'PATCH',
     headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
     body:    JSON.stringify(body),
   })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    console.error(`sbPatch ${path} failed: ${res.status} ${text}`)
+  }
+  return res.ok
 }
 
 async function sbInsert(env: Env, path: string, body: object[]) {
   if (!body.length) return
-  await fetch(`${env.SUPABASE_URL}${path}`, {
+  const res = await fetch(`${env.SUPABASE_URL}${path}`, {
     method:  'POST',
     headers: { ...sbHeaders(env), 'Prefer': 'resolution=ignore-duplicates,return=minimal' },
     body:    JSON.stringify(body),
   })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    console.error(`sbInsert ${path} failed: ${res.status} ${text}`)
+  }
 }
 
 // ── Utilidades ────────────────────────────────────────────────────

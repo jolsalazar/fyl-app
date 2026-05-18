@@ -2,9 +2,9 @@ name = "fyl-alert-digest"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# Cron: 9am Chile = 12:00 UTC (UTC-3)
+# Cron: 9am Chile = 13:00 UTC (UTC-4)
 [triggers]
-crons = ["0 12 * * *"]
+crons = ["0 13 * * *"]
 
 # Variables no sensibles
 [vars]
