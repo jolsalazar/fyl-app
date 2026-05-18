@@ -28,7 +28,7 @@ La app cobra suscripciones mensuales vía **preapprovals** de Mercado Pago (el p
 
 **Causa:** el `MP_WEBHOOK_SECRET` en Cloudflare no coincidía con el configurado en el panel de MP.
 
-**Fix aplicado:** se actualizó la variable en Cloudflare con el valor correcto: `fb46b1adfbf048cef93b236e00f384f0f9ad77c87ebf0f8df4ff55e598170eb3`
+**Fix aplicado:** se actualizó la variable en Cloudflare con el valor correcto del panel de MP (ver Cloudflare → vars).
 
 ### 3. Página `/dashboard/suscripcion` — quedaba en blanco
 
@@ -50,8 +50,8 @@ MP Chile exige que **colector y pagador sean del mismo tipo**: ambos cuentas rea
 
 | Variable | Valor actual | Tipo |
 |---|---|---|
-| `MP_ACCESS_TOKEN` | `TEST-8153051865573184-...` de `jolsalazar@gmail.com` | **cuenta REAL en modo test** |
-| `payer_email` | test_user_3270128415988500733@testuser.com | **cuenta TEST** |
+| `MP_ACCESS_TOKEN` | token TEST de la cuenta real `jolsalazar@gmail.com` | **cuenta REAL en modo test** |
+| `payer_email` | email del test buyer (ver gestor de secretos) | **cuenta TEST** |
 
 MP rechaza la combinación. Error literal: `"Both payer and collector must be real or test users"`.
 
@@ -61,16 +61,16 @@ MP rechaza la combinación. Error literal: `"Both payer and collector must be re
 
 ### Paso 1 — Obtener el `client_secret` de la app
 
-Ir a `https://www.mercadopago.cl/developers/panel/app`, seleccionar la app **ID `8153051865573184`**, y copiar el **client secret** (está en la sección de credenciales).
+Ir a `https://www.mercadopago.cl/developers/panel/app`, seleccionar la app correspondiente, y copiar el **client secret** (sección de credenciales).
 
 ### Paso 2 — Obtener el access token del test seller
 
-Con el `client_secret` en mano, correr esto en la terminal del proyecto:
+Con el `client_secret` en mano, correr el siguiente curl (rellenar con los valores reales desde el gestor de secretos, **no commitear**):
 
 ```bash
 source .env && curl -s -X POST "https://api.mercadopago.com/oauth/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=password&client_id=8153051865573184&client_secret=TU_CLIENT_SECRET&username=test_user_6866693117640302161%40testuser.com&password=5eCuClBRrc"
+  -d "grant_type=password&client_id=<MP_CLIENT_ID>&client_secret=<MP_CLIENT_SECRET>&username=<TEST_SELLER_EMAIL_URLENCODED>&password=<TEST_SELLER_PASSWORD>"
 ```
 
 La respuesta incluye `access_token`. Ese es el token del **test seller**.
@@ -80,34 +80,27 @@ La respuesta incluye `access_token`. Ese es el token del **test seller**.
 | Variable en Cloudflare | Nuevo valor |
 |---|---|
 | `MP_ACCESS_TOKEN` | access token del test seller (del paso 2) |
-| `MP_PAYER_EMAIL_OVERRIDE` | `test_user_3270128415988500733@testuser.com` |
+| `MP_PAYER_EMAIL_OVERRIDE` | email del test buyer (ver gestor de secretos) |
 
 ### Paso 4 — Probar el flujo completo
 
 1. Entrar a la app con cualquier cuenta
 2. Ir a `/planes`, elegir Starter
-3. En el checkout de MP, logarse con el **test buyer**:
-   - Email: `test_user_3270128415988500733@testuser.com`
-   - Contraseña: `iojeoqb1KV`
+3. En el checkout de MP, logarse con el **test buyer** (credenciales en el gestor de secretos)
 4. Seleccionar una tarjeta de prueba y completar el pago
 5. Verificar que llega el webhook y el plan se activa en la BD
 
 ---
 
-## Credenciales de test creadas (guardar esto)
+## Credenciales de test creadas
 
-> Estas cuentas fueron creadas con la API de MP el 2026-05-15. No hay forma de recuperar la contraseña si se pierde.
-
-| Rol | Email | Contraseña | ID MP |
-|---|---|---|---|
-| Test seller | `test_user_6866693117640302161@testuser.com` | `5eCuClBRrc` | 3404634172 |
-| Test buyer | `test_user_3270128415988500733@testuser.com` | `iojeoqb1KV` | 3404626176 |
+> Las cuentas test fueron creadas con la API de MP el 2026-05-15. Email/contraseña/ID de los test users (seller y buyer) están en el **gestor de secretos**, no en este repo. No hay forma de recuperarlas si se pierden; si se pierden, crear nuevas con la skill `mercadopago:mp-test-setup`.
 
 ---
 
 ## Advertencia de seguridad pendiente
 
-El token de producción `APP_USR-8153051865573184-050714-e5e77f2f415aebf478b5cd8bde8f74bf-156179422` fue compartido en texto plano durante la sesión de trabajo. **Regenerar este token en el panel de MP antes de ir a producción.**
+Durante la sesión de trabajo del 2026-05-15 se compartieron en texto plano: el access token de producción (`APP_USR-…`), el `MP_WEBHOOK_SECRET` y las credenciales de los test users. **Todos esos valores fueron rotados el 2026-05-17.** Si en algún momento se vuelven a exponer, rotar de inmediato en el panel de MP y actualizar en Cloudflare.
 
 ---
 
@@ -128,6 +121,6 @@ El token de producción `APP_USR-8153051865573184-050714-e5e77f2f415aebf478b5cd8
 ## Estado de Cloudflare (variables de entorno al día de hoy)
 
 - `MP_ACCESS_TOKEN` → token TEST del usuario real `jolsalazar@gmail.com` (**debe cambiar al test seller**)
-- `MP_WEBHOOK_SECRET` → `fb46b1adfbf048cef93b236e00f384f0f9ad77c87ebf0f8df4ff55e598170eb3` ✓
+- `MP_WEBHOOK_SECRET` → configurado ✓
 - `MP_PAYER_EMAIL_OVERRIDE` → email del test buyer (ya configurado)
 - `APP_URL` → `https://app.fondosylicitaciones.cl` ✓
