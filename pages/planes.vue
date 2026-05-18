@@ -56,8 +56,8 @@
           <li class="ok">Todo lo del plan Free</li>
           <li class="ok">Hasta 3 alertas activas</li>
           <li class="ok">Notificaciones por email (diarias)</li>
-          <li class="no">Mis Match (scoring de compatibilidad)</li>
-          <li class="no">Análisis de elegibilidad</li>
+          <li class="ok">Mis Match — score de compatibilidad fondo a fondo</li>
+          <li class="ok">Razones de por qué calificas o no</li>
         </ul>
         <div class="plan-action">
           <span v-if="plan === 'starter'" class="btn-current">Plan actual</span>

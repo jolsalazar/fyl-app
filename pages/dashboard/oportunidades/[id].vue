@@ -283,7 +283,7 @@ const totalGuardados    = ref(0)
 const matchResult       = ref<MatchResult | null>(null)
 const otrosDelOrganizador = ref(0)
 const edicionesAnteriores = ref(0)
-const { plan, load: loadPlan } = usePlan()
+const { plan, canUseMatch, load: loadPlan } = usePlan()
 
 const tienePerfilRequerido = computed(() =>
   item.value?.perfil_tipo_persona?.length ||
@@ -325,9 +325,9 @@ onMounted(async () => {
     edicionesAnteriores.value  = cAnt ?? 0
   }
 
-  // Calcular compatibilidad solo para Pro/Agencia con perfil completo
+  // Calcular compatibilidad para todos los planes con match habilitado (Starter+)
   await loadPlan()
-  if (plan.value === 'advanced' || plan.value === 'agency') {
+  if (canUseMatch.value) {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const perfil = await cargarPerfil(supabase, user.id)

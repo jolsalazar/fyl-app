@@ -145,7 +145,7 @@
       </template>
 
       <!-- ── CONTENIDO PRO ──────────────────────────────────────── -->
-      <template v-else-if="plan === 'advanced' || plan === 'agency'">
+      <template v-else-if="canUseMatch">
 
       <!-- Sin perfil suficiente -->
       <div v-if="!loading && !perfilCompleto" class="empty-state">
@@ -279,7 +279,7 @@ import { calcularMatch, type Razon, type MatchResult } from '~/shared/match'
 definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
-const { plan, load: loadPlan } = usePlan()
+const { plan, canUseMatch, load: loadPlan } = usePlan()
 
 interface Resultado extends MatchResult { conv: any }
 

@@ -75,7 +75,7 @@ export function usePlan() {
 
   function planRequerido(feature: 'match' | 'email' | 'multiCliente'): string {
     const map = {
-      match:        'Advanced',
+      match:        'Starter',
       email:        'Starter',
       multiCliente: 'Agency',
     }
