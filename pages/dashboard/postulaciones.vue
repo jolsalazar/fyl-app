@@ -4,130 +4,94 @@
       <div class="header">
         <div>
           <h1>Mis Postulaciones</h1>
-          <p class="subtitle">Fondos y licitaciones donde ya postulaste</p>
+          <p class="subtitle">Gestiona el ciclo completo: desde "voy a postular" hasta el resultado</p>
+        </div>
+        <div class="resumen-chips" v-if="!loading && items.length > 0">
+          <span class="chip">Total: <strong>{{ items.length }}</strong></span>
+          <span class="chip ok" v-if="conteoPorEstado.aprobada > 0">
+            ✓ Aprobadas: <strong>{{ conteoPorEstado.aprobada }}</strong>
+          </span>
+          <span class="chip warn" v-if="conteoPorEstado.postulada > 0">
+            En espera: <strong>{{ conteoPorEstado.postulada }}</strong>
+          </span>
         </div>
       </div>
 
-      <div v-if="loading" class="lista">
-        <div v-for="i in 5" :key="i" class="card sk-card">
-          <div class="sk-top">
-            <div class="sk-row"><div class="sk-block sk-tag"></div><div class="sk-block sk-tag"></div></div>
-            <div class="sk-block sk-badge"></div>
-          </div>
-          <div class="sk-block sk-title"></div>
-          <div class="sk-block sk-line"></div>
-          <div class="sk-block sk-line sk-short"></div>
-          <div class="sk-meta"><div class="sk-block sk-pill"></div><div class="sk-block sk-pill"></div></div>
+      <!-- Skeleton -->
+      <div v-if="loading" class="kanban">
+        <div v-for="i in 5" :key="i" class="col">
+          <div class="col-header sk-block" style="height:18px"></div>
+          <div v-for="j in 2" :key="j" class="sk-card sk-block" style="height:90px;border-radius:10px"></div>
         </div>
       </div>
 
+      <!-- Empty -->
       <div v-else-if="items.length === 0" class="empty">
         <div class="empty-icon">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         </div>
         <p class="empty-title">Sin postulaciones registradas</p>
-        <p class="empty-desc">Cuando postules a un fondo, márcalo aquí para llevar el registro. Aparece el botón "Ya postulé" en cada oportunidad.</p>
+        <p class="empty-desc">Cuando marques un fondo como postulado, va a aparecer acá. Después podés moverlo entre estados según avance.</p>
         <NuxtLink to="/dashboard" class="btn-primary">Ver oportunidades</NuxtLink>
       </div>
 
-      <template v-else>
+      <!-- Kanban -->
+      <div v-else class="kanban">
+        <div v-for="col in ESTADOS" :key="col.value" class="col" :class="col.value">
+          <div class="col-header">
+            <span class="col-emoji">{{ col.emoji }}</span>
+            <span class="col-title">{{ col.label }}</span>
+            <span class="col-count">{{ itemsPorEstado[col.value]?.length ?? 0 }}</span>
+          </div>
 
-        <!-- Resumen -->
-        <div class="resumen">
-          <div class="resumen-stat">
-            <span class="stat-num">{{ items.length }}</span>
-            <span class="stat-label">Total</span>
-          </div>
-          <div class="resumen-divider"></div>
-          <div class="resumen-stat">
-            <span class="stat-num stat-evaluacion">{{ conteo.en_evaluacion }}</span>
-            <span class="stat-label">En evaluación</span>
-          </div>
-          <div class="resumen-divider"></div>
-          <div class="resumen-stat">
-            <span class="stat-num stat-adjudicada">{{ conteo.adjudicada }}</span>
-            <span class="stat-label">Adjudicadas</span>
-          </div>
-          <div class="resumen-divider"></div>
-          <div class="resumen-stat">
-            <span class="stat-num stat-no_adjudicada">{{ conteo.no_adjudicada }}</span>
-            <span class="stat-label">No adjudicadas</span>
-          </div>
-          <div class="resumen-divider"></div>
-          <div class="resumen-stat">
-            <span class="stat-num">{{ conteo.sin_resultado }}</span>
-            <span class="stat-label">Sin resultado</span>
-          </div>
-        </div>
+          <div class="col-cards">
+            <div v-if="!itemsPorEstado[col.value]?.length" class="col-empty">—</div>
 
-        <div class="lista">
-          <div v-for="item in items" :key="item.convocatoria_id" class="card" :class="item.resultado">
-            <div class="card-top">
-              <div class="card-source">
-                <img :src="`/sources/${item.fuente}.png`" :alt="fuenteLabel(item.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
-                <div class="tags">
-                  <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
-                  <span class="tag-tipo" :class="item.tipo">{{ item.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
-                </div>
-              </div>
-              <div class="card-right">
-                <span :class="['badge-estado', item.estado]">{{ estadoLabel(item.estado) }}</span>
+            <div
+              v-for="item in itemsPorEstado[col.value] ?? []"
+              :key="item.convocatoria_id"
+              class="card"
+            >
+              <div class="card-top">
+                <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
                 <button class="btn-remove" @click="quitar(item.convocatoria_id)" title="Quitar registro">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
-            </div>
 
-            <NuxtLink :to="`/dashboard/oportunidades/${item.convocatoria_id}`" class="card-title-link">
-              <h3>{{ item.titulo }}</h3>
-            </NuxtLink>
-            <p class="desc">{{ item.descripcion_breve }}</p>
+              <NuxtLink :to="`/dashboard/oportunidades/${item.convocatoria_id}`" class="card-title-link">
+                <h3>{{ item.titulo }}</h3>
+              </NuxtLink>
 
-            <div class="card-meta">
-              <span class="meta-item meta-postule">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Postulé el {{ formatFecha(item.postulado_at) }}
-              </span>
-              <span v-if="item.monto_rango" class="meta-item">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                {{ montoLabel(item.monto_rango) }}
-              </span>
-              <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Cierra {{ formatFecha(item.fecha_cierre_postulacion) }}
-              </span>
-            </div>
-
-            <!-- Selector de resultado -->
-            <div class="resultado-wrap">
-              <span class="resultado-label">¿Cómo quedó?</span>
-              <div class="resultado-opciones">
-                <button
-                  v-for="op in RESULTADOS"
-                  :key="op.value"
-                  :class="['resultado-btn', op.value, { active: item.resultado === op.value }]"
-                  @click="setResultado(item, op.value)"
-                >
-                  {{ op.label }}
-                </button>
+              <div class="card-meta" v-if="item.fecha_cierre_postulacion || item.monto_rango">
+                <span v-if="item.monto_rango" class="meta-item">
+                  {{ montoLabel(item.monto_rango) }}
+                </span>
+                <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
+                  Cierra {{ formatFechaCorta(item.fecha_cierre_postulacion) }}
+                </span>
               </div>
-            </div>
 
-            <div class="card-footer">
-              <div class="focos">
-                <span v-for="f in (item.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
-              </div>
-              <div class="card-links">
-                <a v-if="item.link_postulacion" :href="item.link_postulacion" target="_blank" class="ver-link primary">
-                  Ir a postulación
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                </a>
-                <NuxtLink :to="`/dashboard/oportunidades/${item.convocatoria_id}`" class="ver-link">Ver detalle</NuxtLink>
+              <textarea
+                v-model="item.notas"
+                class="notas-input"
+                placeholder="Agregar nota…"
+                rows="1"
+                @blur="guardarNotas(item)"
+              ></textarea>
+
+              <div class="card-actions">
+                <select :value="item.estado" @change="cambiarEstado(item, ($event.target as HTMLSelectElement).value)" class="select-estado">
+                  <option v-for="e in ESTADOS" :key="e.value" :value="e.value">
+                    Mover a: {{ e.label }}
+                  </option>
+                </select>
               </div>
             </div>
           </div>
         </div>
-      </template>
+      </div>
+
     </div>
   </NuxtLayout>
 </template>
@@ -137,27 +101,37 @@ definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
 const { show: toast } = useToast()
-const items    = ref<any[]>([])
-const loading  = ref(true)
+const items   = ref<any[]>([])
+const loading = ref(true)
 
-const RESULTADOS = [
-  { value: 'en_evaluacion',  label: 'En evaluación' },
-  { value: 'adjudicada',     label: 'Adjudicada' },
-  { value: 'no_adjudicada',  label: 'No adjudicada' },
-  { value: 'desistida',      label: 'Desistí' },
-]
+const ESTADOS = [
+  { value: 'por_postular',   label: 'Por postular',    emoji: '📌' },
+  { value: 'en_preparacion', label: 'En preparación',  emoji: '✍️' },
+  { value: 'postulada',      label: 'Postulada',       emoji: '📤' },
+  { value: 'aprobada',       label: 'Aprobada',        emoji: '🎉' },
+  { value: 'rechazada',      label: 'Rechazada',       emoji: '🙁' },
+] as const
 
-const conteo = computed(() => ({
-  en_evaluacion:  items.value.filter(i => i.resultado === 'en_evaluacion').length,
-  adjudicada:     items.value.filter(i => i.resultado === 'adjudicada').length,
-  no_adjudicada:  items.value.filter(i => i.resultado === 'no_adjudicada').length,
-  sin_resultado:  items.value.filter(i => !i.resultado).length,
-}))
+type EstadoValue = typeof ESTADOS[number]['value']
+
+const itemsPorEstado = computed(() => {
+  const map: Record<string, any[]> = {}
+  for (const e of ESTADOS) map[e.value] = []
+  for (const it of items.value) {
+    const key = (it.estado as EstadoValue) ?? 'postulada'
+    if (map[key]) map[key].push(it)
+  }
+  return map
+})
+
+const conteoPorEstado = computed(() => Object.fromEntries(
+  ESTADOS.map(e => [e.value, itemsPorEstado.value[e.value]?.length ?? 0])
+))
 
 onMounted(async () => {
   const { data: posts } = await supabase
     .from('postulaciones')
-    .select('convocatoria_id, postulado_at, notas, resultado, monto_adjudicado')
+    .select('convocatoria_id, postulado_at, notas, estado')
     .order('postulado_at', { ascending: false })
 
   if (!posts?.length) { loading.value = false; return }
@@ -165,43 +139,57 @@ onMounted(async () => {
   const ids = posts.map(p => p.convocatoria_id)
   const { data: convs } = await supabase
     .from('convocatorias')
-    .select('id, titulo, descripcion_breve, fuente, tipo, estado, monto_rango, fecha_cierre_postulacion, link_postulacion, foco')
+    .select('id, titulo, fuente, tipo, monto_rango, fecha_cierre_postulacion, link_postulacion')
     .in('id', ids)
 
   const map = Object.fromEntries((convs ?? []).map(c => [c.id, c]))
   items.value = posts
-    .map(p => ({ ...map[p.convocatoria_id], convocatoria_id: p.convocatoria_id, postulado_at: p.postulado_at, resultado: p.resultado, monto_adjudicado: p.monto_adjudicado }))
+    .map(p => ({
+      ...map[p.convocatoria_id],
+      convocatoria_id: p.convocatoria_id,
+      postulado_at:    p.postulado_at,
+      notas:           p.notas ?? '',
+      estado:          p.estado ?? 'postulada',
+    }))
     .filter(i => i.titulo)
   loading.value = false
 })
 
-async function setResultado(item: any, valor: string) {
-  // Toggle: si ya estaba seleccionado, lo limpia
-  const nuevo = item.resultado === valor ? null : valor
+async function cambiarEstado(item: any, nuevo: string) {
+  if (item.estado === nuevo) return
   const { error } = await supabase
     .from('postulaciones')
-    .update({ resultado: nuevo })
+    .update({ estado: nuevo })
     .eq('convocatoria_id', item.convocatoria_id)
-  if (!error) {
-    item.resultado = nuevo
-    toast(nuevo ? `Marcada como "${RESULTADOS.find(r => r.value === nuevo)?.label}"` : 'Resultado eliminado', 'ok')
-  }
+  if (error) { toast('No se pudo actualizar', 'error'); return }
+  item.estado = nuevo
+  const label = ESTADOS.find(e => e.value === nuevo)?.label
+  toast(`Movida a "${label}"`)
+}
+
+async function guardarNotas(item: any) {
+  const { error } = await supabase
+    .from('postulaciones')
+    .update({ notas: item.notas })
+    .eq('convocatoria_id', item.convocatoria_id)
+  if (error) toast('No se pudo guardar la nota', 'error')
 }
 
 async function quitar(convocatoriaId: string) {
+  if (!confirm('¿Quitar esta postulación del registro?')) return
   await supabase.from('postulaciones').delete().eq('convocatoria_id', convocatoriaId)
   items.value = items.value.filter(i => i.convocatoria_id !== convocatoriaId)
   toast('Postulación eliminada', 'info')
 }
 
 function fuenteLabel(f: string) {
-  return { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl', incubadoras: 'Incubadoras' }[f] ?? f
-}
-function estadoLabel(e: string) {
-  return { abierto: 'Abierto', cerrado: 'Cerrado', por_abrir: 'Por abrir' }[e] ?? e
+  return { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'MP', fondos_gob: 'Fondos.gob', incubadoras: 'Incubadoras' }[f] ?? f
 }
 function montoLabel(m: string) {
-  return { hasta_1M: 'Hasta $1M', '1M_10M': '$1M – $10M', '10M_30M': '$10M – $30M', '30M_60M': '$30M – $60M', '60M_100M': '$60M – $100M', sobre_100M: 'Más de $100M' }[m] ?? m
+  return { hasta_1M: 'Hasta $1M', '1M_10M': '$1M–$10M', '10M_30M': '$10M–$30M', '30M_60M': '$30M–$60M', '60M_100M': '$60M–$100M', sobre_100M: '+$100M' }[m] ?? m
+}
+function formatFechaCorta(f: string) {
+  return new Date(f).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })
 }
 function esUrgente(f: string) {
   if (!f) return false
@@ -215,30 +203,21 @@ function esUrgente(f: string) {
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; }
-.header { margin-bottom: 1.5rem; }
+.header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap;
+}
 h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
 .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
 
-/* Resumen */
-.resumen {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 1rem 1.5rem;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+.resumen-chips { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.chip {
+  font-size: 0.8rem; padding: 0.3rem 0.7rem; border-radius: 999px;
+  background: #f1f5f9; color: #475569; font-weight: 500;
 }
-.resumen-stat { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; min-width: 72px; }
-.stat-num { font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.03em; }
-.stat-label { font-size: 0.7rem; color: #94a3b8; font-weight: 500; text-align: center; }
-.stat-evaluacion  { color: #f59e0b; }
-.stat-adjudicada  { color: #16a34a; }
-.stat-no_adjudicada { color: #94a3b8; }
-.resumen-divider { width: 1px; height: 36px; background: #f1f5f9; }
+.chip strong { color: #0f172a; }
+.chip.ok    { background: #f0fdf4; color: #15803d; }
+.chip.warn  { background: #fefce8; color: #a16207; }
 
 /* Empty */
 .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 5rem 2rem; text-align: center; gap: 0.75rem; }
@@ -247,111 +226,77 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .empty-desc { font-size: 0.875rem; color: #64748b; max-width: 380px; line-height: 1.55; }
 .btn-primary { margin-top: 0.5rem; padding: 0.625rem 1.25rem; background: #0ea5e9; color: white; font-size: 0.875rem; font-weight: 600; border-radius: 10px; text-decoration: none; }
 
-/* Lista y cards */
-.lista { display: flex; flex-direction: column; gap: 0.75rem; }
-.card {
-  background: white;
+/* Kanban */
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+.col {
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  padding: 1.25rem 1.5rem;
-  transition: box-shadow 0.15s, border-color 0.15s;
-  border-left: 3px solid #e2e8f0;
+  padding: 0.875rem;
+  min-height: 200px;
+  display: flex; flex-direction: column; gap: 0.625rem;
 }
-.card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-.card.en_evaluacion  { border-left-color: #f59e0b; }
-.card.adjudicada     { border-left-color: #22c55e; }
-.card.no_adjudicada  { border-left-color: #94a3b8; }
-.card.desistida      { border-left-color: #cbd5e1; }
+.col-header { display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; font-size: 0.85rem; font-weight: 700; color: #475569; }
+.col-emoji { font-size: 1rem; }
+.col-title { flex: 1; }
+.col-count { background: white; border-radius: 999px; padding: 0.1rem 0.55rem; font-size: 0.72rem; font-weight: 700; color: #94a3b8; border: 1px solid #e2e8f0; }
+.col.por_postular   .col-emoji { filter: hue-rotate(0); }
+.col.aprobada       { border-color: #bbf7d0; background: #f0fdf4; }
+.col.aprobada       .col-header { border-color: #bbf7d0; color: #15803d; }
+.col.rechazada      .col-header { color: #94a3b8; }
 
-.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.625rem; gap: 0.5rem; flex-wrap: wrap; }
-.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.card-right { display: flex; align-items: center; gap: 0.5rem; }
+.col-cards { display: flex; flex-direction: column; gap: 0.5rem; }
+.col-empty { font-size: 0.78rem; color: #cbd5e1; padding: 0.5rem 0; text-align: center; }
 
-.card-source { display: flex; align-items: center; gap: 0.625rem; }
-.source-logo { width: 36px; height: 36px; border-radius: 8px; object-fit: cover; flex-shrink: 0; }
-.tags { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
-.tag-fuente { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
-.tag-tipo { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 999px; }
-.tag-tipo.fondo { background: #f0fdf4; color: #16a34a; }
-.tag-tipo.licitacion { background: #eef2ff; color: #4338ca; }
+.card {
+  background: white; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 0.75rem 0.875rem; display: flex; flex-direction: column; gap: 0.5rem;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-color: #cbd5e1; }
 
-.badge-estado { font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; }
-.badge-estado.abierto   { background: #f0fdf4; color: #16a34a; }
-.badge-estado.cerrado   { background: #f1f5f9; color: #94a3b8; }
-.badge-estado.por_abrir { background: #fefce8; color: #a16207; }
-
+.card-top { display: flex; justify-content: space-between; align-items: center; }
+.tag-fuente { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #0ea5e9; }
 .btn-remove { background: none; border: none; color: #cbd5e1; cursor: pointer; padding: 2px; display: flex; align-items: center; border-radius: 4px; transition: color 0.15s; }
 .btn-remove:hover { color: #ef4444; }
 
 .card-title-link { text-decoration: none; }
+.card-title-link h3 { font-size: 0.8rem; font-weight: 600; color: #0f172a; line-height: 1.35; transition: color 0.15s; }
 .card-title-link:hover h3 { color: #0ea5e9; }
-.card h3 { font-size: 0.9375rem; font-weight: 600; color: #0f172a; margin-bottom: 0.375rem; line-height: 1.4; transition: color 0.15s; }
-.desc { font-size: 0.875rem; color: #64748b; line-height: 1.55; }
 
-.card-meta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.875rem; }
-.meta-item { display: flex; align-items: center; gap: 0.3rem; font-size: 0.8rem; color: #94a3b8; font-weight: 500; }
+.card-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.meta-item { font-size: 0.7rem; color: #94a3b8; font-weight: 500; }
 .meta-item.urgente { color: #f59e0b; font-weight: 600; }
-.meta-postule { color: #16a34a; font-weight: 600; }
 
-/* Resultado */
-.resultado-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-top: 1rem;
-  padding: 0.75rem 1rem;
-  background: #f8fafc;
-  border-radius: 10px;
-  flex-wrap: wrap;
+.notas-input {
+  width: 100%; resize: none; min-height: 32px;
+  border: 1px solid #f1f5f9; border-radius: 6px;
+  padding: 0.4rem 0.5rem; font-size: 0.75rem; font-family: inherit; color: #475569;
+  background: #fafbfc;
 }
-.resultado-label { font-size: 0.78rem; font-weight: 600; color: #64748b; white-space: nowrap; }
-.resultado-opciones { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.resultado-btn {
-  padding: 0.25rem 0.75rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: inherit;
-  border: 1.5px solid #e2e8f0;
-  background: white;
-  color: #64748b;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.resultado-btn:hover { border-color: #cbd5e1; color: #475569; }
-.resultado-btn.en_evaluacion.active  { background: #fefce8; border-color: #fde68a; color: #a16207; }
-.resultado-btn.adjudicada.active     { background: #f0fdf4; border-color: #86efac; color: #16a34a; }
-.resultado-btn.no_adjudicada.active  { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
-.resultado-btn.desistida.active      { background: #f1f5f9; border-color: #cbd5e1; color: #94a3b8; }
+.notas-input:focus { outline: none; border-color: #bae6fd; background: white; }
 
-/* Footer */
-.card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 0.875rem; border-top: 1px solid #f1f5f9; gap: 0.75rem; flex-wrap: wrap; }
-.focos { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-.foco-tag { font-size: 0.7rem; font-weight: 500; padding: 0.2rem 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; color: #64748b; }
-.card-links { display: flex; gap: 0.75rem; align-items: center; }
-.ver-link { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.8125rem; font-weight: 600; color: #94a3b8; text-decoration: none; transition: color 0.15s; }
-.ver-link:hover { color: #64748b; }
-.ver-link.primary { color: #0ea5e9; background: #f0f9ff; padding: 0.35rem 0.75rem; border-radius: 8px; border: 1px solid #bae6fd; }
-.ver-link.primary:hover { background: #e0f2fe; }
+.select-estado {
+  width: 100%; padding: 0.35rem 0.5rem; border-radius: 6px;
+  border: 1px solid #e2e8f0; background: white; font-size: 0.72rem; color: #475569;
+  font-family: inherit; cursor: pointer;
+}
 
 /* Skeleton */
-.spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.65s linear infinite; }
 @keyframes shimmer { from { background-position: -600px 0; } to { background-position: 600px 0; } }
-.sk-card { pointer-events: none; }
 .sk-block { background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%); background-size: 1200px 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
-.sk-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.875rem; }
-.sk-row { display: flex; gap: 0.5rem; }
-.sk-tag { width: 58px; height: 14px; }
-.sk-badge { width: 52px; height: 20px; border-radius: 999px; }
-.sk-title { height: 18px; width: 70%; margin-bottom: 0.6rem; }
-.sk-line { height: 13px; margin-bottom: 0.4rem; }
-.sk-short { width: 50%; }
-.sk-meta { display: flex; gap: 0.75rem; margin-top: 1rem; }
-.sk-pill { width: 80px; height: 13px; border-radius: 999px; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.sk-card { pointer-events: none; }
 
-@media (max-width: 640px) {
+@media (max-width: 1100px) {
+  .kanban { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .kanban { grid-template-columns: 1fr; }
   .content { padding: 1.5rem 1rem; }
-  .resumen { justify-content: center; }
 }
 </style>
