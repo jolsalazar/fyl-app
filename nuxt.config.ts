@@ -33,7 +33,7 @@ export default defineNuxtConfig({
     },
   },
 
-  modules: ["nitro-cloudflare-dev"],
+  modules: ['@nuxtjs/supabase'],
 
   supabase: {
     redirect: false,
@@ -53,12 +53,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    preset: "cloudflare_module",
-
-    cloudflare: {
-      deployConfig: true,
-      nodeCompat: true
-    }
+    preset: 'cloudflare-pages',
   },
 
   experimental: {
