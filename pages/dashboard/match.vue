@@ -12,14 +12,20 @@
             <template v-else>Cargando…</template>
           </p>
         </div>
-        <!-- Selector de proyecto (cuando hay más de 1) -->
-        <div v-if="plan !== 'free' && proyectos.length > 1" class="proyecto-selector">
-          <button
-            v-for="p in proyectos"
-            :key="p.id"
-            :class="['proyecto-btn', selectedProyectoId === p.id ? 'active' : '']"
-            @click="selectProyecto(p.id)"
-          >{{ p.nombre }}</button>
+        <div v-if="plan !== 'free'" class="header-actions">
+          <!-- Selector de proyecto (cuando hay más de 1) -->
+          <div v-if="proyectos.length > 1" class="proyecto-selector">
+            <button
+              v-for="p in proyectos"
+              :key="p.id"
+              :class="['proyecto-btn', selectedProyectoId === p.id ? 'active' : '']"
+              @click="selectProyecto(p.id)"
+            >{{ p.nombre }}</button>
+          </div>
+          <button class="btn-proyectos" @click="drawerOpen = true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            {{ proyectos.length ? 'Editar proyectos' : 'Crear proyecto' }}
+          </button>
         </div>
       </div>
 
@@ -30,9 +36,9 @@
         </div>
         <h2>Completa tu proyecto para ver el match</h2>
         <p>Para calcular tu compatibilidad con cada fondo necesitamos saber el tipo de postulante y la etapa de tu proyecto.</p>
-        <NuxtLink to="/dashboard/mi-perfil" class="btn-completar">
-          Ir a Mis Proyectos →
-        </NuxtLink>
+        <button class="btn-completar" @click="drawerOpen = true">
+          Configurar proyecto →
+        </button>
       </div>
 
       <!-- ── UPGRADE GATE (solo plan free) ──────────────────────── -->
@@ -193,7 +199,7 @@
           <span v-if="proyecto.estado_proyecto" class="perfil-chip">{{ estadoLabel(proyecto.estado_proyecto) }}</span>
           <span v-for="f in proyecto.foco.slice(0, 3)" :key="f" class="perfil-chip">{{ f }}</span>
           <span v-if="proyecto.foco.length > 3" class="perfil-chip">+{{ proyecto.foco.length - 3 }} focos</span>
-          <NuxtLink to="/dashboard/mi-perfil" class="perfil-edit">Editar</NuxtLink>
+          <button type="button" class="perfil-edit" @click="drawerOpen = true">Editar</button>
         </div>
 
         <div class="lista">
@@ -266,6 +272,26 @@
 
       </template><!-- fin bloque pro -->
 
+      <!-- Drawer de Mis Proyectos -->
+      <Transition name="drawer">
+        <div v-if="drawerOpen" class="drawer-overlay" @click.self="cerrarDrawer">
+          <aside class="drawer" role="dialog" aria-label="Mis Proyectos">
+            <div class="drawer-head">
+              <div>
+                <h2>Mis Proyectos</h2>
+                <p>Edita tu perfil para refinar el match. Los cambios se aplican al cerrar.</p>
+              </div>
+              <button class="drawer-close" @click="cerrarDrawer" aria-label="Cerrar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="drawer-body">
+              <ProyectosManager @saved="cambiosPendientes = true" @deleted="cambiosPendientes = true" />
+            </div>
+          </aside>
+        </div>
+      </Transition>
+
     </div>
   </NuxtLayout>
 </template>
@@ -286,6 +312,31 @@ const resultados          = ref<Resultado[]>([])
 const expandidos          = ref(new Set<string>())
 const proyectos           = ref<any[]>([])
 const selectedProyectoId  = ref<string | null>(null)
+const drawerOpen          = ref(false)
+const cambiosPendientes   = ref(false)
+
+async function cerrarDrawer() {
+  drawerOpen.value = false
+  if (!cambiosPendientes.value) return
+  cambiosPendientes.value = false
+  // Recargar lista de proyectos y el match. Si el proyecto seleccionado fue
+  // eliminado, caer al primero disponible.
+  const { data } = await supabase
+    .from('proyectos')
+    .select('id, nombre, tipo_persona, estado_proyecto')
+    .order('created_at', { ascending: true })
+  proyectos.value = data ?? []
+  const sigueVigente = proyectos.value.find(p => p.id === selectedProyectoId.value)
+  const elegido = sigueVigente ?? proyectos.value.find(p => p.tipo_persona && p.estado_proyecto) ?? proyectos.value[0]
+  if (elegido) {
+    selectedProyectoId.value = elegido.id
+    await loadMatch(elegido.id)
+  } else {
+    selectedProyectoId.value = null
+    resultados.value = []
+    proyecto.value = { tipo_persona: null, estado_proyecto: null, foco: [], alcance: [], monto_minimo: null }
+  }
+}
 
 const proyecto = ref({
   tipo_persona:    null as string | null,
@@ -410,6 +461,52 @@ onMounted(async () => {
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; }
 
 .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.header-actions { display: flex; align-items: center; gap: 0.625rem; flex-wrap: wrap; }
+
+.btn-proyectos {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.875rem; background: white; color: #475569;
+  font-size: 0.8125rem; font-weight: 600; font-family: inherit;
+  border: 1.5px solid #e2e8f0; border-radius: 8px; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-proyectos:hover { border-color: #0ea5e9; color: #0ea5e9; }
+
+/* Drawer */
+.drawer-overlay {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
+  display: flex; justify-content: flex-end; z-index: 1000;
+}
+.drawer {
+  width: min(720px, 100%); height: 100%; background: #f8fafc;
+  display: flex; flex-direction: column;
+  box-shadow: -8px 0 24px rgba(15,23,42,0.12);
+}
+.drawer-head {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+  padding: 1.25rem 1.5rem; border-bottom: 1px solid #e2e8f0; background: white;
+}
+.drawer-head h2 { font-size: 1.0625rem; font-weight: 700; color: #0f172a; margin-bottom: 0.2rem; }
+.drawer-head p { font-size: 0.8125rem; color: #64748b; max-width: 480px; line-height: 1.45; }
+.drawer-close {
+  width: 32px; height: 32px; flex-shrink: 0;
+  border: 1px solid #e2e8f0; border-radius: 8px;
+  background: white; color: #64748b; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.drawer-close:hover { color: #0f172a; border-color: #cbd5e1; }
+.drawer-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+.drawer-enter-active, .drawer-leave-active { transition: opacity 0.2s; }
+.drawer-enter-active .drawer, .drawer-leave-active .drawer { transition: transform 0.25s ease; }
+.drawer-enter-from, .drawer-leave-to { opacity: 0; }
+.drawer-enter-from .drawer, .drawer-leave-to .drawer { transform: translateX(100%); }
+
+@media (max-width: 720px) {
+  .drawer { width: 100%; }
+  .drawer-body { padding: 1rem; }
+}
 
 .proyecto-selector { display: flex; gap: 0.375rem; flex-wrap: wrap; flex-shrink: 0; }
 .proyecto-btn {
@@ -435,8 +532,8 @@ onMounted(async () => {
 .btn-completar {
   display: inline-flex; align-items: center; margin-top: 0.5rem;
   padding: 0.625rem 1.5rem; background: #0ea5e9; color: white;
-  font-size: 0.9rem; font-weight: 600; border-radius: 10px;
-  text-decoration: none; transition: background 0.15s;
+  font-size: 0.9rem; font-weight: 600; font-family: inherit; border: none;
+  border-radius: 10px; text-decoration: none; cursor: pointer; transition: background 0.15s;
 }
 .btn-completar:hover { background: #0284c7; }
 h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
@@ -451,7 +548,7 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 }
 .perfil-label { font-weight: 600; color: #64748b; }
 .perfil-chip { padding: 0.2rem 0.6rem; background: white; border: 1px solid #e2e8f0; border-radius: 999px; color: #374151; font-size: 0.775rem; font-weight: 500; }
-.perfil-edit { margin-left: auto; font-size: 0.775rem; color: #0ea5e9; text-decoration: none; font-weight: 500; }
+.perfil-edit { margin-left: auto; font-size: 0.775rem; color: #0ea5e9; background: none; border: none; cursor: pointer; font-family: inherit; font-weight: 500; padding: 0; }
 .perfil-edit:hover { text-decoration: underline; }
 
 /* Empty states */
