@@ -13,7 +13,13 @@
 // Body: { tipo_persona, estado_proyecto, foco[], alcance[], monto_minimo }
 // → 200 { ok, resultados: [...], total_disponibles, total_compatibles_alto }
 // → 400 si el perfil es insuficiente
+// → 405 si el método no es POST u OPTIONS
 // → 500 si falla la lectura de convocatorias
+//
+// El archivo NO usa el sufijo .post.ts a propósito: necesitamos manejar el
+// preflight OPTIONS del browser dentro del mismo handler para devolver los
+// headers CORS correctos. Con .post.ts, Nitro responde 404 al OPTIONS y el
+// browser bloquea el request por CORS.
 
 import { serverSupabaseServiceRole } from '#supabase/server'
 import { calcularMatch, type Perfil } from '~/shared/match'
@@ -37,6 +43,12 @@ export default defineEventHandler(async (event) => {
   if (event.method === 'OPTIONS') {
     setResponseStatus(event, 204)
     return ''
+  }
+
+  if (event.method !== 'POST') {
+    setResponseStatus(event, 405)
+    setHeader(event, 'Allow', 'POST, OPTIONS')
+    return { ok: false, error: 'method_not_allowed' }
   }
 
   const body = await readBody<{
