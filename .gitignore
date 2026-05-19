@@ -5,3 +5,9 @@ dist
 .env
 *.local
 supabase/.temp
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example

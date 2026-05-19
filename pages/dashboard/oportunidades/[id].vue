@@ -89,6 +89,17 @@
               </ul>
             </section>
 
+            <!-- Documentación requerida -->
+            <section class="card-section" v-if="item.documentacion_requerida?.length">
+              <h2>Documentación a presentar</h2>
+              <ul class="requisitos-lista">
+                <li v-for="d in item.documentacion_requerida" :key="d" class="requisito-item">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  {{ d }}
+                </li>
+              </ul>
+            </section>
+
             <!-- Perfil requerido -->
             <section class="card-section" v-if="tienePerfilRequerido">
               <h2>Perfil requerido</h2>
@@ -119,6 +130,12 @@
                   <span class="perfil-valor">{{ item.perfil_limite_edad ? 'Sí aplica' : 'No aplica' }}</span>
                 </div>
               </div>
+            </section>
+
+            <!-- Criterios de evaluación -->
+            <section class="card-section" v-if="item.criterios_evaluacion">
+              <h2>Criterios de evaluación</h2>
+              <p class="descripcion">{{ item.criterios_evaluacion }}</p>
             </section>
 
             <!-- Focos -->
@@ -244,6 +261,21 @@
               </NuxtLink>
             </div>
 
+            <!-- Contacto / dudas -->
+            <div class="side-card" v-if="item.contacto">
+              <h3>Consultas</h3>
+              <div class="side-rows">
+                <div class="side-row contacto-row">
+                  <span class="side-label">Contacto</span>
+                  <a v-if="contactoEsEmail" :href="`mailto:${item.contacto}`" class="side-val contacto-link">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    {{ item.contacto }}
+                  </a>
+                  <span v-else class="side-val">{{ item.contacto }}</span>
+                </div>
+              </div>
+            </div>
+
             <!-- Fuente -->
             <div class="side-card">
               <h3>Fuente</h3>
@@ -292,6 +324,11 @@ const tienePerfilRequerido = computed(() =>
   item.value?.perfil_nivel_desarrollo ||
   item.value?.perfil_limite_edad !== null
 )
+
+const contactoEsEmail = computed(() => {
+  const c = item.value?.contacto
+  return typeof c === 'string' && /^[\w.+-]+@[\w-]+(?:\.[\w-]+)+$/.test(c.trim())
+})
 
 onMounted(async () => {
   const id = route.params.id as string
@@ -671,6 +708,16 @@ h1 {
 .side-label { font-size: 0.75rem; color: #94a3b8; font-weight: 500; }
 .side-val { font-size: 0.9rem; color: #334155; font-weight: 600; }
 .side-val.urgente { color: #f59e0b; }
+.contacto-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #2563eb;
+  text-decoration: none;
+  word-break: break-all;
+}
+.contacto-link:hover { text-decoration: underline; }
+.contacto-link svg { flex-shrink: 0; }
 .urgente-chip {
   display: inline-block;
   margin-left: 0.4rem;
