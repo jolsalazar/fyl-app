@@ -17,6 +17,15 @@
         </div>
       </div>
 
+      <!-- Aviso upgrade (free / starter) -->
+      <div v-if="!loading && !canUseKanban" class="upgrade-bar">
+        <div class="upgrade-bar-text">
+          <strong>El tablero kanban está en Advanced</strong>
+          <span>Mover tarjetas entre etapas y vista en columnas. Mientras tanto, podés ver y administrar tus postulaciones acá abajo.</span>
+        </div>
+        <NuxtLink to="/planes" class="btn-upgrade">Mejorar a Advanced →</NuxtLink>
+      </div>
+
       <!-- Skeleton -->
       <div v-if="loading" class="kanban">
         <div v-for="i in 5" :key="i" class="col">
@@ -35,7 +44,59 @@
         <NuxtLink to="/dashboard" class="btn-primary">Ver oportunidades</NuxtLink>
       </div>
 
-      <!-- Kanban -->
+      <!-- Lista plana (free / starter) -->
+      <div v-else-if="!canUseKanban" class="lista">
+        <template v-for="col in ESTADOS" :key="col.value">
+          <section v-if="itemsPorEstado[col.value]?.length" class="lista-grupo" :class="col.value">
+            <div class="lista-grupo-header">
+              <span class="col-emoji">{{ col.emoji }}</span>
+              <span class="col-title">{{ col.label }}</span>
+              <span class="col-count">{{ itemsPorEstado[col.value].length }}</span>
+            </div>
+            <div
+              v-for="item in itemsPorEstado[col.value]"
+              :key="item.convocatoria_id"
+              class="card lista-card"
+            >
+              <div class="card-top">
+                <span class="tag-fuente">{{ fuenteLabel(item.fuente) }}</span>
+                <button class="btn-remove" @click="quitar(item.convocatoria_id)" title="Quitar registro">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+
+              <NuxtLink :to="`/dashboard/oportunidades/${item.convocatoria_id}`" class="card-title-link">
+                <h3>{{ item.titulo }}</h3>
+              </NuxtLink>
+
+              <div class="card-meta" v-if="item.fecha_cierre_postulacion || item.monto_rango">
+                <span v-if="item.monto_rango" class="meta-item">
+                  {{ montoLabel(item.monto_rango) }}
+                </span>
+                <span v-if="item.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(item.fecha_cierre_postulacion) }">
+                  Cierra {{ formatFechaCorta(item.fecha_cierre_postulacion) }}
+                </span>
+              </div>
+
+              <textarea
+                v-model="item.notas"
+                class="notas-input"
+                placeholder="Agregar nota…"
+                rows="1"
+                @blur="guardarNotas(item)"
+              ></textarea>
+
+              <select :value="item.estado" @change="cambiarEstado(item, ($event.target as HTMLSelectElement).value)" class="select-estado">
+                <option v-for="e in ESTADOS" :key="e.value" :value="e.value">
+                  Mover a: {{ e.label }}
+                </option>
+              </select>
+            </div>
+          </section>
+        </template>
+      </div>
+
+      <!-- Kanban (advanced / agency) -->
       <div v-else class="kanban">
         <div
           v-for="col in ESTADOS"
@@ -113,6 +174,8 @@ definePageMeta({ middleware: 'auth', layout: false })
 
 const supabase = useSupabaseClient()
 const { show: toast } = useToast()
+const { plan, load: loadPlan } = usePlan()
+const canUseKanban = computed(() => plan.value === 'advanced' || plan.value === 'agency')
 const items       = ref<any[]>([])
 const loading     = ref(true)
 const draggingId  = ref<string | null>(null)
@@ -143,6 +206,7 @@ const conteoPorEstado = computed(() => Object.fromEntries(
 ))
 
 onMounted(async () => {
+  await loadPlan()
   const { data: posts } = await supabase
     .from('postulaciones')
     .select('convocatoria_id, postulado_at, notas, estado')
@@ -325,6 +389,34 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   border: 1px solid #e2e8f0; background: white; font-size: 0.72rem; color: #475569;
   font-family: inherit; cursor: pointer;
 }
+
+/* Lista (free / starter) */
+.upgrade-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  background: linear-gradient(135deg, #eef2ff, #ede9fe);
+  border: 1px solid #c7d2fe; border-radius: 12px;
+  padding: 0.875rem 1.125rem; margin-bottom: 1.25rem;
+}
+.upgrade-bar-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 220px; }
+.upgrade-bar-text strong { font-size: 0.9rem; font-weight: 700; color: #312e81; }
+.upgrade-bar-text span { font-size: 0.8rem; color: #4f46e5; }
+.upgrade-bar .btn-upgrade {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;
+  padding: 0.55rem 1rem; border-radius: 8px; font-size: 0.8rem; font-weight: 700;
+  text-decoration: none; white-space: nowrap;
+}
+.upgrade-bar .btn-upgrade:hover { filter: brightness(1.05); }
+
+.lista { display: flex; flex-direction: column; gap: 1.25rem; }
+.lista-grupo { display: flex; flex-direction: column; gap: 0.625rem; }
+.lista-grupo-header {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem; font-weight: 700; color: #475569;
+  padding-bottom: 0.4rem; border-bottom: 1px solid #e2e8f0;
+}
+.lista-grupo.aprobada .lista-grupo-header { color: #15803d; border-color: #bbf7d0; }
+.lista-grupo.rechazada .lista-grupo-header { color: #94a3b8; }
+.lista-card { max-width: 520px; }
 
 /* Skeleton */
 @keyframes shimmer { from { background-position: -600px 0; } to { background-position: 600px 0; } }

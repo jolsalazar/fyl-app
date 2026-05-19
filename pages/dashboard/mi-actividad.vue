@@ -4,7 +4,7 @@
 
       <div class="header">
         <div>
-          <h1>Mi actividad <span class="pro-badge">Starter</span></h1>
+          <h1>Mi actividad</h1>
           <p class="subtitle">Cómo vienen tus postulaciones — guardados, conversión y resultados</p>
         </div>
         <span v-if="!loading && resumenFecha" class="header-meta">{{ resumenFecha }}</span>
@@ -305,8 +305,7 @@ onMounted(async () => {
 
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; }
 .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
-h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; display: flex; align-items: center; gap: 0.625rem; }
-.pro-badge { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: linear-gradient(135deg, #fbbf24, #f59e0b); color: white; padding: 0.18rem 0.55rem; border-radius: 999px; }
+h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
 .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.25rem; }
 .header-meta { font-size: 0.75rem; color: #94a3b8; align-self: center; }
 

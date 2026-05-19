@@ -4,7 +4,7 @@
 
       <div class="header">
         <div>
-          <h1>Comparador <span class="pro-badge">Starter</span></h1>
+          <h1>Comparador</h1>
           <p class="subtitle">Hasta 3 fondos lado a lado para decidir cuál priorizar</p>
         </div>
       </div>
@@ -317,8 +317,7 @@ function esUrgente(f: string | null | undefined) {
 .content { flex: 1; padding: 2rem 2.5rem; font-family: 'Inter', sans-serif; }
 
 .header { margin-bottom: 1.5rem; }
-h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; display: flex; align-items: center; gap: 0.625rem; }
-.pro-badge { font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: linear-gradient(135deg, #fbbf24, #f59e0b); color: white; padding: 0.18rem 0.55rem; border-radius: 999px; }
+h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
 .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.25rem; }
 
 /* Buscador */

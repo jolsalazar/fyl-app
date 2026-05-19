@@ -4,12 +4,9 @@
 
       <div class="header">
         <div>
-          <h1>Mis Match
-            <span class="pro-badge">Starter</span>
-          </h1>
-          <p class="subtitle">
-            <template v-if="plan === 'free'">Función disponible desde el Plan Starter</template>
-            <template v-else-if="!loading && resultados.length">{{ resultados.length }} fondos analizados · ordenados por compatibilidad</template>
+          <h1>Mis Match</h1>
+          <p v-if="plan !== 'free'" class="subtitle">
+            <template v-if="!loading && resultados.length">{{ resultados.length }} fondos analizados · ordenados por compatibilidad</template>
             <template v-else-if="!loading && perfilCompleto">Analizando tus fondos…</template>
             <template v-else-if="!loading">Configura tu proyecto para ver resultados</template>
             <template v-else>Cargando…</template>
@@ -442,14 +439,8 @@ onMounted(async () => {
   text-decoration: none; transition: background 0.15s;
 }
 .btn-completar:hover { background: #0284c7; }
-h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; display: flex; align-items: center; gap: 0.6rem; }
+h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.025em; }
 .subtitle { font-size: 0.875rem; color: #64748b; margin-top: 0.2rem; }
-
-.pro-badge {
-  font-size: 0.6rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;
-  padding: 0.2rem 0.5rem; border-radius: 6px; vertical-align: middle;
-}
 
 /* Perfil activo */
 .perfil-activo {

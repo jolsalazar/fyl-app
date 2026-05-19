@@ -46,17 +46,18 @@ async function runDigest(env: Env) {
   // alineado con la realidad para reportes, exportes y queries admin.
   await closeExpired(env, log)
 
-  // 1. Usuarios Pro / Agencia
-  const profiles = await sbGet<{ id: string }[]>(
-    env, '/rest/v1/profiles?plan=in.(starter,advanced,agency)&select=id'
+  // 1. Todos los usuarios con plan. Free entra para que la bandeja web se llene,
+  //    pero adentro de processUser se omite el email (emailAlertas = false en free).
+  const profiles = await sbGet<{ id: string; plan: string }[]>(
+    env, '/rest/v1/profiles?plan=in.(free,starter,advanced,agency)&select=id,plan'
   )
-  if (!profiles?.length) return { ok: true, message: 'No pro users' }
+  if (!profiles?.length) return { ok: true, message: 'No users' }
 
-  log.push(`Usuarios Pro: ${profiles.length}`)
+  log.push(`Usuarios: ${profiles.length}`)
   let totalEmails = 0
 
   for (const profile of profiles) {
-    const sent = await processUser(env, profile.id, log)
+    const sent = await processUser(env, profile.id, profile.plan, log)
     if (sent) totalEmails++
   }
 
@@ -88,8 +89,13 @@ async function closeExpired(env: Env, log: string[]) {
 }
 
 // ── Procesar un usuario ───────────────────────────────────────────
-async function processUser(env: Env, userId: string, log: string[]): Promise<boolean> {
-  // Email via admin API
+async function processUser(env: Env, userId: string, plan: string, log: string[]): Promise<boolean> {
+  // Plan free no recibe email pero igual procesamos matches para que la bandeja
+  // web se llene. Cualquier plan con `emailAlertas: true` (starter+) recibe email.
+  const enviaEmail = plan !== 'free'
+
+  // Email via admin API (solo lo necesitamos para enviar; en free igual lo pedimos
+  // para identificar al usuario en el log)
   const authUser = await sbAdminGet<{ email: string }>(env, `/auth/v1/admin/users/${userId}`)
   if (!authUser?.email) return false
 
@@ -128,12 +134,14 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
     }
   }
 
-  // Recordatorios de cierre próximo. Se usan también como "trigger de email":
-  // si no hay matches nuevos pero hay cierres pendientes, igual mandamos el email
-  // para no perder ese aviso. Tres caminos para entrar: guardados explícitos,
-  // pasa filtros de una alerta activa, o match >= SCORE_RECORDATORIO.
+  // Recordatorios de cierre próximo. Son aviso por email — el plan free no los
+  // recibe (ver tabla de features: emailAlertas=false). Para starter+ se incluyen
+  // junto con los matches en el mismo email; tres caminos para entrar: guardados
+  // explícitos, pasa filtros de una alerta activa, o match >= SCORE_RECORDATORIO.
   const proyectoBase = alertas.find(a => a.proyecto)?.proyecto ?? null
-  const closures = await findClosingReminders(env, userId, proyectoBase, alertas, idsPostulados)
+  const closures = enviaEmail
+    ? await findClosingReminders(env, userId, proyectoBase, alertas, idsPostulados)
+    : []
   if (closures.length) {
     log.push(`  ${authUser.email} | ${closures.length} cierre(s) próximo(s)`)
   }
@@ -145,12 +153,19 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
 
   if (!resultados.length && !closures.length) return false
 
-  const total = resultados.reduce((s, r) => s + r.items.length, 0)
-  const emailOk = await sendEmail(env, authUser.email, total, resultados, closures)
+  // Plan free: NO se envía email, pero igual escribimos en la bandeja web.
+  // Plan starter+: se envía email; si falla, abortamos para reintentar en el
+  // próximo cron (no avanzamos last_notified_at ni escribimos la bandeja).
+  if (enviaEmail) {
+    const total = resultados.reduce((s, r) => s + r.items.length, 0)
+    const emailOk = await sendEmail(env, authUser.email, total, resultados, closures)
 
-  if (!emailOk) {
-    log.push(`  ${authUser.email} | envío Resend falló — no se actualiza last_notified_at, se reintenta en el próximo cron`)
-    return false
+    if (!emailOk) {
+      log.push(`  ${authUser.email} | envío Resend falló — no se actualiza last_notified_at, se reintenta en el próximo cron`)
+      return false
+    }
+  } else {
+    log.push(`  ${authUser.email} | plan free — sin email, guardando en bandeja web`)
   }
 
   // Guardar en bandeja de notificaciones (idempotente: ignora duplicates)
@@ -176,7 +191,7 @@ async function processUser(env: Env, userId: string, log: string[]): Promise<boo
     )
   }
 
-  // Recién acá avanzamos el cursor de las alertas que sí dispararon email.
+  // Recién acá avanzamos el cursor de las alertas que sí dispararon notificación.
   for (const { alerta } of resultados) {
     await sbPatch(env, `/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
   }

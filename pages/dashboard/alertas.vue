@@ -20,6 +20,10 @@
               <input v-model="form.nombre" type="text" class="text-input" placeholder="ej: Fondos CORFO, Licitaciones Norte…" required />
             </section>
 
+            <div class="basicos-label full-width">
+              <span>Filtros básicos</span>
+            </div>
+
             <!-- Tipo -->
             <section class="card">
               <div class="card-header">
@@ -285,12 +289,56 @@
 
               <div v-if="loadingResults" class="empty"><div class="spinner"></div></div>
 
-              <div v-else-if="notifications.length === 0" class="empty-results">
+              <div v-else-if="notifications.length === 0 && liveMatches.length === 0" class="empty-results">
                 <div class="empty-icon-wrap">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"/></svg>
                 </div>
-                <p class="empty-title">Sin notificaciones aún</p>
-                <p class="empty-desc">Cuando el sistema detecte oportunidades nuevas para esta alerta te avisará por email y aparecerán aquí.</p>
+                <p class="empty-title">Sin oportunidades por ahora</p>
+                <p class="empty-desc">Ningún fondo abierto coincide con los filtros de esta alerta. Cuando aparezcan nuevos te avisamos por email y los verás acá.</p>
+              </div>
+
+              <!-- Bandeja vacía pero hay fondos abiertos que coinciden con los filtros -->
+              <div v-else-if="notifications.length === 0 && liveMatches.length > 0" class="inbox-section">
+                <div class="live-banner">
+                  <strong>Todavía no recibiste avisos por email para esta alerta.</strong>
+                  <span>Mientras tanto, estos son los fondos abiertos que coinciden con tus filtros ahora mismo.</span>
+                </div>
+                <div class="lista">
+                  <div v-for="c in liveMatches" :key="c.id" class="card">
+                    <div class="card-top">
+                      <div class="card-source">
+                        <img :src="`/sources/${c.fuente}.png`" :alt="fuenteLabel(c.fuente)" class="source-logo" @error="(e) => (e.target as HTMLImageElement).style.display='none'" />
+                        <div class="tags">
+                          <span class="tag-fuente">{{ fuenteLabel(c.fuente) }}</span>
+                          <span class="tag-tipo" :class="c.tipo">{{ c.tipo === 'fondo' ? 'Fondo' : 'Licitación' }}</span>
+                        </div>
+                      </div>
+                      <span :class="['badge-estado', c.estado]">{{ estadoLabel(c.estado) }}</span>
+                    </div>
+                    <NuxtLink :to="`/dashboard/oportunidades/${c.id}`" class="card-title-link">
+                      <h3>{{ c.titulo }}</h3>
+                    </NuxtLink>
+                    <p v-if="c.descripcion_breve" class="desc">{{ c.descripcion_breve }}</p>
+                    <div class="card-meta">
+                      <span v-if="c.monto_rango" class="meta-item">{{ montoLabel(c.monto_rango) }}</span>
+                      <span v-if="c.fecha_cierre_postulacion" class="meta-item" :class="{ urgente: esUrgente(c.fecha_cierre_postulacion) }">
+                        Cierra {{ formatFecha(c.fecha_cierre_postulacion) }}
+                      </span>
+                    </div>
+                    <div class="card-footer">
+                      <div class="focos">
+                        <span v-for="f in (c.foco ?? []).slice(0, 3)" :key="f" class="foco-tag">{{ f }}</span>
+                      </div>
+                      <div class="card-links">
+                        <a v-if="c.link_postulacion" :href="c.link_postulacion" target="_blank" class="ver-link primary">
+                          Postular
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                        </a>
+                        <NuxtLink :to="`/dashboard/oportunidades/${c.id}`" class="ver-link">Ver detalle</NuxtLink>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <template v-else>
@@ -458,6 +506,7 @@ async function toggleReminderDay(d: number) {
 
 const loadingResults = ref(false)
 const notifications  = ref<any[]>([])
+const liveMatches    = ref<any[]>([])
 const unreadCounts   = ref<Record<string, number>>({})
 const showRead       = ref(false)
 
@@ -656,6 +705,7 @@ async function selectAlerta(id: string) {
   if (selectedId.value === id) return
   selectedId.value = id
   notifications.value = []
+  liveMatches.value = []
   showRead.value = false
   await loadNotifications()
   await markRead()
@@ -676,6 +726,7 @@ async function loadNotifications() {
 
   if (!notifs?.length) {
     notifications.value = []
+    await loadLiveMatches()
     loadingResults.value = false
     return
   }
@@ -689,6 +740,53 @@ async function loadNotifications() {
   const convMap = Object.fromEntries((convs ?? []).map(c => [c.id, c]))
   notifications.value = notifs.map(n => ({ ...n, conv: convMap[n.convocatoria_id] ?? null }))
   loadingResults.value = false
+}
+
+// Cuando la bandeja está vacía, mostramos los matches actuales en base a los
+// filtros de la alerta. Útil para alertas recién creadas (el cron solo mira las
+// últimas 25h) o cuando no hay novedades hace tiempo. Replica la query del
+// worker pero sin el filtro `created_at > desde`.
+async function loadLiveMatches() {
+  const alerta = selectedAlerta.value
+  if (!alerta) return
+
+  let q = supabase
+    .from('convocatorias')
+    .select('id, titulo, descripcion_breve, fuente, tipo, estado, monto_rango, fecha_cierre_postulacion, link_postulacion, foco')
+    .eq('estado', 'abierto')
+    .order('fecha_cierre_postulacion', { ascending: true, nullsFirst: false })
+    .limit(20)
+
+  if (alerta.tipos?.length)           q = q.in('tipo',    alerta.tipos)
+  if (alerta.fuentes?.length)         q = q.in('fuente',  alerta.fuentes)
+  if (alerta.alcance_interes?.length) q = q.in('alcance', alerta.alcance_interes)
+
+  if (alerta.monto_rangos?.length) {
+    q = q.in('monto_rango', alerta.monto_rangos)
+  } else if (alerta.monto_minimo) {
+    const idx = MONTO_ORDER.indexOf(alerta.monto_minimo)
+    if (idx >= 0) q = q.in('monto_rango', MONTO_ORDER.slice(idx))
+  }
+
+  if (alerta.foco?.length) q = q.contains('foco', alerta.foco)
+
+  if (alerta.palabras_clave?.length) {
+    const orStr = alerta.palabras_clave.flatMap((k: string) => [
+      `titulo.ilike.*${k}*`,
+      `descripcion_breve.ilike.*${k}*`,
+    ]).join(',')
+    q = q.or(orStr)
+  }
+
+  if (idsPostulados.value.length) {
+    q = q.not('id', 'in', `(${idsPostulados.value.join(',')})`)
+  }
+
+  const { data } = await q
+  const hoy = new Date().toISOString().split('T')[0]
+  liveMatches.value = (data ?? []).filter(c =>
+    !c.fecha_cierre_postulacion || c.fecha_cierre_postulacion >= hoy
+  )
 }
 
 async function markRead() {
@@ -849,6 +947,13 @@ function esUrgente(f: string) {
   background-repeat: no-repeat; background-position: right 0.75rem center; padding-right: 2.25rem;
 }
 .select-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 3px rgba(14,165,233,0.1); }
+
+.basicos-label {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.875rem; font-weight: 600; color: #475569;
+  border: 1.5px dashed #e2e8f0; border-radius: 10px;
+  padding: 0.6rem 1rem;
+}
 
 .avanzados-wrap { }
 .avanzados-toggle {
@@ -1036,6 +1141,14 @@ function esUrgente(f: string) {
 .results-count.muted { color: #94a3b8; }
 
 .inbox-section { margin-bottom: 1.5rem; }
+
+.live-banner {
+  display: flex; flex-direction: column; gap: 0.2rem;
+  background: #fffbeb; border: 1px solid #fde68a;
+  border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1rem;
+}
+.live-banner strong { font-size: 0.85rem; font-weight: 700; color: #92400e; }
+.live-banner span { font-size: 0.78rem; color: #b45309; line-height: 1.45; }
 
 .inbox-label {
   display: flex; align-items: center; gap: 0.5rem;
