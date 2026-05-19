@@ -22,7 +22,7 @@
 // browser bloquea el request por CORS.
 
 import { serverSupabaseServiceRole } from '#supabase/server'
-import { calcularMatch, type Perfil } from '~/shared/match'
+import { calcularMatch, MONTO_ORDER, type Perfil } from '~/shared/match'
 
 const ALLOWED_ORIGIN = 'https://fondosylicitaciones.cl'
 const MAX_CONVOCATORIAS = 500
@@ -31,7 +31,7 @@ const TOP_N = 3
 const TIPO_PERSONA    = new Set(['natural', 'juridica'])
 const ESTADO_PROYECTO = new Set(['solo_idea', 'maqueta', 'prototipo', 'marcha_blanca', 'crecimiento'])
 const ALCANCE         = new Set(['regional', 'nacional', 'internacional'])
-const MONTO           = new Set(['hasta_1M', '1M_10M', '10M_30M', '30M_60M', '60M_100M', 'sobre_100M'])
+const MONTO           = new Set(MONTO_ORDER)
 
 export default defineEventHandler(async (event) => {
   setHeader(event, 'Access-Control-Allow-Origin', ALLOWED_ORIGIN)
@@ -80,7 +80,7 @@ export default defineEventHandler(async (event) => {
   const supabase = serverSupabaseServiceRole(event)
   const hoy = new Date().toISOString().split('T')[0]
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('convocatorias')
     .select(`
       id, titulo, organizador, fuente,
@@ -92,15 +92,34 @@ export default defineEventHandler(async (event) => {
     .eq('estado', 'abierto')
     .neq('fuente', 'mercadopublico')
     .or(`fecha_cierre_postulacion.gte.${hoy},fecha_cierre_postulacion.is.null`)
-    .limit(MAX_CONVOCATORIAS)
+
+  // Pre-filtro por monto: el matcher trata "monto inferior al pedido" como neutro
+  // (no descarta) para no esconder fondos cercanos en la UI logueada. En el demo
+  // público sí descartamos en SQL: si el usuario pide +$100M, no tiene sentido
+  // mostrarle un fondo de hasta $1M aunque por fallback de score salga arriba.
+  // Aceptamos también monto_rango null porque puede ser legítimo (no declarado).
+  if (perfil.monto_minimo) {
+    const idx = MONTO_ORDER.indexOf(perfil.monto_minimo)
+    if (idx >= 0) {
+      const compatibles = MONTO_ORDER.slice(idx)
+      query = query.or(`monto_rango.in.(${compatibles.join(',')}),monto_rango.is.null`)
+    }
+  }
+
+  const { data, error } = await query.limit(MAX_CONVOCATORIAS)
 
   if (error || !data) {
     setResponseStatus(event, 500)
     return { ok: false, error: 'fetch_failed' }
   }
 
+  // Post-filtro: descartar convocatorias sin ninguna razón positiva.
+  // El matcher devuelve score 50 como fallback cuando posibles=0 (la convocatoria
+  // no tiene campos estructurados para comparar). Esos resultados son ruido en el
+  // demo: sin razones positivas no podemos justificar el match al usuario.
   const scored = data
     .map((conv: any) => ({ conv, match: calcularMatch(perfil, conv) }))
+    .filter(s => s.match.razones.some((r: any) => r.tipo === 'positivo'))
     .sort((a, b) => b.match.score - a.match.score)
 
   const totalCompatiblesAlto = scored.filter(s => s.match.nivel === 'alto').length
@@ -121,7 +140,7 @@ export default defineEventHandler(async (event) => {
   return {
     ok: true,
     resultados,
-    total_disponibles:        data.length,
+    total_disponibles:        scored.length,  // post-filtro: cuenta sólo matches significativos
     total_compatibles_alto:   totalCompatiblesAlto,
   }
 })
