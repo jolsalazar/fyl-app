@@ -54,6 +54,7 @@
           <option value="anid">ANID</option>
           <option value="fondos_gob">Fondos.gob.cl</option>
           <option value="incubadoras">Incubadoras</option>
+          <option value="fondos_cultura">Fondos Cultura</option>
         </select>
 
         <select v-model="filtroMonto" @change="cargar" class="select">
