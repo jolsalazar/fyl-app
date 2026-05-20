@@ -287,7 +287,7 @@ onMounted(async () => {
 })
 
 // Labels
-const FUENTE: Record<string, string> = { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl', incubadoras: 'Incubadoras' }
+const FUENTE: Record<string, string> = { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl', incubadoras: 'Incubadoras', fondos_cultura: 'Fondos Cultura' }
 function fuenteLabel(f: string) { return FUENTE[f] ?? f }
 function montoLabel(m: string | null | undefined) {
   if (!m) return '—'

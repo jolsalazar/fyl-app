@@ -360,6 +360,7 @@ const fuentes = [
   { value: 'anid',           label: 'ANID' },
   { value: 'mercadopublico', label: 'Mercado Público' },
   { value: 'fondos_gob',     label: 'Fondos.gob.cl' },
+  { value: 'fondos_cultura', label: 'Fondos Cultura' },
 ]
 
 function siguiente() { paso.value++ }
