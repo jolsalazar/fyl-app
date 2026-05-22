@@ -75,7 +75,9 @@
             <!-- Descripción -->
             <section class="card-section" v-if="item.descripcion_breve">
               <h2>Descripción</h2>
-              <p class="descripcion">{{ item.descripcion_breve }}</p>
+              <div class="descripcion">
+                <p v-for="(linea, i) in descripcionLineas" :key="i">{{ linea }}</p>
+              </div>
             </section>
 
             <!-- Requisitos clave -->
@@ -308,6 +310,15 @@ const supabase = useSupabaseClient()
 const route = useRoute()
 
 const item              = ref<any>(null)
+
+// El scraper concatena trozos de la página con " | ". Los partimos en líneas
+// para que la descripción se lea como párrafos en vez de un bloque con pipes.
+const descripcionLineas = computed<string[]>(() =>
+  (item.value?.descripcion_breve || '')
+    .split('|')
+    .map((s: string) => s.trim())
+    .filter(Boolean)
+)
 const loading           = ref(true)
 const guardado          = ref(false)
 const postulado         = ref(false)
@@ -647,6 +658,8 @@ h1 {
   color: #334155;
   line-height: 1.7;
 }
+.descripcion p { margin-bottom: 0.6rem; }
+.descripcion p:last-child { margin-bottom: 0; }
 
 /* Perfil */
 .perfil-grid { display: flex; flex-direction: column; gap: 0.875rem; }
