@@ -67,6 +67,8 @@
       </button>
 
       <nav class="nav">
+        <!-- Explorar: encontrar oportunidades -->
+        <span class="nav-group-label">Explorar</span>
         <NuxtLink to="/dashboard" class="nav-item" exact-active-class="active" @click="sidebarOpen = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           Fondos
@@ -77,33 +79,6 @@
           Licitaciones
           <span v-if="nuevasLicitaciones > 0" class="nav-badge">{{ nuevasLicitaciones > 99 ? '99+' : nuevasLicitaciones }}</span>
         </NuxtLink>
-        <NuxtLink to="/dashboard/guardados" class="nav-item" active-class="active" @click="sidebarOpen = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-          Guardados
-          <span v-if="totalGuardados > 0" class="nav-count">{{ totalGuardados }}</span>
-        </NuxtLink>
-        <NuxtLink to="/dashboard/postulaciones" class="nav-item" active-class="active" @click="sidebarOpen = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-          Postulaciones
-        </NuxtLink>
-        <NuxtLink to="/dashboard/mi-actividad" class="nav-item" active-class="active" @click="sidebarOpen = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
-          Mi actividad
-          <span class="nav-pro">Pro</span>
-        </NuxtLink>
-        <NuxtLink to="/dashboard/calendario" class="nav-item" active-class="active" @click="sidebarOpen = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Calendario
-        </NuxtLink>
-        <NuxtLink to="/dashboard/alertas" class="nav-item" active-class="active" @click="sidebarOpen = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"/></svg>
-          Mis alertas
-          <span v-if="alertasNuevas > 0" class="nav-badge">{{ alertasNuevas > 99 ? '99+' : alertasNuevas }}</span>
-        </NuxtLink>
-        <NuxtLink to="/dashboard/estadisticas" class="nav-item" active-class="active" @click="sidebarOpen = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          Estadísticas
-        </NuxtLink>
         <NuxtLink to="/dashboard/match" class="nav-item nav-match" active-class="active" @click="sidebarOpen = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
           Mis Match
@@ -113,6 +88,39 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="21"/><line x1="18" y1="3" x2="18" y2="21"/><polyline points="3 7 6 4 9 7"/><polyline points="15 17 18 20 21 17"/></svg>
           Comparador
           <span class="nav-pro">Pro</span>
+        </NuxtLink>
+
+        <!-- Mi seguimiento: gestionar lo mío -->
+        <span class="nav-group-label">Mi seguimiento</span>
+        <NuxtLink to="/dashboard/alertas" class="nav-item" active-class="active" @click="sidebarOpen = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0 1 18 14.158V11a6.002 6.002 0 0 0-4-5.659V5a2 2 0 1 0-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9"/></svg>
+          Mis alertas
+          <span v-if="alertasNuevas > 0" class="nav-badge">{{ alertasNuevas > 99 ? '99+' : alertasNuevas }}</span>
+        </NuxtLink>
+        <NuxtLink to="/dashboard/guardados" class="nav-item" active-class="active" @click="sidebarOpen = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Guardados
+          <span v-if="totalGuardados > 0" class="nav-count">{{ totalGuardados }}</span>
+        </NuxtLink>
+        <NuxtLink to="/dashboard/postulaciones" class="nav-item" active-class="active" @click="sidebarOpen = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Postulaciones
+        </NuxtLink>
+        <NuxtLink to="/dashboard/calendario" class="nav-item" active-class="active" @click="sidebarOpen = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Calendario
+        </NuxtLink>
+
+        <!-- Análisis: desempeño -->
+        <span class="nav-group-label">Análisis</span>
+        <NuxtLink to="/dashboard/mi-actividad" class="nav-item" active-class="active" @click="sidebarOpen = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+          Mi actividad
+          <span class="nav-pro">Pro</span>
+        </NuxtLink>
+        <NuxtLink to="/dashboard/estadisticas" class="nav-item" active-class="active" @click="sidebarOpen = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Estadísticas
         </NuxtLink>
 
         <template v-if="isAdmin">
@@ -441,6 +449,19 @@ async function logout() {
 .nav-item:hover  { background: #1e293b; color: #cbd5e1; }
 .nav-item.active { background: #1e293b; color: #38bdf8; }
 .nav-item.active svg { color: #38bdf8; }
+
+.nav-group-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #3f4d63;
+  padding: 0 0.75rem;
+  margin-top: 0.5rem;
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+.nav-group-label:first-child { margin-top: 0; }
 
 .nav-pro {
   margin-left: auto;

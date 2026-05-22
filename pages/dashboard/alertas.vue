@@ -258,12 +258,10 @@
           <!-- Panel derecho: bandeja de notificaciones -->
           <div class="panel-right">
             <Transition name="fade" mode="out-in">
-            <template v-if="!selectedId">
-              <div class="empty-results">
-                <p>Selecciona una alerta para ver su bandeja</p>
-              </div>
-            </template>
-            <template v-else :key="selectedId">
+            <div v-if="!selectedId" class="empty-results">
+              <p>Selecciona una alerta para ver su bandeja</p>
+            </div>
+            <div v-else :key="selectedId" class="results-body">
               <div class="results-head">
                 <h2 class="results-title">{{ selectedAlerta?.nombre }}</h2>
                 <div class="results-meta">
@@ -433,7 +431,7 @@
                   </div>
                 </div>
               </template>
-            </template>
+            </div>
             </Transition>
           </div>
         </div>

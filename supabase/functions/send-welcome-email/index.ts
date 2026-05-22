@@ -28,6 +28,14 @@ Deno.serve(async (req) => {
       }),
     })
 
+    // Aviso a los administradores de que se registró alguien. Independiente del
+    // welcome: si falla, no debe afectar el correo de bienvenida ni el registro.
+    try {
+      await notificarAdmins(supabase, user)
+    } catch (e) {
+      console.error('[send-welcome-email] aviso a admins falló:', e)
+    }
+
     const body = await res.json()
     return new Response(JSON.stringify(body), {
       status: res.ok ? 200 : 500,
@@ -37,6 +45,68 @@ Deno.serve(async (req) => {
     return new Response(String(e), { status: 500 })
   }
 })
+
+// Envía un correo a todos los usuarios con role='admin' avisando del registro.
+// deno-lint-ignore no-explicit-any
+async function notificarAdmins(supabase: any, user: any) {
+  const { data: admins } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
+
+  if (!admins?.length) return
+
+  // profiles no guarda email → resolverlo desde auth por cada admin.
+  const emails: string[] = []
+  for (const a of admins) {
+    const { data } = await supabase.auth.admin.getUserById(a.id)
+    const email = data?.user?.email
+    if (email) emails.push(email)
+  }
+  if (!emails.length) return
+
+  const plan = user.user_metadata?.plan || user.raw_user_meta_data?.plan || 'free'
+  const fecha = new Date(user.created_at ?? Date.now()).toLocaleString('es-CL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Santiago',
+  })
+
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Fondos y Licitaciones <hola@fondosylicitaciones.cl>',
+      to: emails,
+      subject: `Nuevo registro: ${user.email}`,
+      html: buildAdminEmail(user.email, fecha, plan),
+    }),
+  })
+}
+
+function buildAdminEmail(email: string, fecha: string, plan: string): string {
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"/></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;">
+  <div style="max-width:520px;margin:0 auto;padding:32px 24px;">
+    <div style="background:white;border:1px solid #e2e8f0;border-radius:14px;padding:28px;">
+      <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#0ea5e9;">Nuevo registro</p>
+      <h1 style="margin:0 0 20px;font-size:20px;font-weight:800;color:#0f172a;">Se registró un nuevo usuario 🎉</h1>
+      <table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;color:#334155;">
+        <tr><td style="padding:8px 0;color:#64748b;width:120px;">Email</td><td style="padding:8px 0;font-weight:600;color:#0f172a;">${email}</td></tr>
+        <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">Plan elegido</td><td style="padding:8px 0;font-weight:600;color:#0f172a;border-top:1px solid #f1f5f9;text-transform:capitalize;">${plan}</td></tr>
+        <tr><td style="padding:8px 0;color:#64748b;border-top:1px solid #f1f5f9;">Fecha</td><td style="padding:8px 0;font-weight:600;color:#0f172a;border-top:1px solid #f1f5f9;">${fecha}</td></tr>
+      </table>
+      <div style="margin-top:24px;">
+        <a href="https://app.fondosylicitaciones.cl/dashboard/admin/usuarios" style="display:inline-block;background:#0f172a;color:white;text-decoration:none;padding:11px 22px;border-radius:9px;font-size:14px;font-weight:600;">Ver en el panel admin →</a>
+      </div>
+    </div>
+    <p style="margin:16px 0 0;text-align:center;font-size:11px;color:#94a3b8;">Aviso automático para administradores · Fondos y Licitaciones</p>
+  </div>
+</body></html>`
+}
 
 function buildEmail(email: string): string {
   return `<!DOCTYPE html>
