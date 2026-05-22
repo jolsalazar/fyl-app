@@ -94,3 +94,67 @@ export function emailCambioPromoAplicado(opts: {
   `)
   return { subject, html }
 }
+
+// ── Plantillas de engagement (envío manual desde el admin) ───────────────────
+// Cada plantilla recibe el nombre del usuario (o "" si no tiene) y devuelve
+// asunto + html listos para enviar. Mantener las claves en sync con
+// ENGAGEMENT_TEMPLATES del frontend (perfil de usuario admin).
+
+const DASHBOARD_URL = 'https://app.fondosylicitaciones.cl/dashboard'
+
+function saludo(nombre?: string | null): string {
+  return nombre && nombre.trim() ? `Hola ${nombre.trim()},` : 'Hola,'
+}
+
+export type EngagementTemplateKey = 'te_extranamos' | 'completa_perfil' | 'novedades'
+
+export const ENGAGEMENT_TEMPLATES: Record<EngagementTemplateKey, {
+  label: string
+  build: (nombre?: string | null) => { subject: string; html: string }
+}> = {
+  te_extranamos: {
+    label: 'Te extrañamos',
+    build: (nombre) => ({
+      subject: 'Hace tiempo no te vemos en Fondos y Licitaciones',
+      html: shell(`
+        <h2 style="font-size:1.4rem;font-weight:700;margin:0 0 16px">Te extrañamos 👋</h2>
+        <p>${saludo(nombre)}</p>
+        <p>Notamos que hace un tiempo no entras a tu panel. Mientras tanto, han seguido apareciendo <strong>nuevas convocatorias y licitaciones</strong> que podrían calzar con tu perfil.</p>
+        <p style="background:#f1f5f9;border-radius:10px;padding:16px;font-size:0.9rem;color:#475569;margin:24px 0">
+          Entra y revisa tus matches más recientes — quizás haya una oportunidad esperándote.
+        </p>
+        <p><a href="${DASHBOARD_URL}" style="display:inline-block;background:#0ea5e9;color:white;text-decoration:none;padding:12px 24px;border-radius:9px;font-weight:600">Ver mis oportunidades</a></p>
+      `),
+    }),
+  },
+  completa_perfil: {
+    label: 'Completa tu perfil',
+    build: (nombre) => ({
+      subject: 'Mejora tus resultados completando tu perfil',
+      html: shell(`
+        <h2 style="font-size:1.4rem;font-weight:700;margin:0 0 16px">Saca más provecho a tus alertas</h2>
+        <p>${saludo(nombre)}</p>
+        <p>Para que tus matches sean más precisos, te recomendamos completar tu <strong>configuración de alertas y tu proyecto</strong>: categorías, regiones, montos y palabras clave.</p>
+        <p style="background:#f1f5f9;border-radius:10px;padding:16px;font-size:0.9rem;color:#475569;margin:24px 0">
+          Mientras mejor definido esté tu perfil, mejores y más relevantes serán las convocatorias que te mostramos.
+        </p>
+        <p><a href="${DASHBOARD_URL}" style="display:inline-block;background:#0ea5e9;color:white;text-decoration:none;padding:12px 24px;border-radius:9px;font-weight:600">Completar mi perfil</a></p>
+      `),
+    }),
+  },
+  novedades: {
+    label: 'Novedades de la plataforma',
+    build: (nombre) => ({
+      subject: 'Novedades en Fondos y Licitaciones',
+      html: shell(`
+        <h2 style="font-size:1.4rem;font-weight:700;margin:0 0 16px">Tenemos novedades para ti</h2>
+        <p>${saludo(nombre)}</p>
+        <p>Seguimos mejorando la plataforma para ayudarte a encontrar más y mejores oportunidades de financiamiento.</p>
+        <p style="background:#f1f5f9;border-radius:10px;padding:16px;font-size:0.9rem;color:#475569;margin:24px 0">
+          Entra a tu panel para ver las convocatorias activas y revisar tus matches.
+        </p>
+        <p><a href="${DASHBOARD_URL}" style="display:inline-block;background:#0ea5e9;color:white;text-decoration:none;padding:12px 24px;border-radius:9px;font-weight:600">Ir a mi panel</a></p>
+      `),
+    }),
+  },
+}

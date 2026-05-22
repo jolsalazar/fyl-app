@@ -156,24 +156,29 @@ definePageMeta({ middleware: ['auth', 'admin'], layout: false })
 
 const supabase = useSupabaseClient()
 
-interface UserRow { id: string; plan: string; created_at: string }
+interface UserRow { id: string; plan: string; created_at: string; role?: string; archived_at?: string | null }
 interface SemanaRow { semana: string; total: number }
 
 const users = ref<UserRow[]>([])
 const semanas = ref<SemanaRow[]>([])
 const loading = ref(true)
 
-const total = computed(() => users.value.length)
+// Clientes contabilizables: excluye administradores y cuentas archivadas.
+const contables = computed(() =>
+  users.value.filter(u => u.role !== 'admin' && !u.archived_at)
+)
+
+const total = computed(() => contables.value.length)
 const byPlan = computed(() => ({
-  free:    users.value.filter(u => u.plan === 'free').length,
-  advanced: users.value.filter(u => u.plan === 'advanced').length,
-  agency:   users.value.filter(u => u.plan === 'agency').length,
+  free:    contables.value.filter(u => u.plan === 'free').length,
+  advanced: contables.value.filter(u => u.plan === 'advanced').length,
+  agency:   contables.value.filter(u => u.plan === 'agency').length,
 }))
 const pagados = computed(() => byPlan.value.advanced + byPlan.value.agency)
 
 const nuevosEstaSemana = computed(() => {
   const hace7 = new Date(); hace7.setDate(hace7.getDate() - 7)
-  return users.value.filter(u => new Date(u.created_at) >= hace7).length
+  return contables.value.filter(u => new Date(u.created_at) >= hace7).length
 })
 
 const semanasPadded = computed(() => {

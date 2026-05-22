@@ -8,7 +8,7 @@
         </div>
       </div>
 
-      <!-- Stats -->
+      <!-- Stats (excluye administradores) -->
       <div class="stats-row" v-if="!loading && !loadError">
         <div class="stat-card">
           <span class="stat-num">{{ total }}</span>
@@ -32,11 +32,18 @@
         </div>
       </div>
 
-      <!-- Búsqueda -->
-      <div class="search-bar" v-if="!loading && !loadError">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input v-model="busqueda" type="text" placeholder="Buscar por email…" class="search-input" />
-        <span v-if="busqueda" class="search-count">{{ usuariosFiltrados.length }} resultado{{ usuariosFiltrados.length !== 1 ? 's' : '' }}</span>
+      <!-- Controles -->
+      <div class="controls" v-if="!loading && !loadError">
+        <div class="search-bar">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input v-model="busqueda" type="text" placeholder="Buscar por email…" class="search-input" />
+          <span v-if="busqueda" class="search-count">{{ usuariosFiltrados.length }} resultado{{ usuariosFiltrados.length !== 1 ? 's' : '' }}</span>
+        </div>
+        <label class="toggle-archived">
+          <input type="checkbox" v-model="showArchived" />
+          Mostrar archivadas
+          <span v-if="archivadasCount" class="archived-count">{{ archivadasCount }}</span>
+        </label>
       </div>
 
       <!-- Table -->
@@ -51,19 +58,26 @@
               <th>Estado</th>
               <th>Rol</th>
               <th>Registro</th>
+              <th>Último ingreso</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="u in usuariosFiltrados" :key="u.id">
-              <td class="email-cell">{{ u.email }}</td>
+            <tr v-for="u in usuariosFiltrados" :key="u.id" :class="{ 'row-archived': u.archived_at }">
+              <td class="email-cell">
+                <NuxtLink :to="`/dashboard/admin/usuarios/${u.id}`" class="email-link">{{ u.email }}</NuxtLink>
+                <span v-if="u.archived_at" class="tag-archived">archivada</span>
+                <span v-else-if="u.is_internal" class="tag-internal">interna</span>
+              </td>
               <td>
+                <span v-if="u.role === 'admin'" class="plan-na">—</span>
                 <select
+                  v-else
                   v-model="u.plan"
-                  :disabled="changingPlan === u.id"
+                  :disabled="changingPlan === u.id || !!u.archived_at"
                   class="plan-select"
                   :class="u.plan"
-                  @change="changePlan(u, ($event.target as HTMLSelectElement).value)"
+                  @change="askChangePlan(u, ($event.target as HTMLSelectElement).value)"
                 >
                   <option value="free">Free</option>
                   <option value="starter">Starter</option>
@@ -74,14 +88,15 @@
               <td><span :class="['badge', u.plan_status === 'active' ? 'badge-active' : 'badge-inactive']">{{ u.plan_status }}</span></td>
               <td><span :class="['badge', u.role === 'admin' ? 'badge-admin' : 'badge-user']">{{ u.role }}</span></td>
               <td class="date-cell">{{ formatDate(u.created_at) }}</td>
+              <td class="date-cell">{{ u.last_sign_in_at ? formatDate(u.last_sign_in_at) : '—' }}</td>
               <td class="action-cell">
                 <button
                   v-if="u.id !== currentUserId"
-                  :class="['role-btn', u.role === 'admin' ? 'role-btn-demote' : 'role-btn-promote']"
-                  :disabled="togglingId === u.id"
-                  @click="toggleRole(u)"
+                  :class="['arch-btn', u.archived_at ? 'arch-btn-restore' : 'arch-btn-archive']"
+                  :disabled="archivingId === u.id"
+                  @click="askArchive(u)"
                 >
-                  {{ togglingId === u.id ? '…' : u.role === 'admin' ? 'Quitar admin' : 'Hacer admin' }}
+                  {{ archivingId === u.id ? '…' : u.archived_at ? 'Restaurar' : 'Archivar' }}
                 </button>
               </td>
             </tr>
@@ -89,6 +104,34 @@
         </table>
       </div>
     </div>
+
+    <!-- Confirmación cambio de plan -->
+    <ConfirmDialog
+      :open="!!pendingPlan"
+      tone="primary"
+      title="Cambiar plan"
+      :message="pendingPlan ? `¿Cambiar el plan de ${pendingPlan.email} de «${pendingPlan.oldPlan}» a «${pendingPlan.newPlan}»? Esto modifica su acceso y queda registrado en finanzas.` : ''"
+      confirm-text="Sí, cambiar plan"
+      :busy="!!changingPlan"
+      @confirm="confirmChangePlan"
+      @cancel="cancelChangePlan"
+    />
+
+    <!-- Confirmación archivar / restaurar -->
+    <ConfirmDialog
+      :open="!!pendingArchive"
+      :tone="pendingArchive?.archived_at ? 'primary' : 'warning'"
+      :title="pendingArchive?.archived_at ? 'Restaurar cuenta' : 'Archivar cuenta'"
+      :message="pendingArchive
+        ? (pendingArchive.archived_at
+            ? `La cuenta ${pendingArchive.email} volverá a aparecer en el listado.`
+            : `${pendingArchive.email} dejará de aparecer en el listado. No se elimina nada: el correo y todos sus datos se conservan y puedes restaurarla cuando quieras.`)
+        : ''"
+      :confirm-text="pendingArchive?.archived_at ? 'Restaurar' : 'Archivar'"
+      :busy="!!archivingId"
+      @confirm="confirmArchive"
+      @cancel="pendingArchive = null"
+    />
   </NuxtLayout>
 </template>
 
@@ -104,6 +147,9 @@ interface UserRow {
   role: string
   plan_status: string
   created_at: string
+  last_sign_in_at: string | null
+  archived_at: string | null
+  is_internal: boolean
 }
 
 const { show } = useToast()
@@ -111,23 +157,40 @@ const { show } = useToast()
 const users = ref<UserRow[]>([])
 const loading = ref(true)
 const loadError = ref(false)
-const togglingId = ref('')
+const archivingId = ref('')
 const changingPlan = ref('')
 const currentUserId = ref('')
 const busqueda = ref('')
+const showArchived = ref(false)
+
+// Plan original por id, para revertir el select si se cancela la confirmación.
+const originalPlans = new Map<string, string>()
+
+const pendingPlan = ref<{ user: UserRow; email: string; oldPlan: string; newPlan: string } | null>(null)
+const pendingArchive = ref<UserRow | null>(null)
+
+const visibles = computed(() =>
+  showArchived.value ? users.value : users.value.filter(u => !u.archived_at)
+)
 
 const usuariosFiltrados = computed(() => {
-  if (!busqueda.value.trim()) return users.value
+  if (!busqueda.value.trim()) return visibles.value
   const q = busqueda.value.toLowerCase()
-  return users.value.filter(u => u.email.toLowerCase().includes(q))
+  return visibles.value.filter(u => u.email.toLowerCase().includes(q))
 })
 
-const total = computed(() => users.value.length)
+const archivadasCount = computed(() => users.value.filter(u => u.archived_at).length)
+
+// Contadores: excluyen admins y archivadas (no son clientes contabilizables).
+const contables = computed(() =>
+  users.value.filter(u => u.role !== 'admin' && !u.archived_at)
+)
+const total = computed(() => contables.value.length)
 const byPlan = computed(() => ({
-  free:     users.value.filter(u => u.plan === 'free').length,
-  starter:  users.value.filter(u => u.plan === 'starter').length,
-  advanced: users.value.filter(u => u.plan === 'advanced').length,
-  agency:   users.value.filter(u => u.plan === 'agency').length,
+  free:     contables.value.filter(u => u.plan === 'free').length,
+  starter:  contables.value.filter(u => u.plan === 'starter').length,
+  advanced: contables.value.filter(u => u.plan === 'advanced').length,
+  agency:   contables.value.filter(u => u.plan === 'agency').length,
 }))
 
 function formatDate(iso: string) {
@@ -137,29 +200,57 @@ function formatDate(iso: string) {
   })
 }
 
-async function changePlan(u: UserRow, newPlan: string) {
+// ── Cambio de plan con confirmación ──────────────────────────────────────────
+function askChangePlan(u: UserRow, newPlan: string) {
+  const oldPlan = originalPlans.get(u.id) ?? u.plan
+  if (oldPlan === newPlan) return
+  pendingPlan.value = { user: u, email: u.email, oldPlan, newPlan }
+}
+
+function cancelChangePlan() {
+  if (pendingPlan.value) {
+    // revertir el select al valor original
+    pendingPlan.value.user.plan = pendingPlan.value.oldPlan
+  }
+  pendingPlan.value = null
+}
+
+async function confirmChangePlan() {
+  if (!pendingPlan.value) return
+  const { user: u, newPlan, oldPlan } = pendingPlan.value
   changingPlan.value = u.id
   const { error: err } = await supabase.rpc('admin_set_user_plan', { target_id: u.id, new_plan: newPlan })
   if (err) {
+    u.plan = oldPlan
     show('No se pudo cambiar el plan', 'error')
   } else {
     u.plan = newPlan
+    originalPlans.set(u.id, newPlan)
     show('Plan actualizado', 'ok')
   }
   changingPlan.value = ''
+  pendingPlan.value = null
 }
 
-async function toggleRole(u: UserRow) {
-  togglingId.value = u.id
-  const newRole = u.role === 'admin' ? 'user' : 'admin'
-  const { error: err } = await supabase.rpc('admin_set_user_role', { target_id: u.id, new_role: newRole })
+// ── Archivar / restaurar con confirmación ────────────────────────────────────
+function askArchive(u: UserRow) {
+  pendingArchive.value = u
+}
+
+async function confirmArchive() {
+  if (!pendingArchive.value) return
+  const u = pendingArchive.value
+  const archivar = !u.archived_at
+  archivingId.value = u.id
+  const { error: err } = await supabase.rpc('admin_set_user_archived', { target_id: u.id, archived: archivar })
   if (err) {
-    show('No se pudo cambiar el rol', 'error')
+    show('No se pudo actualizar la cuenta', 'error')
   } else {
-    u.role = newRole
-    show('Rol actualizado', 'ok')
+    u.archived_at = archivar ? new Date().toISOString() : null
+    show(archivar ? 'Cuenta archivada' : 'Cuenta restaurada', 'ok')
   }
-  togglingId.value = ''
+  archivingId.value = ''
+  pendingArchive.value = null
 }
 
 onMounted(async () => {
@@ -170,7 +261,8 @@ onMounted(async () => {
   if (err) {
     loadError.value = true
   } else {
-    users.value = data ?? []
+    users.value = (data ?? []) as UserRow[]
+    for (const u of users.value) originalPlans.set(u.id, u.plan)
   }
   loading.value = false
 })
@@ -221,11 +313,15 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 .accent-advanced .stat-num { color: #6366f1; }
 .accent-agency .stat-num   { color: #0ea5e9; }
 
+.controls {
+  display: flex; align-items: center; gap: 1rem;
+  margin-bottom: 1rem; flex-wrap: wrap;
+}
 .search-bar {
   display: flex; align-items: center; gap: 0.625rem;
   background: white; border: 1px solid #e2e8f0; border-radius: 10px;
-  padding: 0.5rem 0.875rem; margin-bottom: 1rem;
-  color: #94a3b8;
+  padding: 0.5rem 0.875rem;
+  color: #94a3b8; flex: 1; min-width: 220px;
 }
 .search-input {
   flex: 1; border: none; outline: none; font-size: 0.9rem;
@@ -233,6 +329,17 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
 }
 .search-input::placeholder { color: #94a3b8; }
 .search-count { font-size: 0.8rem; color: #94a3b8; white-space: nowrap; }
+
+.toggle-archived {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-size: 0.85rem; color: #475569; cursor: pointer; user-select: none;
+  white-space: nowrap;
+}
+.toggle-archived input { cursor: pointer; }
+.archived-count {
+  background: #f1f5f9; color: #64748b; border-radius: 999px;
+  padding: 0.05rem 0.5rem; font-size: 0.72rem; font-weight: 600;
+}
 
 .table-wrap {
   background: white;
@@ -256,6 +363,7 @@ th {
 tbody tr { border-bottom: 1px solid #f1f5f9; }
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: #f8fafc; }
+tbody tr.row-archived { opacity: 0.6; background: #fafafa; }
 
 td {
   padding: 0.75rem 1rem;
@@ -263,8 +371,18 @@ td {
   color: #334155;
 }
 
-.email-cell { color: #0f172a; font-weight: 500; }
+.email-cell { color: #0f172a; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; }
+.email-link { color: #2563eb; text-decoration: none; }
+.email-link:hover { text-decoration: underline; }
+.tag-archived, .tag-internal {
+  font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; padding: 0.1rem 0.4rem; border-radius: 5px;
+}
+.tag-archived { background: #f1f5f9; color: #94a3b8; }
+.tag-internal { background: #f0fdf4; color: #15803d; }
+
 .date-cell { color: #64748b; font-size: 0.8125rem; white-space: nowrap; }
+.plan-na { color: #cbd5e1; font-weight: 600; }
 
 .badge {
   display: inline-block;
@@ -303,7 +421,7 @@ td {
 
 .action-cell { text-align: right; }
 
-.role-btn {
+.arch-btn {
   padding: 0.3rem 0.75rem;
   border-radius: 6px;
   font-size: 0.75rem;
@@ -313,26 +431,15 @@ td {
   transition: all 0.15s;
   font-family: 'Inter', sans-serif;
 }
-
-.role-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.role-btn-promote {
-  background: #fefce8;
-  border-color: #fbbf24;
-  color: #b45309;
+.arch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.arch-btn-archive {
+  background: #fff7ed; border-color: #fdba74; color: #c2410c;
 }
-.role-btn-promote:hover:not(:disabled) {
-  background: #fef3c7;
+.arch-btn-archive:hover:not(:disabled) { background: #ffedd5; }
+.arch-btn-restore {
+  background: #eff6ff; border-color: #93c5fd; color: #1d4ed8;
 }
-
-.role-btn-demote {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #475569;
-}
-.role-btn-demote:hover:not(:disabled) {
-  background: #e2e8f0;
-}
+.arch-btn-restore:hover:not(:disabled) { background: #dbeafe; }
 
 .loading, .error {
   padding: 3rem;
