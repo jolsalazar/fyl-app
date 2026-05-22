@@ -55,14 +55,26 @@ async function runDigest(env: Env) {
 
   log.push(`Usuarios: ${profiles.length}`)
   let totalEmails = 0
+  let totalErrores = 0
 
+  // Aislamiento por usuario: una excepción en processUser NO debe abortar todo el
+  // digest. Antes (sin try/catch) un solo throw cortaba la corrida y dejaba sin
+  // procesar a todos los usuarios siguientes — quedaban sin email y con el cursor
+  // congelado. Acá capturamos, logueamos y seguimos con el próximo.
   for (const profile of profiles) {
-    const sent = await processUser(env, profile.id, profile.plan, log)
-    if (sent) totalEmails++
+    try {
+      const sent = await processUser(env, profile.id, profile.plan, log)
+      if (sent) totalEmails++
+    } catch (e) {
+      totalErrores++
+      const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e)
+      log.push(`  ⚠️ ERROR procesando user ${profile.id} (plan ${profile.plan}): ${msg}`)
+      console.error(`[digest] error en user ${profile.id} (plan ${profile.plan}):`, e)
+    }
   }
 
-  log.push(`Emails enviados: ${totalEmails}`)
-  return { ok: true, log }
+  log.push(`Emails enviados: ${totalEmails}${totalErrores ? ` · Errores: ${totalErrores}` : ''}`)
+  return { ok: true, errores: totalErrores, log }
 }
 
 // ── Higiene de datos ──────────────────────────────────────────────

@@ -439,23 +439,23 @@ async function logout() {
   gap: 0.75rem;
   padding: 0.625rem 0.75rem;
   border-radius: 8px;
-  color: #64748b;
+  color: #aab6c8;
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
   transition: all 0.15s;
   flex-shrink: 0;
 }
-.nav-item:hover  { background: #1e293b; color: #cbd5e1; }
+.nav-item:hover  { background: #1e293b; color: #f1f5f9; }
 .nav-item.active { background: #1e293b; color: #38bdf8; }
 .nav-item.active svg { color: #38bdf8; }
 
 .nav-group-label {
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #3f4d63;
+  color: #8b98ad;
   padding: 0 0.75rem;
   margin-top: 0.5rem;
   line-height: 1.6;
@@ -469,7 +469,7 @@ async function logout() {
   background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;
   padding: 0.1rem 0.35rem; border-radius: 4px;
 }
-.nav-match { color: #94a3b8; }
+.nav-match { color: #aab6c8; }
 .nav-match.active { color: #a78bfa; }
 .nav-match.active svg { color: #a78bfa; }
 .nav-match:hover { color: #c4b5fd; }
@@ -492,11 +492,11 @@ async function logout() {
   display: flex; align-items: center; gap: 0.5rem;
   width: 100%; padding: 0.5rem 0.75rem;
   background: none; border: none; border-radius: 8px;
-  color: #475569; font-size: 0.6875rem; font-weight: 700;
+  color: #8b98ad; font-size: 0.65rem; font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.08em;
   cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif;
 }
-.nav-admin-toggle:hover { background: #1e293b; color: #94a3b8; }
+.nav-admin-toggle:hover { background: #1e293b; color: #cbd5e1; }
 .chevron { margin-left: auto; transition: transform 0.2s; }
 .chevron.open { transform: rotate(180deg); }
 .nav-sub { padding-left: 1.75rem; font-size: 0.85rem; }
