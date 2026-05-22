@@ -29,6 +29,16 @@ const _plan     = ref<Plan>('free')
 const _loading  = ref(true)
 const _loaded   = ref(false)
 
+// Hidratación instantánea desde caché: en cada recarga el bundle re-inicializa
+// _plan a 'free', y recién load() trae el real desde Supabase → parpadeo
+// Free→Advanced. Leer el último plan conocido de localStorage al cargar el
+// módulo (antes del primer render) elimina ese flash. load() lo refresca igual.
+const PLAN_CACHE_KEY = 'fyl_plan'
+if (import.meta.client) {
+  const cached = localStorage.getItem(PLAN_CACHE_KEY)
+  if (cached && cached in PLAN_CONFIG) _plan.value = cached as Plan
+}
+
 export function usePlan() {
   const supabase = useSupabaseClient()
 
@@ -48,6 +58,7 @@ export function usePlan() {
     _plan.value    = (LEGACY[raw] ?? (raw in PLAN_CONFIG ? raw : 'free')) as Plan
     _loading.value = false
     _loaded.value  = true
+    if (import.meta.client) localStorage.setItem(PLAN_CACHE_KEY, _plan.value)
   }
 
   const config  = computed(() => PLAN_CONFIG[_plan.value] ?? PLAN_CONFIG.free)
@@ -90,6 +101,7 @@ export function usePlan() {
     _plan.value    = 'free'
     _loaded.value  = false
     _loading.value = true
+    if (import.meta.client) localStorage.removeItem(PLAN_CACHE_KEY)
   }
 
   return {

@@ -171,10 +171,24 @@ const isAdmin      = ref(false)
 const adminExpanded = ref(false)
 const menuOpen     = ref(false)
 const sidebarOpen  = ref(false)
-const nuevas            = ref(0)
-const nuevasLicitaciones = ref(0)
-const totalGuardados    = ref(0)
-const alertasNuevas     = ref(0)
+
+// Como cada página monta su propio <NuxtLayout>, este layout se re-monta en cada
+// navegación y onMounted vuelve a pedir los contadores → parpadeo (0 → número).
+// Hidratamos desde caché para mostrar el último valor conocido al instante y
+// refrescar en segundo plano.
+function cachedCount(key: string): number {
+  if (!import.meta.client) return 0
+  const v = Number(localStorage.getItem(key))
+  return Number.isFinite(v) && v >= 0 ? v : 0
+}
+function setCachedCount(key: string, val: number) {
+  if (import.meta.client) localStorage.setItem(key, String(val))
+}
+
+const nuevas            = ref(cachedCount('fyl_count_fondos'))
+const nuevasLicitaciones = ref(cachedCount('fyl_count_licit'))
+const totalGuardados    = ref(cachedCount('fyl_count_guardados'))
+const alertasNuevas     = ref(cachedCount('fyl_count_alertas'))
 const inicial = computed(() => email.value?.[0]?.toUpperCase() ?? '?')
 
 const planClass = computed(() => ({
@@ -221,11 +235,14 @@ onMounted(async () => {
     ])
     nuevas.value = cFondos ?? 0
     nuevasLicitaciones.value = cLicit ?? 0
+    setCachedCount('fyl_count_fondos', nuevas.value)
+    setCachedCount('fyl_count_licit', nuevasLicitaciones.value)
   }
 
   const { count: cGuardados } = await supabase
     .from('guardados').select('id', { count: 'exact', head: true })
   totalGuardados.value = cGuardados ?? 0
+  setCachedCount('fyl_count_guardados', totalGuardados.value)
 
   const lastAlertas = localStorage.getItem('fyl_last_alertas')
   if (lastAlertas) {
@@ -255,6 +272,7 @@ onMounted(async () => {
       }
       const { count } = await q
       alertasNuevas.value = count ?? 0
+      setCachedCount('fyl_count_alertas', alertasNuevas.value)
     }
   }
 })
@@ -262,6 +280,11 @@ onMounted(async () => {
 async function logout() {
   menuOpen.value = false
   resetPlan()
+  if (import.meta.client) {
+    for (const k of ['fyl_count_fondos', 'fyl_count_licit', 'fyl_count_guardados', 'fyl_count_alertas']) {
+      localStorage.removeItem(k)
+    }
+  }
   await supabase.auth.signOut()
   router.push('/login')
 }
