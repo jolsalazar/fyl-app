@@ -41,6 +41,10 @@
         <div class="field">
           <label>Email</label>
           <input v-model="email" type="email" required placeholder="tu@empresa.cl" :disabled="loading" />
+          <p v-if="emailSugerencia" class="email-hint">
+            ¿Quisiste decir
+            <button type="button" class="hint-btn" @click="email = emailSugerencia!">{{ emailSugerencia }}</button>?
+          </p>
         </div>
 
         <div class="field">
@@ -124,6 +128,47 @@ const success         = ref(false)
 const verPass         = ref(false)
 const verConfirm      = ref(false)
 const aceptaTerminos  = ref(false)
+
+// Sugerencia de corrección de typos en el dominio del correo (estilo Mailcheck).
+// Solo sugiere cuando el dominio escrito está muy cerca de un proveedor común,
+// para no molestar a quien usa un dominio corporativo legítimo.
+const DOMINIOS_COMUNES = [
+  'gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'yahoo.es',
+  'icloud.com', 'live.com', 'live.cl', 'hotmail.es', 'hotmail.cl',
+  'gmail.cl', 'me.com', 'protonmail.com',
+]
+
+function distanciaEdicion(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const dp = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
+  for (let i = 0; i <= m; i++) dp[i][0] = i
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost)
+    }
+  }
+  return dp[m][n]
+}
+
+const emailSugerencia = computed<string | null>(() => {
+  const v = email.value.trim().toLowerCase()
+  const at = v.lastIndexOf('@')
+  if (at < 1 || at === v.length - 1) return null
+  const local = v.slice(0, at)
+  const dom = v.slice(at + 1)
+  if (!dom.includes('.') || DOMINIOS_COMUNES.includes(dom)) return null
+
+  let mejor: string | null = null
+  let mejorDist = Infinity
+  for (const d of DOMINIOS_COMUNES) {
+    const dist = distanciaEdicion(dom, d)
+    if (dist < mejorDist) { mejorDist = dist; mejor = d }
+  }
+  // Cerca de un proveedor común → typo probable. Lejos → dominio propio, no sugerir.
+  return mejor && mejorDist >= 1 && mejorDist <= 2 ? `${local}@${mejor}` : null
+})
 
 const passwordRules = computed(() => [
   { label: 'Mínimo 8 caracteres',    ok: password.value.length >= 8 },
@@ -271,6 +316,21 @@ h1 {
   margin-bottom: 1.75rem;
 }
 .field { margin-bottom: 1rem; }
+.email-hint {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: #92400e;
+}
+.hint-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: #b45309;
+  text-decoration: underline;
+  cursor: pointer;
+}
 label {
   display: block;
   font-size: 0.8125rem;
