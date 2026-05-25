@@ -235,11 +235,9 @@ async function handleRegistro() {
     }
   }
 
-  if (data.user) {
-    supabase.functions.invoke('send-welcome-email', {
-      body: { record: { id: data.user.id } },
-    }).catch(() => {})
-  }
+  // El correo de bienvenida (+ aviso a admins) lo dispara un trigger server-side
+  // en auth.users (migración 20260525000002). No se invoca desde el cliente para
+  // no depender del navegador ni duplicar el envío.
 
   if (data.session) {
     router.push('/onboarding')
