@@ -37,7 +37,7 @@
       <div class="filtros">
         <div class="search-wrap">
           <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input v-model="busqueda" type="text" placeholder="Buscar por título..." class="search-input" @input="onBusqueda" />
+          <input v-model="busqueda" type="text" placeholder="Buscar por título, organismo, descripción..." class="search-input" @input="onBusqueda" />
         </div>
 
         <select v-model="filtroEstado" @change="cargar" class="select">
@@ -287,10 +287,11 @@ function buildQuery() {
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
   if (busqueda.value) {
     // Sanitiza el término: quita caracteres que romperían el filtro .or() de PostgREST
-    // (comas, paréntesis, comillas, %) y busca en los campos de texto relevantes.
+    // (comas, paréntesis, comillas, %). Solo columnas de texto plano: `foco`,
+    // `requisitos_clave` y `documentacion_requerida` son text[] y no admiten ilike.
     const term = busqueda.value.trim().replace(/[%,()"\\]/g, ' ').trim()
     if (term) {
-      const campos = ['titulo', 'descripcion_breve', 'foco', 'tipo_financiamiento', 'organizador']
+      const campos = ['titulo', 'descripcion_breve', 'organizador', 'tipo_financiamiento', 'region', 'raw_text']
       q = q.or(campos.map(c => `${c}.ilike.%${term}%`).join(','))
     }
   }
@@ -486,14 +487,15 @@ onMounted(async () => {
 
   const semanaAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  const [, { data: guardados }, { data: guardadosCountData }, { data: popularesData }, { count: cNuevos }, { data: postulaciones }] = await Promise.all([
+  const [, { data: guardados }, { data: popularesData }, { count: cNuevos }, { data: postulaciones }] = await Promise.all([
     loadPlan(),
+    // Una sola lectura de guardados: alimenta tanto el set de "ya guardado" como
+    // el conteo por convocatoria (más abajo).
     supabase.from('guardados').select('convocatoria_id'),
-    supabase.from('guardados').select('convocatoria_id'),
-    supabase.from('guardados').select('convocatoria_id, created_at, convocatorias!inner(id, titulo, tipo, fuente, estado)')
-      .neq('convocatorias.fuente', 'mercadopublico')
-      .eq('convocatorias.estado', 'abierto')
-      .gte('created_at', semanaAtras),
+    // Sin embed: `guardados` no tiene FK a `convocatorias`, así que PostgREST no
+    // puede resolver convocatorias!inner (devolvía 400). Traemos los guardados de
+    // la semana y resolvemos las convocatorias en un segundo query (ver más abajo).
+    supabase.from('guardados').select('convocatoria_id').gte('created_at', semanaAtras),
     supabase.from('convocatorias')
       .select('id', { count: 'exact', head: true })
       .neq('fuente', 'mercadopublico')
@@ -504,22 +506,34 @@ onMounted(async () => {
   guardadosSet.value    = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
   postulacionesSet.value = new Set((postulaciones ?? []).map((p: any) => p.convocatoria_id))
 
-  // Conteo por convocatoria para mostrar en cards
+  // Conteo por convocatoria para mostrar en cards (reusa la misma lectura)
   const countMap: Record<string, number> = {}
-  for (const g of guardadosCountData ?? []) {
+  for (const g of guardados ?? []) {
     countMap[g.convocatoria_id] = (countMap[g.convocatoria_id] ?? 0) + 1
   }
   guardadosCount.value = countMap
 
-  // Top 3 más guardados esta semana
-  const popMap: Record<string, { id: string, titulo: string, tipo: string, total: number }> = {}
+  // Top 3 más guardados esta semana: contamos por convocatoria y luego resolvemos
+  // sus datos filtrando a las abiertas y no-mercadopublico (join en cliente).
+  const conteoSemana: Record<string, number> = {}
   for (const g of popularesData ?? []) {
-    const conv = (g as any).convocatorias
-    if (!conv) continue
-    const id = conv.id
-    popMap[id] = { id, titulo: conv.titulo, tipo: conv.tipo, total: (popMap[id]?.total ?? 0) + 1 }
+    conteoSemana[g.convocatoria_id] = (conteoSemana[g.convocatoria_id] ?? 0) + 1
   }
-  populares.value = Object.values(popMap).sort((a, b) => b.total - a.total).slice(0, 3)
+  const idsSemana = Object.keys(conteoSemana)
+  if (idsSemana.length) {
+    const { data: convsPop } = await supabase
+      .from('convocatorias')
+      .select('id, titulo, tipo')
+      .in('id', idsSemana)
+      .neq('fuente', 'mercadopublico')
+      .eq('estado', 'abierto')
+    populares.value = (convsPop ?? [])
+      .map((c: any) => ({ id: c.id, titulo: c.titulo, tipo: c.tipo, total: conteoSemana[c.id] ?? 0 }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 3)
+  } else {
+    populares.value = []
+  }
   nuevosEstaSemana.value = cNuevos ?? 0
 
   await cargar()
