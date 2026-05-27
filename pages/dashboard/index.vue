@@ -287,9 +287,12 @@ function buildQuery() {
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
   if (busqueda.value) {
     // Sanitiza el término: quita caracteres que romperían el filtro .or() de PostgREST
-    // (comas, paréntesis, comillas, %) y busca en título, descripción y tags.
+    // (comas, paréntesis, comillas, %) y busca en los campos de texto relevantes.
     const term = busqueda.value.trim().replace(/[%,()"\\]/g, ' ').trim()
-    if (term) q = q.or(`titulo.ilike.%${term}%,descripcion.ilike.%${term}%,tags_text.ilike.%${term}%`)
+    if (term) {
+      const campos = ['titulo', 'descripcion_breve', 'foco', 'tipo_financiamiento', 'organizador']
+      q = q.or(campos.map(c => `${c}.ilike.%${term}%`).join(','))
+    }
   }
   if (orden.value === 'cierre') {
     q = q.order('fecha_cierre_postulacion', { ascending: true, nullsFirst: false })
