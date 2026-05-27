@@ -285,7 +285,12 @@ function buildQuery() {
   }
   if (filtroFuente.value) q = q.eq('fuente', filtroFuente.value)
   if (filtroMonto.value)  q = q.eq('monto_rango', filtroMonto.value)
-  if (busqueda.value)     q = q.ilike('titulo', `%${busqueda.value}%`)
+  if (busqueda.value) {
+    // Sanitiza el término: quita caracteres que romperían el filtro .or() de PostgREST
+    // (comas, paréntesis, comillas, %) y busca en título, descripción y tags.
+    const term = busqueda.value.trim().replace(/[%,()"\\]/g, ' ').trim()
+    if (term) q = q.or(`titulo.ilike.%${term}%,descripcion.ilike.%${term}%,tags_text.ilike.%${term}%`)
+  }
   if (orden.value === 'cierre') {
     q = q.order('fecha_cierre_postulacion', { ascending: true, nullsFirst: false })
   } else {
@@ -297,7 +302,8 @@ function buildQuery() {
 async function cargar() {
   loading.value = true
   offset.value = 0
-  const { data, count } = await buildQuery().range(0, PAGE_SIZE - 1)
+  const { data, count, error } = await buildQuery().range(0, PAGE_SIZE - 1)
+  if (error) console.error('[buscador] error al cargar convocatorias:', error)
   items.value = data ?? []
   total.value = count ?? 0
   offset.value = items.value.length
@@ -306,7 +312,8 @@ async function cargar() {
 
 async function cargarMas() {
   loadingMas.value = true
-  const { data } = await buildQuery().range(offset.value, offset.value + PAGE_SIZE - 1)
+  const { data, error } = await buildQuery().range(offset.value, offset.value + PAGE_SIZE - 1)
+  if (error) console.error('[buscador] error al cargar más convocatorias:', error)
   items.value = [...items.value, ...(data ?? [])]
   offset.value = items.value.length
   loadingMas.value = false
