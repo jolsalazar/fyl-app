@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     return { ok: false, error: 'invalid_plan' }
   }
 
-  // getPrecioInicial devuelve precio_promo si el plan tiene promo, sino precio regular.
+  // Precio único y permanente del plan.
   const unitPrice = getPrecioInicial(plan)
 
   const preference = {

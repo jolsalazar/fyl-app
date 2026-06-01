@@ -5,14 +5,40 @@
         <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" class="brand-logo" />
       </div>
 
-      <!-- Plan badge -->
-      <div v-if="plan" class="plan-badge" :class="plan">
-        <span class="plan-icon">{{ planInfo.icon }}</span>
-        Plan {{ planInfo.nombre }}
-      </div>
-
       <h1>Crea tu cuenta</h1>
       <p class="subtitle">Empieza a recibir alertas de oportunidades en minutos</p>
+
+      <!-- Selector de plan: momento de decisión Free vs Starter -->
+      <div v-if="!success && !emailExistente" class="plan-selector">
+        <button
+          type="button"
+          class="plan-option"
+          :class="{ selected: planSeleccionado === 'free' }"
+          @click="planSeleccionado = 'free'"
+        >
+          <span class="plan-option-head">
+            <span class="plan-option-icon">{{ PLANES_CONFIG.free.icon }}</span>
+            <span class="plan-option-name">{{ PLANES_CONFIG.free.nombre }}</span>
+          </span>
+          <span class="plan-option-price">$0<small>/mes</small></span>
+          <span class="plan-option-desc">Explora oportunidades y recibe 1 alerta.</span>
+        </button>
+
+        <button
+          type="button"
+          class="plan-option featured"
+          :class="{ selected: planSeleccionado === 'starter' }"
+          @click="planSeleccionado = 'starter'"
+        >
+          <span class="plan-option-badge">⭐ Recomendado</span>
+          <span class="plan-option-head">
+            <span class="plan-option-icon">{{ PLANES_CONFIG.starter.icon }}</span>
+            <span class="plan-option-name">{{ PLANES_CONFIG.starter.nombre }}</span>
+          </span>
+          <span class="plan-option-price">${{ PLANES_CONFIG.starter.precio.toLocaleString('es-CL') }}<small>/mes</small></span>
+          <span class="plan-option-desc">Alertas diarias, Mi Match y herramientas de gestión.</span>
+        </button>
+      </div>
 
       <!-- Success state -->
       <div v-if="success" class="success-banner">
@@ -28,7 +54,7 @@
         <div class="info-icon">i</div>
         <div>
           <strong>Ya tienes una cuenta</strong>
-          <p>El email <strong>{{ email }}</strong> ya está registrado. Inicia sesión para continuar{{ plan && plan !== 'free' ? ` con el plan ${planInfo.nombre}` : '' }}.</p>
+          <p>El email <strong>{{ email }}</strong> ya está registrado. Inicia sesión para continuar{{ planSeleccionado !== 'free' ? ` con el plan ${PLANES_CONFIG[planSeleccionado].nombre}` : '' }}.</p>
           <NuxtLink :to="loginUrl" class="btn-login-existente">
             Iniciar sesión
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -100,24 +126,17 @@
 </template>
 
 <script setup lang="ts">
-import { PLANES_CONFIG, esPlanValido, type Plan } from '~~/utils/planes'
+import { PLANES_CONFIG } from '~~/utils/planes'
 
 const supabase = useSupabaseClient()
 const router = useRouter()
 const route = useRoute()
 
-const plan = computed(() => {
-  const p = route.query.plan as string
-  return esPlanValido(p) ? p : null
-})
-
-const planInfo = computed(() => {
-  const p = plan.value ?? 'free'
-  return {
-    nombre: PLANES_CONFIG[p as Plan].nombre,
-    icon: PLANES_CONFIG[p as Plan].icon,
-  }
-})
+// Selector Free/Starter del registro. Se siembra con ?plan= si llega (free|starter),
+// si no, default a Starter (el recomendado). Solo registra la intención: el cobro
+// de Starter ocurre al final del onboarding.
+const planQuery = route.query.plan as string
+const planSeleccionado = ref<'free' | 'starter'>(planQuery === 'free' ? 'free' : 'starter')
 
 const email           = ref('')
 const password        = ref('')
@@ -216,13 +235,14 @@ async function handleRegistro() {
   }
 
   // Guardar intención de plan vía endpoint server-side (no UPDATE directo,
-  // así no falla silenciosamente si RLS bloquea o columna no existe)
-  if (data.session && plan.value && plan.value !== 'free') {
+  // así no falla silenciosamente si RLS bloquea o columna no existe).
+  // Solo si eligió Starter; con Free no hay intención de pago.
+  if (data.session && planSeleccionado.value !== 'free') {
     let intencionGuardada = false
     try {
       const res = await $fetch<{ ok: boolean }>('/api/intencion-plan', {
         method: 'POST',
-        body: { plan: plan.value },
+        body: { plan: planSeleccionado.value },
       })
       intencionGuardada = res.ok === true
     } catch {
@@ -231,7 +251,7 @@ async function handleRegistro() {
 
     // Fallback en localStorage para que onboarding pueda recuperarla
     if (!intencionGuardada) {
-      try { localStorage.setItem('plan_intencion', plan.value) } catch {}
+      try { localStorage.setItem('plan_intencion', planSeleccionado.value) } catch {}
     }
   }
 
@@ -250,8 +270,8 @@ async function handleRegistro() {
 
 const emailExistente = ref(false)
 const loginUrl = computed(() => {
-  return plan.value && plan.value !== 'free'
-    ? `/login?plan=${plan.value}`
+  return planSeleccionado.value !== 'free'
+    ? `/login?plan=${planSeleccionado.value}`
     : '/login'
 })
 </script>
@@ -286,20 +306,57 @@ const loginUrl = computed(() => {
 }
 .brand-logo { height: 50px; width: auto; }
 
-.plan-badge {
-  display: inline-flex;
+/* Selector de plan Free/Starter */
+.plan-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+.plan-selector .plan-option {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  margin: 0 !important;
+  padding: 0.85rem !important;
+  background: white !important;
+  color: #0f172a !important;
+  border: 1.5px solid #e2e8f0 !important;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.plan-selector .plan-option:hover { border-color: #cbd5e1 !important; }
+.plan-selector .plan-option.selected {
+  border-color: #0ea5e9 !important;
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.12);
+}
+.plan-option-head {
+  display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  margin-bottom: 1.25rem;
 }
-.plan-badge.free     { background: #f1f5f9; color: #64748b; }
-.plan-badge.starter  { background: #eff6ff; color: #2563eb; }
-.plan-badge.advanced { background: #ede9fe; color: #6d28d9; }
-.plan-badge.agency   { background: #e0f2fe; color: #0369a1; }
+.plan-option-icon { font-size: 1.05rem; line-height: 1; }
+.plan-option-name { font-weight: 700; font-size: 0.9rem; }
+.plan-option-price { font-weight: 800; font-size: 1.05rem; color: #0f172a; }
+.plan-option-price small { font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
+.plan-option-desc { font-size: 0.72rem; color: #64748b; line-height: 1.35; font-weight: 400; }
+.plan-option-badge {
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  background: #0ea5e9;
+  color: white;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
 
 h1 {
   font-size: 1.5rem;

@@ -64,15 +64,11 @@ Panel MP -> Webhooks -> Configurar:
 
 Copiar la firma secreta del webhook a `MP_WEBHOOK_SECRET`.
 
-## 5. Cron diario
+## 5. Precios
 
-Endpoints protegidos por header `x-cron-secret: <CRON_SECRET>`:
-
-- `POST /api/cron/aplicar-cambio-promo`
-- `POST /api/cron/enviar-aviso-promo`
-
-`aplicar-cambio-promo` sube el monto desde precio promo a precio regular cuando
-termina el periodo promocional. `enviar-aviso-promo` avisa antes del cambio.
+Cada plan tiene un precio único y permanente (ver `utils/planes.ts`). Ya **no**
+existe el periodo promocional de 90 días ni el aumento posterior de precio, por
+lo que se eliminaron los crons `aplicar-cambio-promo` y `enviar-aviso-promo`.
 
 ## 6. Smoke test
 

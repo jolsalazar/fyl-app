@@ -45,11 +45,8 @@
       <div class="plan-card" :class="{ current: plan === 'starter' }">
         <div class="plan-top">
           <div class="plan-name">Starter</div>
-          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.starter.precio_promo.toLocaleString() }}</span><span class="price-per">/mes</span></div>
-          <p class="price-promo-note">
-            los primeros 3 meses<br>
-            <span class="price-regular">luego ${{ PLANES_CONFIG.starter.precio_regular.toLocaleString() }}/mes</span>
-          </p>
+          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.starter.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
+          <p class="price-promo-note price-promo-spacer" aria-hidden="true">&nbsp;<br>&nbsp;</p>
           <p class="plan-desc">Para emprendedores activos que postulan y quieren herramientas reales de gestión.</p>
         </div>
         <ul class="features">
@@ -78,11 +75,8 @@
         <div class="featured-badge">Más popular</div>
         <div class="plan-top">
           <div class="plan-name">Advanced</div>
-          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.advanced.precio_promo.toLocaleString() }}</span><span class="price-per">/mes</span></div>
-          <p class="price-promo-note">
-            los primeros 3 meses<br>
-            <span class="price-regular">luego ${{ PLANES_CONFIG.advanced.precio_regular.toLocaleString() }}/mes</span>
-          </p>
+          <div class="plan-price"><span class="price-num">${{ PLANES_CONFIG.advanced.precio.toLocaleString() }}</span><span class="price-per">/mes</span></div>
+          <p class="price-promo-note price-promo-spacer" aria-hidden="true">&nbsp;<br>&nbsp;</p>
           <p class="plan-desc">Para quienes gestionan muchos fondos en paralelo y necesitan operar sin techo.</p>
         </div>
         <ul class="features">

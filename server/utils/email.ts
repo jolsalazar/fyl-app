@@ -57,44 +57,6 @@ function shell(content: string): string {
   `
 }
 
-/** Email de aviso: la promo de 3 meses termina en X días. */
-export function emailAvisoPromo(opts: {
-  nombrePlan:    string
-  precioRegular: number
-  diasRestantes: number
-  fechaCambio:   string  // formato dd/mm/yyyy
-}): { subject: string; html: string } {
-  const subject = `Tu plan ${opts.nombrePlan} pasa a precio regular en ${opts.diasRestantes} días`
-  const html = shell(`
-    <h2 style="font-size:1.4rem;font-weight:700;margin:0 0 16px">Tu período promocional termina pronto</h2>
-    <p>Te avisamos con anticipación: el <strong>${opts.fechaCambio}</strong> termina el período promocional de tu plan <strong>${opts.nombrePlan}</strong>.</p>
-    <p>A partir de esa fecha, el cobro mensual pasa a <strong>$${opts.precioRegular.toLocaleString('es-CL')}/mes</strong> (precio regular).</p>
-    <p style="background:#f1f5f9;border-radius:10px;padding:16px;font-size:0.9rem;color:#475569;margin:24px 0">
-      No tienes que hacer nada. El cambio se aplica automáticamente y MercadoPago seguirá cobrando como hasta ahora, solo que con el nuevo monto.
-    </p>
-    <p>Si quieres cancelar antes del cambio, puedes hacerlo desde tu <a href="https://app.fondosylicitaciones.cl/dashboard" style="color:#0ea5e9">panel</a> o respondiendo este email.</p>
-  `)
-  return { subject, html }
-}
-
-/** Email de confirmación: el cambio de precio ya se aplicó. */
-export function emailCambioPromoAplicado(opts: {
-  nombrePlan:    string
-  precioRegular: number
-}): { subject: string; html: string } {
-  const subject = `Tu plan ${opts.nombrePlan} ahora cobra el precio regular`
-  const html = shell(`
-    <h2 style="font-size:1.4rem;font-weight:700;margin:0 0 16px">Cambio de precio aplicado</h2>
-    <p>Como te avisamos, el período promocional de tu plan <strong>${opts.nombrePlan}</strong> terminó.</p>
-    <p>A partir del próximo cobro mensual, el monto será de <strong>$${opts.precioRegular.toLocaleString('es-CL')}/mes</strong>.</p>
-    <p style="background:#f1f5f9;border-radius:10px;padding:16px;font-size:0.9rem;color:#475569;margin:24px 0">
-      Tu suscripción sigue activa con todos los beneficios. No hay que hacer nada de tu lado.
-    </p>
-    <p>Si quieres cambiar o cancelar tu plan, entra a tu <a href="https://app.fondosylicitaciones.cl/dashboard" style="color:#0ea5e9">panel</a> cuando quieras.</p>
-  `)
-  return { subject, html }
-}
-
 // ── Plantillas de engagement (envío manual desde el admin) ───────────────────
 // Cada plantilla recibe el nombre del usuario (o "" si no tiene) y devuelve
 // asunto + html listos para enviar. Mantener las claves en sync con

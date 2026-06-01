@@ -34,7 +34,7 @@ import {
   verificarFirmaMercadoPago,
   type Plan,
 } from '~~/server/utils/mercadopago'
-import { DURACION_PROMO_DIAS, getPrecioRegular, tienePromo } from '~~/utils/planes'
+import { getPrecioRegular } from '~~/utils/planes'
 
 const MAX_FAILED_PAYMENTS = 3 // tras 3 cobros consecutivos rechazados → downgrade a free
 
@@ -200,16 +200,11 @@ export default defineEventHandler(async (event) => {
         }
 
         // INSERT del registro local con datos derivados de MP + planes.ts.
-        // Para promo_ends_at usamos date_created de MP si está disponible
-        // (no `now()` — el webhook puede llegar retrasado y eso extendería
-        // la promo más allá del plazo real).
+        // Ya no hay promo a 90 días: precio único y permanente.
         const planTipado    = plan as Plan
         const currentAmount = sub.auto_recurring?.transaction_amount ?? getPrecioRegular(planTipado)
         const regularAmount = getPrecioRegular(planTipado)
-        const fechaInicio   = sub.date_created ? new Date(sub.date_created) : new Date()
-        const promoEndsAt   = tienePromo(planTipado)
-          ? new Date(fechaInicio.getTime() + DURACION_PROMO_DIAS * 24 * 60 * 60 * 1000).toISOString()
-          : null
+        const promoEndsAt   = null
 
         const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/subscriptions`, {
           method:  'POST',

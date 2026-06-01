@@ -12,7 +12,7 @@
 //   SUPABASE_URL             Para insertar la subscription
 //   SUPABASE_SERVICE_KEY     Service role para escritura sin RLS
 
-import { PLANES_CONFIG, esPlanValido, getPrecioInicial, getPrecioRegular, tienePromo, DURACION_PROMO_DIAS, type Plan } from '~~/utils/planes'
+import { PLANES_CONFIG, esPlanValido, getPrecioInicial, getPrecioRegular, type Plan } from '~~/utils/planes'
 import { cancelarPreapprovalMercadoPago } from '~~/server/utils/mercadopago'
 import { serverSupabaseUser } from '#supabase/server'
 
@@ -43,7 +43,6 @@ export default defineEventHandler(async (event) => {
 
   const precioInicial = getPrecioInicial(plan as Plan)
   const precioRegular = getPrecioRegular(plan as Plan)
-  const hayPromo      = tienePromo(plan as Plan)
 
   const profileUrl = `${SUPABASE_URL}/rest/v1/profiles?id=eq.${user.id}&select=id`
   const profileRes = await fetch(profileUrl, {
@@ -77,10 +76,8 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // promo_ends_at = ahora + 90 días (solo planes con promo)
-  const promoEndsAt = hayPromo
-    ? new Date(Date.now() + DURACION_PROMO_DIAS * 24 * 60 * 60 * 1000).toISOString()
-    : null
+  // Ya no hay promo a 90 días: el precio es único y permanente.
+  const promoEndsAt = null
 
   // ── Upgrade/downgrade: cancelar suscripciones activas previas del usuario.
   // El unique partial index (user_id where status in pending/authorized) impide
