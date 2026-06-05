@@ -55,6 +55,7 @@
           <option value="fondos_gob">Fondos.gob.cl</option>
           <option value="incubadoras">Incubadoras</option>
           <option value="fondos_cultura">Fondos Cultura</option>
+          <option value="santander_x">Santander X</option>
         </select>
 
         <select v-model="filtroMonto" @change="cargar" class="select">
@@ -347,6 +348,7 @@ function fuenteLabel(f: string) {
     corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID',
     mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl',
     incubadoras: 'Incubadoras', fondos_cultura: 'Fondos Cultura',
+    santander_x: 'Santander X',
   }
   return map[f] ?? f
 }

@@ -234,6 +234,7 @@ function focoSize(count: number): number {
 const FUENTE_LABELS: Record<string, string> = {
   corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID',
   mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl',
+  santander_x: 'Santander X',
 }
 const MONTO_LABELS: Record<string, string> = {
   hasta_1M: 'Hasta $1M', '1M_10M': '$1M – $10M', '10M_30M': '$10M – $30M',

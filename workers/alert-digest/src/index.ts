@@ -17,6 +17,7 @@ const FUENTE_LABELS: Record<string, string> = {
   corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID',
   mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl',
   incubadoras: 'Incubadoras', fondos_cultura: 'Fondos Cultura',
+  santander_x: 'Santander X',
 }
 
 export default {

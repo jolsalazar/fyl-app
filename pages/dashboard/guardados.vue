@@ -149,7 +149,7 @@ async function togglePostulado(item: any) {
 }
 
 function fuenteLabel(f: string) {
-  const map: Record<string, string> = { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl', incubadoras: 'Incubadoras', fondos_cultura: 'Fondos Cultura' }
+  const map: Record<string, string> = { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'Mercado Público', fondos_gob: 'Fondos.gob.cl', incubadoras: 'Incubadoras', fondos_cultura: 'Fondos Cultura', santander_x: 'Santander X' }
   return map[f] ?? f
 }
 function estadoLabel(e: string) {

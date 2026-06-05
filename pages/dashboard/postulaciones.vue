@@ -281,7 +281,7 @@ async function quitar(convocatoriaId: string) {
 }
 
 function fuenteLabel(f: string) {
-  return { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'MP', fondos_gob: 'Fondos.gob', incubadoras: 'Incubadoras', fondos_cultura: 'Cultura' }[f] ?? f
+  return { corfo: 'CORFO', sercotec: 'SERCOTEC', anid: 'ANID', mercadopublico: 'MP', fondos_gob: 'Fondos.gob', incubadoras: 'Incubadoras', fondos_cultura: 'Cultura', santander_x: 'Santander X' }[f] ?? f
 }
 function montoLabel(m: string) {
   return { hasta_1M: 'Hasta $1M', '1M_10M': '$1M–$10M', '10M_30M': '$10M–$30M', '30M_60M': '$30M–$60M', '60M_100M': '$60M–$100M', sobre_100M: '+$100M' }[m] ?? m

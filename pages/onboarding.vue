@@ -361,6 +361,7 @@ const fuentes = [
   { value: 'mercadopublico', label: 'Mercado Público' },
   { value: 'fondos_gob',     label: 'Fondos.gob.cl' },
   { value: 'fondos_cultura', label: 'Fondos Cultura' },
+  { value: 'santander_x',    label: 'Santander X' },
 ]
 
 function siguiente() { paso.value++ }
