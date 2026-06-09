@@ -1,0 +1,17 @@
+name = "fyl-weekly-digest"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# Cron: viernes 9am Chile = 13:00 UTC (UTC-4)
+[triggers]
+crons = ["0 13 * * 5"]
+
+# Variables no sensibles
+[vars]
+SUPABASE_URL = "https://qumfnywynqgojmepuffx.supabase.co"
+APP_URL      = "https://app.fondosylicitaciones.cl"
+
+# Secretos — configurar con (mismos valores que fyl-alert-digest):
+#   wrangler secret put SUPABASE_SERVICE_KEY
+#   wrangler secret put RESEND_API_KEY
+#   wrangler secret put CRON_SECRET

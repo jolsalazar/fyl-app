@@ -29,6 +29,7 @@
           <div class="facts">
             <div class="fact"><span class="fact-k">Registro</span><span class="fact-v">{{ fmt(detail.created_at) }}</span></div>
             <div class="fact"><span class="fact-k">Último ingreso</span><span class="fact-v">{{ detail.last_sign_in_at ? fmt(detail.last_sign_in_at) : 'Nunca' }}</span></div>
+            <div class="fact"><span class="fact-k">Ingresos (7d / 30d)</span><span class="fact-v">{{ detail.logins_7d }} / {{ detail.logins_30d }}</span></div>
             <div class="fact"><span class="fact-k">Onboarding</span><span class="fact-v">{{ detail.onboarding_done ? 'Completo' : 'Pendiente' }}</span></div>
             <div class="fact"><span class="fact-k">Estado del plan</span><span class="fact-v">{{ detail.plan_status }}</span></div>
             <div v-if="detail.intended_plan && detail.intended_plan !== detail.plan" class="fact">
@@ -257,6 +258,8 @@ interface Detail {
   email: string
   created_at: string
   last_sign_in_at: string | null
+  logins_7d: number
+  logins_30d: number
   plan: string
   role: string
   plan_status: string

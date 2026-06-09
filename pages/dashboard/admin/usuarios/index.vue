@@ -59,6 +59,7 @@
               <th>Rol</th>
               <th>Registro</th>
               <th>Último ingreso</th>
+              <th>Ingresos (30d)</th>
               <th></th>
             </tr>
           </thead>
@@ -89,6 +90,9 @@
               <td><span :class="['badge', u.role === 'admin' ? 'badge-admin' : 'badge-user']">{{ u.role }}</span></td>
               <td class="date-cell">{{ formatDate(u.created_at) }}</td>
               <td class="date-cell">{{ u.last_sign_in_at ? formatDate(u.last_sign_in_at) : '—' }}</td>
+              <td>
+                <span :class="['logins-pill', u.logins_30d > 0 ? 'logins-on' : 'logins-off']">{{ u.logins_30d }}</span>
+              </td>
               <td class="action-cell">
                 <button
                   v-if="u.id !== currentUserId"
@@ -150,6 +154,7 @@ interface UserRow {
   last_sign_in_at: string | null
   archived_at: string | null
   is_internal: boolean
+  logins_30d: number
 }
 
 const { show } = useToast()
@@ -383,6 +388,14 @@ td {
 
 .date-cell { color: #64748b; font-size: 0.8125rem; white-space: nowrap; }
 .plan-na { color: #cbd5e1; font-weight: 600; }
+
+.logins-pill {
+  display: inline-block; min-width: 1.75rem; text-align: center;
+  padding: 0.15rem 0.5rem; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 700;
+}
+.logins-on  { background: #dcfce7; color: #15803d; }
+.logins-off { background: #f1f5f9; color: #94a3b8; }
 
 .badge {
   display: inline-block;
