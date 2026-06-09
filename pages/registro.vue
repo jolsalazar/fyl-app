@@ -4,12 +4,11 @@
 
       <!-- Panel izquierdo: landing que comunica valor y reacciona al plan -->
       <aside class="landing-panel">
-        <img src="~/assets/images/logo-dark.png" alt="Fondos y Licitaciones" class="lp-logo" />
+        <span class="lp-logo-chip">
+          <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" />
+        </span>
 
-        <div class="lp-intro">
-          <h2 class="lp-headline">No te pierdas ninguna oportunidad de financiamiento</h2>
-          <p class="lp-sub">Fondos públicos, privados y licitaciones de todo Chile, en un solo lugar.</p>
-        </div>
+        <h2 class="lp-headline">No te pierdas ninguna oportunidad de financiamiento</h2>
 
         <!-- Selector de plan: vive en el panel para que el toggle cambie los beneficios de abajo -->
         <div class="seg" role="tablist" aria-label="Elige tu plan">
@@ -47,19 +46,19 @@
         >
           ¿Postulas activamente? Starter suma alertas diarias, Mi Match y comparador →
         </button>
-        <p v-else class="lp-reassurance">
-          No te cobramos ahora — creas tu cuenta gratis y decides si activas Starter al final.
-        </p>
-
-        <!-- Cómo funciona -->
-        <div class="lp-steps">
-          <div class="lp-step"><span class="lp-step-num">1</span> Cuéntanos qué buscas</div>
-          <div class="lp-step"><span class="lp-step-num">2</span> Recibe alertas que calzan contigo</div>
-          <div class="lp-step"><span class="lp-step-num">3</span> Postula a tiempo con recordatorios</div>
+        <div v-else class="lp-reassurance">
+          <p class="lp-reassurance-note">
+            <span class="lp-check">✓</span>
+            No te cobramos ahora — decides si activas Starter al final del registro.
+          </p>
+          <span class="lp-mp">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Pago seguro con Mercado Pago · débito o tarjeta de crédito
+          </span>
         </div>
 
-        <!-- Prueba social: copy honesto sin cifras hasta confirmar números reales -->
-        <p class="lp-trust">Monitoreamos nuevas oportunidades todos los días para que postules a tiempo.</p>
+        <!-- Reaseguro corto al pie: quita fricción sin agregar altura -->
+        <p class="lp-trust">Sin permanencia · Cancela cuando quieras</p>
       </aside>
 
       <!-- Panel derecho: formulario -->
@@ -178,9 +177,8 @@ const BENEFICIOS = {
   starter: [
     'Todo lo del plan Free',
     'Hasta 3 alertas y 3 proyectos',
-    'Email diario con novedades + recordatorios de cierre (7, 3 y 1 día)',
-    'Mis Match: score de compatibilidad fondo a fondo con razones',
-    'Comparador y pipeline de postulaciones tipo kanban',
+    'Email diario + recordatorios de cierre',
+    'Mis Match: compatibilidad fondo a fondo',
   ],
 } as const
 const beneficios = computed(() => BENEFICIOS[planSeleccionado.value])
@@ -352,27 +350,25 @@ const loginUrl = computed(() => {
 .landing-panel {
   background: linear-gradient(160deg, #0ea5e9 0%, #0369a1 100%);
   color: white;
-  padding: 2.5rem 2rem;
+  padding: 2rem 1.75rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.1rem;
 }
-.lp-logo {
-  height: 38px;
-  width: auto;
+.lp-logo-chip {
   align-self: flex-start;
+  background: white;
+  border-radius: 10px;
+  padding: 0.45rem 0.7rem;
+  line-height: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
 }
-.lp-intro { display: flex; flex-direction: column; gap: 0.5rem; }
+.lp-logo-chip img { height: 24px; width: auto; display: block; }
 .lp-headline {
-  font-size: 1.4rem;
+  font-size: 1.25rem;
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.02em;
-}
-.lp-sub {
-  font-size: 0.9rem;
-  color: rgba(255,255,255,0.85);
-  line-height: 1.45;
 }
 
 /* Selector de plan (segmented) */
@@ -458,70 +454,58 @@ const loginUrl = computed(() => {
 .lp-upsell:hover { background: rgba(255,255,255,0.2) !important; }
 .lp-reassurance {
   display: flex;
+  flex-direction: column;
   gap: 0.5rem;
-  align-items: flex-start;
   background: rgba(255,255,255,0.12);
   border-radius: 10px;
   padding: 0.7rem 0.85rem;
+}
+.lp-reassurance-note {
+  display: flex;
+  gap: 0.45rem;
+  align-items: flex-start;
   font-size: 0.82rem;
   font-weight: 600;
   line-height: 1.35;
 }
-.lp-reassurance::before {
-  content: '✓';
-  font-weight: 800;
+.lp-check { font-weight: 800; }
+.lp-mp {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.92);
+  border-top: 1px solid rgba(255,255,255,0.18);
+  padding-top: 0.5rem;
 }
+.lp-mp svg { flex-shrink: 0; opacity: 0.9; }
 
-/* Cómo funciona */
-.lp-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  margin-top: auto;
-}
-.lp-step {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.82rem;
-  color: rgba(255,255,255,0.9);
-}
-.lp-step-num {
-  flex-shrink: 0;
-  width: 1.4rem;
-  height: 1.4rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,0.2);
-  border-radius: 50%;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
 .lp-trust {
+  margin-top: auto;
   font-size: 0.78rem;
-  color: rgba(255,255,255,0.75);
+  color: rgba(255,255,255,0.78);
   line-height: 1.4;
   border-top: 1px solid rgba(255,255,255,0.18);
-  padding-top: 1rem;
+  padding-top: 0.9rem;
 }
 
 /* ── Panel derecho (formulario) ──────────────────────────── */
-.form-panel { padding: 2.5rem; }
+.form-panel { padding: 2rem 2.25rem; align-self: center; width: 100%; }
 
 h1 {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.025em;
-  margin-bottom: 0.375rem;
+  margin-bottom: 0.3rem;
 }
 .subtitle {
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: #64748b;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.25rem;
 }
-.field { margin-bottom: 1rem; }
+.field { margin-bottom: 0.8rem; }
 .email-hint {
   margin-top: 0.4rem;
   font-size: 0.78rem;
@@ -611,7 +595,7 @@ input:disabled { opacity: 0.6; }
   display: flex;
   align-items: flex-start;
   gap: 0.6rem;
-  margin: 1rem 0;
+  margin: 0.85rem 0;
   cursor: pointer;
   font-size: 0.8375rem;
   color: #64748b;
@@ -757,7 +741,7 @@ input:disabled { opacity: 0.6; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .footer-link {
   text-align: center;
-  margin-top: 1.5rem;
+  margin-top: 1.1rem;
   font-size: 0.875rem;
   color: #94a3b8;
 }
@@ -778,11 +762,10 @@ input:disabled { opacity: 0.6; }
     padding: 2rem 1.75rem;
     gap: 1rem;
   }
-  .lp-headline { font-size: 1.2rem; }
-  /* Cómo funciona ocupa mucho en móvil: se oculta para no empujar el form */
-  .lp-steps { display: none; }
+  .lp-headline { font-size: 1.15rem; }
+  /* En móvil el reaseguro al pie empuja el form: se oculta */
   .lp-trust { display: none; }
-  .form-panel { padding: 2rem 1.75rem; }
+  .form-panel { padding: 1.75rem; }
 }
 @media (max-width: 560px) {
   .page { padding: 0; align-items: flex-start; }
