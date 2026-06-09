@@ -1,126 +1,155 @@
 <template>
   <div class="page">
     <div class="card">
-      <div class="brand">
-        <img src="~/assets/images/logo-light.png" alt="Fondos y Licitaciones" class="brand-logo" />
-      </div>
 
-      <h1>Crea tu cuenta</h1>
-      <p class="subtitle">Empieza a recibir alertas de oportunidades en minutos</p>
+      <!-- Panel izquierdo: landing que comunica valor y reacciona al plan -->
+      <aside class="landing-panel">
+        <img src="~/assets/images/logo-dark.png" alt="Fondos y Licitaciones" class="lp-logo" />
 
-      <!-- Selector de plan: momento de decisión Free vs Starter -->
-      <div v-if="!success && !emailExistente" class="plan-selector">
+        <div class="lp-intro">
+          <h2 class="lp-headline">No te pierdas ninguna oportunidad de financiamiento</h2>
+          <p class="lp-sub">Fondos públicos, privados y licitaciones de todo Chile, en un solo lugar.</p>
+        </div>
+
+        <!-- Selector de plan: vive en el panel para que el toggle cambie los beneficios de abajo -->
+        <div class="seg" role="tablist" aria-label="Elige tu plan">
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ active: planSeleccionado === 'free' }"
+            @click="planSeleccionado = 'free'"
+          >
+            <span class="seg-name">{{ PLANES_CONFIG.free.icon }} Free</span>
+            <span class="seg-price">$0<small>/mes</small></span>
+          </button>
+          <button
+            type="button"
+            class="seg-btn"
+            :class="{ active: planSeleccionado === 'starter' }"
+            @click="planSeleccionado = 'starter'"
+          >
+            <span class="seg-name">{{ PLANES_CONFIG.starter.icon }} Starter</span>
+            <span class="seg-price">${{ PLANES_CONFIG.starter.precio.toLocaleString('es-CL') }}<small>/mes</small></span>
+          </button>
+        </div>
+
+        <!-- Beneficios dinámicos del plan seleccionado -->
+        <ul class="lp-benefits">
+          <li v-for="b in beneficios" :key="b">{{ b }}</li>
+        </ul>
+
+        <!-- Free: upsell suave a Starter. Starter: reaseguro de que no se cobra ahora. -->
         <button
+          v-if="planSeleccionado === 'free'"
           type="button"
-          class="plan-option"
-          :class="{ selected: planSeleccionado === 'free' }"
-          @click="planSeleccionado = 'free'"
-        >
-          <span class="plan-option-head">
-            <span class="plan-option-icon">{{ PLANES_CONFIG.free.icon }}</span>
-            <span class="plan-option-name">{{ PLANES_CONFIG.free.nombre }}</span>
-          </span>
-          <span class="plan-option-price">$0<small>/mes</small></span>
-          <span class="plan-option-desc">Explora oportunidades y recibe 1 alerta.</span>
-        </button>
-
-        <button
-          type="button"
-          class="plan-option featured"
-          :class="{ selected: planSeleccionado === 'starter' }"
+          class="lp-upsell"
           @click="planSeleccionado = 'starter'"
         >
-          <span class="plan-option-badge">⭐ Recomendado</span>
-          <span class="plan-option-head">
-            <span class="plan-option-icon">{{ PLANES_CONFIG.starter.icon }}</span>
-            <span class="plan-option-name">{{ PLANES_CONFIG.starter.nombre }}</span>
-          </span>
-          <span class="plan-option-price">${{ PLANES_CONFIG.starter.precio.toLocaleString('es-CL') }}<small>/mes</small></span>
-          <span class="plan-option-desc">Alertas diarias, Mi Match y herramientas de gestión.</span>
+          ¿Postulas activamente? Starter suma alertas diarias, Mi Match y comparador →
         </button>
-      </div>
+        <p v-else class="lp-reassurance">
+          No te cobramos ahora — creas tu cuenta gratis y decides si activas Starter al final.
+        </p>
 
-      <!-- Success state -->
-      <div v-if="success" class="success-banner">
-        <div class="success-icon">✓</div>
-        <div>
-          <strong>¡Revisa tu email!</strong>
-          <p>Te enviamos un link de confirmación a <strong>{{ email }}</strong>. Haz clic en el link para activar tu cuenta.</p>
-        </div>
-      </div>
-
-      <!-- Email ya registrado: ofrecer login con plan preservado -->
-      <div v-else-if="emailExistente" class="info-banner">
-        <div class="info-icon">i</div>
-        <div>
-          <strong>Ya tienes una cuenta</strong>
-          <p>El email <strong>{{ email }}</strong> ya está registrado. Inicia sesión para continuar{{ planSeleccionado !== 'free' ? ` con el plan ${PLANES_CONFIG[planSeleccionado].nombre}` : '' }}.</p>
-          <NuxtLink :to="loginUrl" class="btn-login-existente">
-            Iniciar sesión
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </NuxtLink>
-          <button type="button" class="btn-otro-email" @click="emailExistente = false">Usar otro email</button>
-        </div>
-      </div>
-
-      <form v-else @submit.prevent="handleRegistro">
-        <div class="field">
-          <label>Email</label>
-          <input v-model="email" type="email" required placeholder="tu@empresa.cl" :disabled="loading" />
-          <p v-if="emailSugerencia" class="email-hint">
-            ¿Quisiste decir
-            <button type="button" class="hint-btn" @click="email = emailSugerencia!">{{ emailSugerencia }}</button>?
-          </p>
+        <!-- Cómo funciona -->
+        <div class="lp-steps">
+          <div class="lp-step"><span class="lp-step-num">1</span> Cuéntanos qué buscas</div>
+          <div class="lp-step"><span class="lp-step-num">2</span> Recibe alertas que calzan contigo</div>
+          <div class="lp-step"><span class="lp-step-num">3</span> Postula a tiempo con recordatorios</div>
         </div>
 
-        <div class="field">
-          <label>Contraseña</label>
-          <div class="input-wrap">
-            <input v-model="password" :type="verPass ? 'text' : 'password'" required placeholder="Mínimo 8 caracteres" :disabled="loading" />
-            <button type="button" class="eye-btn" @click="verPass = !verPass" tabindex="-1">
-              <svg v-if="!verPass" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
+        <!-- Prueba social: copy honesto sin cifras hasta confirmar números reales -->
+        <p class="lp-trust">Monitoreamos nuevas oportunidades todos los días para que postules a tiempo.</p>
+      </aside>
+
+      <!-- Panel derecho: formulario -->
+      <div class="form-panel">
+        <h1>Crea tu cuenta</h1>
+        <p class="subtitle">Empieza a recibir alertas de oportunidades en minutos</p>
+
+        <!-- Success state -->
+        <div v-if="success" class="success-banner">
+          <div class="success-icon">✓</div>
+          <div>
+            <strong>¡Revisa tu email!</strong>
+            <p>Te enviamos un link de confirmación a <strong>{{ email }}</strong>. Haz clic en el link para activar tu cuenta.</p>
           </div>
-          <!-- Indicador de seguridad -->
-          <div v-if="password.length > 0" class="password-rules">
-            <div v-for="r in passwordRules" :key="r.label" :class="['rule', r.ok ? 'ok' : 'pending']">
-              <svg v-if="r.ok" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
-              {{ r.label }}
+        </div>
+
+        <!-- Email ya registrado: ofrecer login con plan preservado -->
+        <div v-else-if="emailExistente" class="info-banner">
+          <div class="info-icon">i</div>
+          <div>
+            <strong>Ya tienes una cuenta</strong>
+            <p>El email <strong>{{ email }}</strong> ya está registrado. Inicia sesión para continuar{{ planSeleccionado !== 'free' ? ` con el plan ${PLANES_CONFIG[planSeleccionado].nombre}` : '' }}.</p>
+            <NuxtLink :to="loginUrl" class="btn-login-existente">
+              Iniciar sesión
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </NuxtLink>
+            <button type="button" class="btn-otro-email" @click="emailExistente = false">Usar otro email</button>
+          </div>
+        </div>
+
+        <form v-else @submit.prevent="handleRegistro">
+          <div class="field">
+            <label>Email</label>
+            <input v-model="email" type="email" required placeholder="tu@empresa.cl" :disabled="loading" />
+            <p v-if="emailSugerencia" class="email-hint">
+              ¿Quisiste decir
+              <button type="button" class="hint-btn" @click="email = emailSugerencia!">{{ emailSugerencia }}</button>?
+            </p>
+          </div>
+
+          <div class="field">
+            <label>Contraseña</label>
+            <div class="input-wrap">
+              <input v-model="password" :type="verPass ? 'text' : 'password'" required placeholder="Mínimo 8 caracteres" :disabled="loading" />
+              <button type="button" class="eye-btn" @click="verPass = !verPass" tabindex="-1">
+                <svg v-if="!verPass" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
+            <!-- Indicador de seguridad -->
+            <div v-if="password.length > 0" class="password-rules">
+              <div v-for="r in passwordRules" :key="r.label" :class="['rule', r.ok ? 'ok' : 'pending']">
+                <svg v-if="r.ok" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+                {{ r.label }}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="field">
-          <label>Confirmar contraseña</label>
-          <div class="input-wrap">
-            <input v-model="confirmPassword" :type="verConfirm ? 'text' : 'password'" required placeholder="Repite tu contraseña" :disabled="loading" />
-            <button type="button" class="eye-btn" @click="verConfirm = !verConfirm" tabindex="-1">
-              <svg v-if="!verConfirm" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            </button>
+          <div class="field">
+            <label>Confirmar contraseña</label>
+            <div class="input-wrap">
+              <input v-model="confirmPassword" :type="verConfirm ? 'text' : 'password'" required placeholder="Repite tu contraseña" :disabled="loading" />
+              <button type="button" class="eye-btn" @click="verConfirm = !verConfirm" tabindex="-1">
+                <svg v-if="!verConfirm" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <!-- Términos y condiciones -->
-        <label class="terms-check">
-          <input type="checkbox" v-model="aceptaTerminos" :disabled="loading" />
-          <span class="check-box"></span>
-          <span>Acepto los <a href="https://fondosylicitaciones.cl/terminos" target="_blank" rel="noopener">términos y condiciones</a> y la <a href="https://fondosylicitaciones.cl/privacidad" target="_blank" rel="noopener">política de privacidad</a></span>
-        </label>
+          <!-- Términos y condiciones -->
+          <label class="terms-check">
+            <input type="checkbox" v-model="aceptaTerminos" :disabled="loading" />
+            <span class="check-box"></span>
+            <span>Acepto los <a href="https://fondosylicitaciones.cl/terminos" target="_blank" rel="noopener">términos y condiciones</a> y la <a href="https://fondosylicitaciones.cl/privacidad" target="_blank" rel="noopener">política de privacidad</a></span>
+          </label>
 
-        <div v-if="error" class="error-banner">{{ error }}</div>
+          <div v-if="error" class="error-banner">{{ error }}</div>
 
-        <button type="submit" :disabled="loading || !passwordValida || !aceptaTerminos">
-          <span v-if="loading" class="spinner"></span>
-          {{ loading ? 'Creando cuenta...' : 'Crear cuenta' }}
-        </button>
-      </form>
+          <button type="submit" class="btn-submit" :disabled="loading || !passwordValida || !aceptaTerminos">
+            <span v-if="loading" class="spinner"></span>
+            {{ loading ? 'Creando cuenta...' : (planSeleccionado === 'free' ? 'Crear cuenta gratis' : 'Continuar') }}
+          </button>
+        </form>
 
-      <p class="footer-link">
-        ¿Ya tienes cuenta? <NuxtLink :to="loginUrl">Iniciar sesión</NuxtLink>
-      </p>
+        <p class="footer-link">
+          ¿Ya tienes cuenta? <NuxtLink :to="loginUrl">Iniciar sesión</NuxtLink>
+        </p>
+      </div>
+
     </div>
   </div>
 </template>
@@ -133,10 +162,28 @@ const router = useRouter()
 const route = useRoute()
 
 // Selector Free/Starter del registro. Se siembra con ?plan= si llega (free|starter),
-// si no, default a Starter (el recomendado). Solo registra la intención: el cobro
-// de Starter ocurre al final del onboarding.
+// si no, default a Free para no provocar la sensación de "esto es para cobrarme".
+// Solo registra la intención: el cobro de Starter ocurre al final del onboarding.
 const planQuery = route.query.plan as string
-const planSeleccionado = ref<'free' | 'starter'>(planQuery === 'free' ? 'free' : 'starter')
+const planSeleccionado = ref<'free' | 'starter'>(planQuery === 'starter' ? 'starter' : 'free')
+
+// Beneficios mostrados en el panel izquierdo. Derivados de las features de planes.vue,
+// resumidos para el contexto de registro. Cambian al togglear el plan.
+const BENEFICIOS = {
+  free: [
+    'Explora todas las oportunidades de fondos y licitaciones',
+    'Guarda favoritos y revisa el calendario de cierres',
+    '1 alerta activa personalizada',
+  ],
+  starter: [
+    'Todo lo del plan Free',
+    'Hasta 3 alertas y 3 proyectos',
+    'Email diario con novedades + recordatorios de cierre (7, 3 y 1 día)',
+    'Mis Match: score de compatibilidad fondo a fondo con razones',
+    'Comparador y pipeline de postulaciones tipo kanban',
+  ],
+} as const
+const beneficios = computed(() => BENEFICIOS[planSeleccionado.value])
 
 const email           = ref('')
 const password        = ref('')
@@ -292,71 +339,175 @@ const loginUrl = computed(() => {
 .card {
   background: white;
   border-radius: 20px;
-  padding: 2.5rem;
   width: 100%;
-  max-width: 420px;
+  max-width: 920px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 32px rgba(0,0,0,0.06);
   border: 1px solid #e2e8f0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
 }
-.brand {
+
+/* ── Panel izquierdo (landing) ───────────────────────────── */
+.landing-panel {
+  background: linear-gradient(160deg, #0ea5e9 0%, #0369a1 100%);
+  color: white;
+  padding: 2.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.lp-logo {
+  height: 38px;
+  width: auto;
+  align-self: flex-start;
+}
+.lp-intro { display: flex; flex-direction: column; gap: 0.5rem; }
+.lp-headline {
+  font-size: 1.4rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.lp-sub {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.85);
+  line-height: 1.45;
+}
+
+/* Selector de plan (segmented) */
+.seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  background: rgba(255,255,255,0.14);
+  border-radius: 12px;
+  padding: 0.3rem;
+}
+.seg-btn {
+  width: auto !important;
+  margin: 0 !important;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.55rem 0.5rem !important;
+  background: transparent !important;
+  color: rgba(255,255,255,0.85) !important;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.seg-btn:hover:not(.active) { background: rgba(255,255,255,0.08) !important; }
+.seg-btn.active {
+  background: white !important;
+  color: #0369a1 !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.seg-name { font-weight: 700; font-size: 0.9rem; }
+.seg-price { font-weight: 800; font-size: 0.95rem; }
+.seg-price small { font-size: 0.65rem; font-weight: 600; opacity: 0.7; }
+
+/* Beneficios dinámicos */
+.lp-benefits {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.lp-benefits li {
+  position: relative;
+  padding-left: 1.6rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.95);
+}
+.lp-benefits li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.1rem;
+  height: 1.1rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 1.25rem;
+  background: rgba(255,255,255,0.22);
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 800;
 }
-.brand-logo { height: 50px; width: auto; }
 
-/* Selector de plan Free/Starter */
-.plan-selector {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
-  margin-bottom: 1.5rem;
-}
-.plan-selector .plan-option {
-  position: relative;
-  display: flex !important;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
-  width: 100%;
+/* Upsell (Free) / reaseguro (Starter) */
+.lp-upsell {
+  width: 100% !important;
   margin: 0 !important;
-  padding: 0.85rem !important;
-  background: white !important;
-  color: #0f172a !important;
-  border: 1.5px solid #e2e8f0 !important;
-  border-radius: 12px;
-  cursor: pointer;
   text-align: left;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  background: rgba(255,255,255,0.12) !important;
+  color: white !important;
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem !important;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.plan-selector .plan-option:hover { border-color: #cbd5e1 !important; }
-.plan-selector .plan-option.selected {
-  border-color: #0ea5e9 !important;
-  box-shadow: 0 0 0 3px rgba(14,165,233,0.12);
+.lp-upsell:hover { background: rgba(255,255,255,0.2) !important; }
+.lp-reassurance {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  background: rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
-.plan-option-head {
+.lp-reassurance::before {
+  content: '✓';
+  font-weight: 800;
+}
+
+/* Cómo funciona */
+.lp-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: auto;
+}
+.lp-step {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.9);
 }
-.plan-option-icon { font-size: 1.05rem; line-height: 1; }
-.plan-option-name { font-weight: 700; font-size: 0.9rem; }
-.plan-option-price { font-weight: 800; font-size: 1.05rem; color: #0f172a; }
-.plan-option-price small { font-size: 0.7rem; font-weight: 600; color: #94a3b8; }
-.plan-option-desc { font-size: 0.72rem; color: #64748b; line-height: 1.35; font-weight: 400; }
-.plan-option-badge {
-  position: absolute;
-  top: -9px;
-  right: 10px;
-  background: #0ea5e9;
-  color: white;
-  font-size: 0.62rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
+.lp-step-num {
+  flex-shrink: 0;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 800;
 }
+.lp-trust {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.75);
+  line-height: 1.4;
+  border-top: 1px solid rgba(255,255,255,0.18);
+  padding-top: 1rem;
+}
+
+/* ── Panel derecho (formulario) ──────────────────────────── */
+.form-panel { padding: 2.5rem; }
 
 h1 {
   font-size: 1.5rem;
@@ -575,7 +726,7 @@ input:disabled { opacity: 0.6; }
   background: #dbeafe !important;
 }
 
-button {
+.btn-submit {
   width: 100%;
   padding: 0.75rem;
   background: #0ea5e9;
@@ -593,9 +744,9 @@ button {
   justify-content: center;
   gap: 0.5rem;
 }
-button:hover:not(:disabled) { background: #0284c7; }
-button:active:not(:disabled) { transform: scale(0.99); }
-button:disabled { opacity: 0.65; cursor: not-allowed; }
+.btn-submit:hover:not(:disabled) { background: #0284c7; }
+.btn-submit:active:not(:disabled) { transform: scale(0.99); }
+.btn-submit:disabled { opacity: 0.65; cursor: not-allowed; }
 .spinner {
   width: 15px; height: 15px;
   border: 2px solid rgba(255,255,255,0.3);
@@ -616,4 +767,27 @@ button:disabled { opacity: 0.65; cursor: not-allowed; }
   font-weight: 500;
 }
 .footer-link a:hover { text-decoration: underline; }
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .card {
+    grid-template-columns: 1fr;
+    max-width: 460px;
+  }
+  .landing-panel {
+    padding: 2rem 1.75rem;
+    gap: 1rem;
+  }
+  .lp-headline { font-size: 1.2rem; }
+  /* Cómo funciona ocupa mucho en móvil: se oculta para no empujar el form */
+  .lp-steps { display: none; }
+  .lp-trust { display: none; }
+  .form-panel { padding: 2rem 1.75rem; }
+}
+@media (max-width: 560px) {
+  .page { padding: 0; align-items: flex-start; }
+  .card { border-radius: 0; border: none; min-height: 100vh; }
+  .landing-panel { padding: 1.75rem 1.5rem; }
+  .form-panel { padding: 1.75rem 1.5rem; }
+}
 </style>
