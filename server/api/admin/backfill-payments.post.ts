@@ -11,6 +11,7 @@
 //   MP_ACCESS_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_KEY
 
 import { mapearFilaPago, persistirPagosMercadoPago, type PagoMercadoPago } from '~~/server/utils/mercadopago'
+import { esPlanValido } from '~~/utils/planes'
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 
 const PAGE_SIZE   = 50
@@ -49,6 +50,7 @@ export default defineEventHandler(async (event) => {
   let offset = 0
   let totalFetched = 0
   let totalUpserted = 0
+  let totalSkipped = 0
   let totalFailed = 0
   let pagesProcessed = 0
   const errors: Array<{ paymentId: string; msg: string }> = []
@@ -86,12 +88,16 @@ export default defineEventHandler(async (event) => {
     const results = body.results ?? []
     if (results.length === 0) break
 
-    const rows = results.map((pago) => {
-      // external_reference formato esperado: "user_id:plan"
-      const userId = pago.external_reference?.split(':')[0] ?? null
-      const isUuid = !!userId && /^[0-9a-f-]{36}$/i.test(userId)
-      return mapearFilaPago(pago, isUuid ? userId : null, null)
-    })
+    // Solo pagos de fyl: external_reference "user_id:plan" (uuid + plan válido).
+    // La cuenta MP del vendedor recibe pagos de otros proyectos; sin este
+    // filtro se importan todos e inflan las métricas de finanzas.
+    const rows: Array<ReturnType<typeof mapearFilaPago>> = []
+    for (const pago of results) {
+      const [userId, plan] = pago.external_reference?.split(':') ?? []
+      const esDeFyl = !!userId && /^[0-9a-f-]{36}$/i.test(userId) && esPlanValido(plan)
+      if (esDeFyl) rows.push(mapearFilaPago(pago, userId, null))
+      else totalSkipped++
+    }
 
     // Página completa en una sola request (límite de subrequests de Workers).
     const ok = await persistirPagosMercadoPago({
@@ -101,9 +107,9 @@ export default defineEventHandler(async (event) => {
     })
     totalFetched += results.length
     if (ok) {
-      totalUpserted += results.length
+      totalUpserted += rows.length
     } else {
-      totalFailed += results.length
+      totalFailed += rows.length
       errors.push({ paymentId: `página offset=${offset}`, msg: 'persist_failed' })
     }
 
@@ -117,6 +123,7 @@ export default defineEventHandler(async (event) => {
     pages_processed: pagesProcessed,
     fetched:         totalFetched,
     upserted:        totalUpserted,
+    skipped:         totalSkipped,  // pagos de la cuenta MP ajenos a fyl
     failed:          totalFailed,
     errors:          errors.slice(0, 10),  // primeros 10 errores
   }
