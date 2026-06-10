@@ -164,6 +164,9 @@
               <select v-model="selectedTemplate" class="tpl-select">
                 <option v-for="t in templates" :key="t.key" :value="t.key">{{ t.label }}</option>
               </select>
+              <button class="btn-action btn-neutral" :disabled="previewing" @click="openPreview">
+                {{ previewing ? 'Cargando…' : 'Vista previa' }}
+              </button>
               <button class="btn-action btn-primary" :disabled="sending" @click="askSendEmail">
                 {{ sending ? 'Enviando…' : 'Enviar' }}
               </button>
@@ -213,6 +216,29 @@
       @confirm="runConfirm"
       @cancel="confirmAction = null"
     />
+
+    <!-- Vista previa del correo de engagement -->
+    <div v-if="previewOpen" class="preview-overlay" @click.self="previewOpen = false">
+      <div class="preview-modal">
+        <div class="preview-head">
+          <div>
+            <strong>Vista previa del correo</strong>
+            <p class="preview-subject">Asunto: {{ previewSubject }}</p>
+          </div>
+          <button class="preview-close" aria-label="Cerrar" @click="previewOpen = false">✕</button>
+        </div>
+        <iframe class="preview-frame" :srcdoc="previewHtml" sandbox="" title="Vista previa del correo" />
+        <div class="preview-foot">
+          <span class="preview-hint">Así lo recibirá {{ detail?.email }}.</span>
+          <div class="preview-actions">
+            <button class="btn-action btn-neutral" :disabled="sendingTest" @click="doSendTest">
+              {{ sendingTest ? 'Enviando…' : 'Enviarme copia de prueba' }}
+            </button>
+            <button class="btn-action btn-primary" @click="previewOpen = false">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </NuxtLayout>
 </template>
 
@@ -451,6 +477,47 @@ async function doSendEmail() {
   sending.value = false
 }
 
+// ── Vista previa + copia de prueba del correo ────────────────────────────────
+const previewing = ref(false)
+const previewOpen = ref(false)
+const previewSubject = ref('')
+const previewHtml = ref('')
+const sendingTest = ref(false)
+
+async function openPreview() {
+  previewing.value = true
+  try {
+    const res = await $fetch<{ ok: boolean; subject?: string; html?: string }>(
+      '/api/admin/send-engagement-email',
+      { method: 'POST', body: { target_id: targetId, template: selectedTemplate.value, mode: 'preview' } },
+    )
+    if (res.ok && res.html) {
+      previewSubject.value = res.subject ?? ''
+      previewHtml.value = res.html
+      previewOpen.value = true
+    } else {
+      show('No se pudo generar la vista previa', 'error')
+    }
+  } catch {
+    show('No se pudo generar la vista previa', 'error')
+  }
+  previewing.value = false
+}
+
+async function doSendTest() {
+  sendingTest.value = true
+  try {
+    const res = await $fetch<{ ok: boolean; to?: string }>(
+      '/api/admin/send-engagement-email',
+      { method: 'POST', body: { target_id: targetId, template: selectedTemplate.value, mode: 'test' } },
+    )
+    show(res.ok ? `Copia de prueba enviada a ${res.to}` : 'No se pudo enviar la copia', res.ok ? 'ok' : 'error')
+  } catch {
+    show('No se pudo enviar la copia', 'error')
+  }
+  sendingTest.value = false
+}
+
 async function doToggleRole() {
   if (!detail.value) return
   togglingRole.value = true
@@ -627,4 +694,35 @@ h1 { font-size: 1.4rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02e
 
 .loading, .error { padding: 3rem; text-align: center; color: #64748b; font-size: 0.9rem; }
 .error { color: #ef4444; }
+
+/* Vista previa de correo */
+.preview-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+}
+.preview-modal {
+  background: white; border-radius: 14px; width: 100%; max-width: 680px;
+  max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+  font-family: 'Inter', sans-serif;
+}
+.preview-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  padding: 1rem 1.25rem; border-bottom: 1px solid #f1f5f9;
+}
+.preview-head strong { font-size: 0.95rem; color: #0f172a; }
+.preview-subject { font-size: 0.82rem; color: #64748b; margin-top: 0.2rem; word-break: break-word; }
+.preview-close {
+  background: none; border: none; cursor: pointer; color: #94a3b8;
+  font-size: 1rem; padding: 0.25rem; line-height: 1;
+}
+.preview-close:hover { color: #475569; }
+.preview-frame { flex: 1; width: 100%; min-height: 380px; border: none; background: #f8fafc; }
+.preview-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.85rem 1.25rem; border-top: 1px solid #f1f5f9; flex-wrap: wrap;
+}
+.preview-hint { font-size: 0.78rem; color: #94a3b8; }
+.preview-actions { display: flex; gap: 0.5rem; margin-left: auto; }
 </style>

@@ -40,6 +40,11 @@
           <span v-if="busqueda" class="search-count">{{ usuariosFiltrados.length }} resultado{{ usuariosFiltrados.length !== 1 ? 's' : '' }}</span>
         </div>
         <label class="toggle-archived">
+          <input type="checkbox" v-model="soloLeads" />
+          Solo interesados sin pagar
+          <span v-if="leadsCount" class="leads-count">{{ leadsCount }}</span>
+        </label>
+        <label class="toggle-archived">
           <input type="checkbox" v-model="showArchived" />
           Mostrar archivadas
           <span v-if="archivadasCount" class="archived-count">{{ archivadasCount }}</span>
@@ -69,6 +74,7 @@
                 <NuxtLink :to="`/dashboard/admin/usuarios/${u.id}`" class="email-link">{{ u.email }}</NuxtLink>
                 <span v-if="u.archived_at" class="tag-archived">archivada</span>
                 <span v-else-if="u.is_internal" class="tag-internal">interna</span>
+                <span v-if="esLead(u)" class="tag-lead">quiso {{ nombrePlanIntencion(u) }}</span>
               </td>
               <td>
                 <span v-if="u.role === 'admin'" class="plan-na">—</span>
@@ -140,6 +146,8 @@
 </template>
 
 <script setup lang="ts">
+import { getNombrePlan, esPlanValido } from '~~/utils/planes'
+
 definePageMeta({ middleware: ['auth', 'admin'], layout: false })
 
 const supabase = useSupabaseClient()
@@ -155,6 +163,7 @@ interface UserRow {
   archived_at: string | null
   is_internal: boolean
   logins_30d: number
+  intended_plan: string | null
 }
 
 const { show } = useToast()
@@ -167,6 +176,7 @@ const changingPlan = ref('')
 const currentUserId = ref('')
 const busqueda = ref('')
 const showArchived = ref(false)
+const soloLeads = ref(false)
 
 // Plan original por id, para revertir el select si se cancela la confirmación.
 const originalPlans = new Map<string, string>()
@@ -179,12 +189,26 @@ const visibles = computed(() =>
 )
 
 const usuariosFiltrados = computed(() => {
-  if (!busqueda.value.trim()) return visibles.value
-  const q = busqueda.value.toLowerCase()
-  return visibles.value.filter(u => u.email.toLowerCase().includes(q))
+  let lista = visibles.value
+  if (soloLeads.value) lista = lista.filter(esLead)
+  if (busqueda.value.trim()) {
+    const q = busqueda.value.toLowerCase()
+    lista = lista.filter(u => u.email.toLowerCase().includes(q))
+  }
+  return lista
 })
 
 const archivadasCount = computed(() => users.value.filter(u => u.archived_at).length)
+
+// Lead = mostró intención de plan de pago pero sigue en otro plan (misma regla
+// que el detalle de usuario).
+function esLead(u: UserRow) {
+  return !!u.intended_plan && u.intended_plan !== u.plan && u.role !== 'admin'
+}
+function nombrePlanIntencion(u: UserRow) {
+  return esPlanValido(u.intended_plan) ? getNombrePlan(u.intended_plan) : u.intended_plan ?? ''
+}
+const leadsCount = computed(() => visibles.value.filter(esLead).length)
 
 // Contadores: excluyen admins y archivadas (no son clientes contabilizables).
 const contables = computed(() =>
@@ -345,6 +369,10 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   background: #f1f5f9; color: #64748b; border-radius: 999px;
   padding: 0.05rem 0.5rem; font-size: 0.72rem; font-weight: 600;
 }
+.leads-count {
+  background: #fef3c7; color: #b45309; border-radius: 999px;
+  padding: 0.05rem 0.5rem; font-size: 0.72rem; font-weight: 600;
+}
 
 .table-wrap {
   background: white;
@@ -379,12 +407,14 @@ td {
 .email-cell { color: #0f172a; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; }
 .email-link { color: #2563eb; text-decoration: none; }
 .email-link:hover { text-decoration: underline; }
-.tag-archived, .tag-internal {
+.tag-archived, .tag-internal, .tag-lead {
   font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.03em; padding: 0.1rem 0.4rem; border-radius: 5px;
+  white-space: nowrap;
 }
 .tag-archived { background: #f1f5f9; color: #94a3b8; }
 .tag-internal { background: #f0fdf4; color: #15803d; }
+.tag-lead { background: #fef3c7; color: #b45309; }
 
 .date-cell { color: #64748b; font-size: 0.8125rem; white-space: nowrap; }
 .plan-na { color: #cbd5e1; font-weight: 600; }
