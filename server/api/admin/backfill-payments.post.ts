@@ -10,11 +10,14 @@
 // Variables de entorno:
 //   MP_ACCESS_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_KEY
 
-import { persistirPagoMercadoPago } from '~~/server/utils/mercadopago'
+import { mapearFilaPago, persistirPagosMercadoPago, type PagoMercadoPago } from '~~/server/utils/mercadopago'
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 
 const PAGE_SIZE   = 50
-const MAX_PAGES   = 40  // tope defensivo: 2000 pagos máximo por ejecución
+// Cloudflare Workers limita las subrequests por invocación (~50 en plan free).
+// Cada página consume 2 (search MP + upsert masivo), más ~3 del auth inicial:
+// 20 páginas ≈ 43 subrequests, dentro del límite. Tope: 1000 pagos por ejecución.
+const MAX_PAGES   = 20
 
 export default defineEventHandler(async (event) => {
   const MP_ACCESS_TOKEN      = process.env.MP_ACCESS_TOKEN
@@ -75,45 +78,33 @@ export default defineEventHandler(async (event) => {
 
     const body = await res.json() as {
       paging?: { total: number; limit: number; offset: number }
-      results?: Array<{
-        id:                 number
-        status:             string
-        status_detail?:     string
-        external_reference?: string
-        transaction_amount: number
-        date_approved?:     string
-        money_release_date?: string
-        fee_details?:       Array<{ type: string; amount: number; fee_payer?: string }>
-        transaction_details?: { net_received_amount?: number }
-        // Para pagos asociados a preapproval, MP devuelve estos campos
-        // (no documentados en search pero presentes en /v1/payments/{id}).
-        // Si no vienen en search, los pagos quedan sin preapproval_id —
-        // se puede enriquecer haciendo GET por id, pero implica N requests.
-      }>
+      // Si MP no devuelve preapproval_id en search, los pagos quedan sin él —
+      // se puede enriquecer haciendo GET por id, pero implica N requests.
+      results?: PagoMercadoPago[]
     }
 
     const results = body.results ?? []
     if (results.length === 0) break
 
-    for (const pago of results) {
+    const rows = results.map((pago) => {
       // external_reference formato esperado: "user_id:plan"
       const userId = pago.external_reference?.split(':')[0] ?? null
       const isUuid = !!userId && /^[0-9a-f-]{36}$/i.test(userId)
+      return mapearFilaPago(pago, isUuid ? userId : null, null)
+    })
 
-      const ok = await persistirPagoMercadoPago({
-        supabaseUrl:    SUPABASE_URL,
-        serviceRoleKey: SUPABASE_SERVICE_KEY,
-        pago,
-        userId:         isUuid ? userId : null,
-        preapprovalId:  null,  // search no devuelve preapproval_id; queda null
-      })
-      totalFetched++
-      if (ok) {
-        totalUpserted++
-      } else {
-        totalFailed++
-        errors.push({ paymentId: String(pago.id), msg: 'persist_failed' })
-      }
+    // Página completa en una sola request (límite de subrequests de Workers).
+    const ok = await persistirPagosMercadoPago({
+      supabaseUrl:    SUPABASE_URL,
+      serviceRoleKey: SUPABASE_SERVICE_KEY,
+      rows,
+    })
+    totalFetched += results.length
+    if (ok) {
+      totalUpserted += results.length
+    } else {
+      totalFailed += results.length
+      errors.push({ paymentId: `página offset=${offset}`, msg: 'persist_failed' })
     }
 
     pagesProcessed++

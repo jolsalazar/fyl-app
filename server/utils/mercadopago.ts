@@ -131,27 +131,26 @@ export async function asignarPlanUsuario(opts: {
  * conocido). Para pagos pending iniciales conviene NO persistir todavía:
  * esperar al evento de aprobación para no contaminar reportes.
  */
-export async function persistirPagoMercadoPago(opts: {
-  supabaseUrl:    string
-  serviceRoleKey: string
-  pago: {
-    id:                  number
-    status:              string
-    status_detail?:      string
-    external_reference?: string
-    transaction_amount:  number
-    date_approved?:      string
-    money_release_date?: string
-    fee_details?:        Array<{ type: string; amount: number; fee_payer?: string }>
-    transaction_details?: {
-      net_received_amount?: number
-    }
+export type PagoMercadoPago = {
+  id:                  number
+  status:              string
+  status_detail?:      string
+  external_reference?: string
+  transaction_amount:  number
+  date_approved?:      string
+  money_release_date?: string
+  fee_details?:        Array<{ type: string; amount: number; fee_payer?: string }>
+  transaction_details?: {
+    net_received_amount?: number
   }
-  userId?:          string | null
-  preapprovalId?:   string | null
-}): Promise<boolean> {
-  const { pago } = opts
+}
 
+/** Mapea un pago MP a la fila de public.payments (cálculo de fees/net incluido). */
+export function mapearFilaPago(
+  pago: PagoMercadoPago,
+  userId?: string | null,
+  preapprovalId?: string | null,
+) {
   // Sumar comisiones MP base (no IVA). MP usa type='mercadopago_fee' y a veces
   // 'application_fee' o 'financing_fee'. Sumamos TODO lo que no sea tax.
   const feeDetails = pago.fee_details ?? []
@@ -165,10 +164,10 @@ export async function persistirPagoMercadoPago(opts: {
   const net = pago.transaction_details?.net_received_amount
     ?? Math.max(0, pago.transaction_amount - feeBase - taxes)
 
-  const row = {
+  return {
     mp_payment_id:       String(pago.id),
-    mp_preapproval_id:   opts.preapprovalId ?? null,
-    user_id:             opts.userId ?? null,
+    mp_preapproval_id:   preapprovalId ?? null,
+    user_id:             userId ?? null,
     transaction_amount:  Math.round(pago.transaction_amount),
     fee_amount:          Math.round(feeBase),
     taxes_amount:        Math.round(taxes),
@@ -179,6 +178,19 @@ export async function persistirPagoMercadoPago(opts: {
     date_approved:       pago.date_approved ?? null,
     money_release_date:  pago.money_release_date ?? null,
   }
+}
+
+/**
+ * Upsert masivo de filas de payments en UNA sola request REST (PostgREST acepta
+ * arrays). Clave en Cloudflare Workers, donde cada invocación tiene un tope de
+ * subrequests (~50): el backfill upserta cada página completa de una vez.
+ */
+export async function persistirPagosMercadoPago(opts: {
+  supabaseUrl:    string
+  serviceRoleKey: string
+  rows:           Array<ReturnType<typeof mapearFilaPago>>
+}): Promise<boolean> {
+  if (opts.rows.length === 0) return true
 
   // Upsert por mp_payment_id: PostgREST acepta on_conflict + Prefer: resolution=merge-duplicates.
   const res = await fetch(
@@ -191,14 +203,28 @@ export async function persistirPagoMercadoPago(opts: {
         'Content-Type': 'application/json',
         Prefer:         'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify(row),
+      body: JSON.stringify(opts.rows),
     },
   )
   if (!res.ok) {
-    console.error('[mp] persistirPagoMercadoPago failed:', res.status, await res.text())
+    console.error('[mp] persistirPagosMercadoPago failed:', res.status, await res.text())
     return false
   }
   return true
+}
+
+export async function persistirPagoMercadoPago(opts: {
+  supabaseUrl:    string
+  serviceRoleKey: string
+  pago:           PagoMercadoPago
+  userId?:        string | null
+  preapprovalId?: string | null
+}): Promise<boolean> {
+  return persistirPagosMercadoPago({
+    supabaseUrl:    opts.supabaseUrl,
+    serviceRoleKey: opts.serviceRoleKey,
+    rows:           [mapearFilaPago(opts.pago, opts.userId, opts.preapprovalId)],
+  })
 }
 
 /** Obtiene el detalle de una preapproval (suscripción) desde MP. */
