@@ -1,0 +1,14 @@
+{
+  "name": "fyl-monthly-report",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev":    "wrangler dev -c wrangler.toml",
+    "deploy": "wrangler deploy -c wrangler.toml"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^4.92.0"
+  }
+}
