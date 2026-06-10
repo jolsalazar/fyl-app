@@ -32,8 +32,12 @@
             <div class="fact"><span class="fact-k">Ingresos (7d / 30d)</span><span class="fact-v">{{ detail.logins_7d }} / {{ detail.logins_30d }}</span></div>
             <div class="fact"><span class="fact-k">Onboarding</span><span class="fact-v">{{ detail.onboarding_done ? 'Completo' : 'Pendiente' }}</span></div>
             <div class="fact"><span class="fact-k">Estado del plan</span><span class="fact-v">{{ detail.plan_status }}</span></div>
-            <div v-if="detail.intended_plan && detail.intended_plan !== detail.plan" class="fact">
-              <span class="fact-k">Plan que quería</span><span class="fact-v">{{ detail.intended_plan }}</span>
+            <div v-if="esLead" class="fact">
+              <span class="fact-k">Lead</span>
+              <span class="fact-v">
+                <span class="badge badge-warn">Interesado sin pagar</span>
+                <span :class="['badge', `badge-${detail.intended_plan}`]" style="margin-left:6px">quiso {{ nombrePlanIntencion }}</span>
+              </span>
             </div>
             <div v-if="detail.plan_expires_at" class="fact">
               <span class="fact-k">Vence el plan</span><span class="fact-v">{{ fmt(detail.plan_expires_at) }}</span>
@@ -213,6 +217,8 @@
 </template>
 
 <script setup lang="ts">
+import { getNombrePlan, esPlanValido } from '~~/utils/planes'
+
 definePageMeta({ middleware: ['auth', 'admin'], layout: false })
 
 const supabase = useSupabaseClient()
@@ -291,12 +297,27 @@ const emailCorregidoValido = computed(() => {
   return EMAIL_RE.test(v) && v !== detail.value?.email?.toLowerCase()
 })
 
-const templates = [
-  { key: 'te_extranamos', label: 'Te extrañamos' },
-  { key: 'completa_perfil', label: 'Completa tu perfil' },
-  { key: 'novedades', label: 'Novedades de la plataforma' },
-]
-const selectedTemplate = ref(templates[0].key)
+// Lead = mostró intención de plan de pago pero sigue en otro plan (típicamente free).
+const esLead = computed(() =>
+  !!detail.value?.intended_plan && detail.value.intended_plan !== detail.value.plan,
+)
+const nombrePlanIntencion = computed(() => {
+  const ip = detail.value?.intended_plan
+  return esPlanValido(ip) ? getNombrePlan(ip) : ip ?? ''
+})
+
+const templates = computed(() => {
+  const base = [
+    { key: 'te_extranamos', label: 'Te extrañamos' },
+    { key: 'completa_perfil', label: 'Completa tu perfil' },
+    { key: 'novedades', label: 'Novedades de la plataforma' },
+  ]
+  if (esLead.value) base.unshift({ key: 'revivir_lead', label: 'Revivir lead (interés sin pagar)' })
+  return base
+})
+const selectedTemplate = ref('te_extranamos')
+// Cuando es un lead, preseleccionar la plantilla de recuperación (la acción más relevante).
+watch(esLead, (v) => { if (v) selectedTemplate.value = 'revivir_lead' })
 
 const isSelf = computed(() => detail.value?.id === currentUserId.value)
 const inicial = computed(() => detail.value?.email?.[0]?.toUpperCase() ?? '?')
@@ -354,7 +375,7 @@ const confirmMessage = computed(() => {
   if (!detail.value) return ''
   switch (confirmAction.value) {
     case 'email':
-      return `Se enviará el correo «${templates.find(t => t.key === selectedTemplate.value)?.label}» a ${detail.value.email}.`
+      return `Se enviará el correo «${templates.value.find(t => t.key === selectedTemplate.value)?.label}» a ${detail.value.email}.`
     case 'update_email':
       return `El correo de acceso cambiará de ${detail.value.email} a ${nuevoEmail.value.trim().toLowerCase()} y quedará confirmado. El usuario deberá usar el nuevo correo para iniciar sesión (su contraseña no cambia).`
     case 'role':

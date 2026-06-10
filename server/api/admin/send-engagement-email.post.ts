@@ -6,6 +6,7 @@
 
 import { serverSupabaseClient, serverSupabaseUser, serverSupabaseServiceRole } from '#supabase/server'
 import { enviarEmail, ENGAGEMENT_TEMPLATES, type EngagementTemplateKey } from '~~/server/utils/email'
+import { esPlanValido } from '~~/utils/planes'
 
 export default defineEventHandler(async (event) => {
   // Auth + rol admin (mismo patrón que backfill-payments).
@@ -44,11 +45,23 @@ export default defineEventHandler(async (event) => {
 
   const { data: targetProfile } = await admin
     .from('profiles')
-    .select('nombre')
+    .select('nombre, intended_plan')
     .eq('id', targetId)
     .single()
 
-  const { subject, html } = ENGAGEMENT_TEMPLATES[templateKey].build(targetProfile?.nombre ?? null)
+  const ip = targetProfile?.intended_plan
+  const intendedPlan = esPlanValido(ip) ? ip : null
+
+  // revivir_lead solo tiene sentido si el usuario realmente mostró intención de pago.
+  if (templateKey === 'revivir_lead' && !intendedPlan) {
+    setResponseStatus(event, 400)
+    return { ok: false, error: 'no_intended_plan' }
+  }
+
+  const { subject, html } = ENGAGEMENT_TEMPLATES[templateKey].build({
+    nombre: targetProfile?.nombre ?? null,
+    intendedPlan,
+  })
   const sent = await enviarEmail({ to: target.user.email, subject, html })
 
   if (!sent) {
