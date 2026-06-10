@@ -169,18 +169,28 @@ export default defineEventHandler(async (event) => {
   const { inicio, fin } = rangoMes(anio, mes)
   const supabase = serverSupabaseServiceRole(event)
 
-  // ── Mes pedido: una sola lectura alimenta agregados + destacados ──
-  const { data, error } = await supabase
-    .from('convocatorias')
-    .select(SELECT_PANORAMA)
-    .gte('fecha_cierre_postulacion', inicio)
-    .lte('fecha_cierre_postulacion', fin)
-    .not('fuente', 'in', `(${FUENTES_EXCLUIDAS.join(',')})`)
-    .limit(5000)
+  // ── Mes pedido: una lectura paginada alimenta agregados + destacados ──
+  // PostgREST corta en 1000 filas por request (db-max-rows); con licitaciones
+  // incluidas un mes supera ese tope, así que paginamos con .range() hasta 5000.
+  const PAGE = 1000
+  const MAX_ROWS = 5000
+  const data: any[] = []
+  for (let from = 0; from < MAX_ROWS; from += PAGE) {
+    const { data: page, error } = await supabase
+      .from('convocatorias')
+      .select(SELECT_PANORAMA)
+      .gte('fecha_cierre_postulacion', inicio)
+      .lte('fecha_cierre_postulacion', fin)
+      .not('fuente', 'in', `(${FUENTES_EXCLUIDAS.join(',')})`)
+      .order('id', { ascending: true })
+      .range(from, from + PAGE - 1)
 
-  if (error || !data) {
-    setResponseStatus(event, 500)
-    return { ok: false, error: 'fetch_failed' }
+    if (error || !page) {
+      setResponseStatus(event, 500)
+      return { ok: false, error: 'fetch_failed' }
+    }
+    data.push(...page)
+    if (page.length < PAGE) break
   }
 
   const hoy = new Date()
@@ -200,11 +210,11 @@ export default defineEventHandler(async (event) => {
   const nextAnio = mes === 12 ? anio + 1 : anio
   const { inicio: nextInicio, fin: nextFin } = rangoMes(nextAnio, nextMes)
 
-  const baseProximo = () => supabase
+  const countRange = (desde: string, hasta: string) => supabase
     .from('convocatorias')
     .select('id', { count: 'exact', head: true })
-    .gte('fecha_cierre_postulacion', nextInicio)
-    .lte('fecha_cierre_postulacion', nextFin)
+    .gte('fecha_cierre_postulacion', desde)
+    .lte('fecha_cierre_postulacion', hasta)
     .not('fuente', 'in', `(${FUENTES_EXCLUIDAS.join(',')})`)
 
   const prevMes  = mes === 1 ? 12       : mes - 1
@@ -212,13 +222,17 @@ export default defineEventHandler(async (event) => {
   const { inicio: prevInicio, fin: prevFin } = rangoMes(prevAnio, prevMes)
 
   const [
+    { count: mesFondosCount },
+    { count: mesLicCount },
     { count: nextFondosCount },
     { count: nextLicCount },
     { data: nextDestacadosData },
     prevRes,
   ] = await Promise.all([
-    baseProximo().eq('tipo', 'fondo'),
-    baseProximo().eq('tipo', 'licitacion'),
+    countRange(inicio, fin).eq('tipo', 'fondo'),
+    countRange(inicio, fin).eq('tipo', 'licitacion'),
+    countRange(nextInicio, nextFin).eq('tipo', 'fondo'),
+    countRange(nextInicio, nextFin).eq('tipo', 'licitacion'),
     supabase
       .from('convocatorias')
       .select(SELECT_PANORAMA)
@@ -229,29 +243,35 @@ export default defineEventHandler(async (event) => {
       .order('monto_maximo', { ascending: false, nullsFirst: false })
       .limit(PROXIMO_DESTACADOS_N * 3),
     prevAnio >= 2024
-      ? supabase
-          .from('convocatorias')
-          .select('id', { count: 'exact', head: true })
-          .gte('fecha_cierre_postulacion', prevInicio)
-          .lte('fecha_cierre_postulacion', prevFin)
-          .not('fuente', 'in', `(${FUENTES_EXCLUIDAS.join(',')})`)
+      ? countRange(prevInicio, prevFin)
       : Promise.resolve({ count: null } as { count: number | null }),
   ])
 
+  // Totales exactos (head count): los agregados se calculan sobre hasta 5000
+  // filas, pero los conteos visibles no dependen de ese tope.
+  const totalFondos       = mesFondosCount ?? filasFondos.length
+  const totalLicitaciones = mesLicCount ?? filasLicitaciones.length
+  const totalMes          = totalFondos + totalLicitaciones
+
   let comparativa_mes_anterior: { total: number; diferencia: number; porcentaje: number } | null = null
   if (typeof prevRes.count === 'number') {
-    const diferencia = data.length - prevRes.count
+    const diferencia = totalMes - prevRes.count
     const porcentaje = prevRes.count > 0 ? Math.round((diferencia / prevRes.count) * 100) : 0
     comparativa_mes_anterior = { total: prevRes.count, diferencia, porcentaje }
   }
+
+  const fondosAgg       = agregarFilas(filasFondos, hoy)
+  const licitacionesAgg = agregarFilas(filasLicitaciones, hoy)
+  fondosAgg.total       = totalFondos
+  licitacionesAgg.total = totalLicitaciones
 
   return {
     ok: true,
     mes:       mesParam,
     mes_label: `${MESES_ES[mes - 1]} ${anio}`,
-    total:     data.length,
-    fondos:       agregarFilas(filasFondos, hoy),
-    licitaciones: agregarFilas(filasLicitaciones, hoy),
+    total:     totalMes,
+    fondos:       fondosAgg,
+    licitaciones: licitacionesAgg,
     destacados_fondos:       topPorMonto(filasFondos.filter(vigente), DESTACADOS_N),
     destacados_licitaciones: topPorMonto(filasLicitaciones.filter(vigente), DESTACADOS_N),
     proximo_mes: {
