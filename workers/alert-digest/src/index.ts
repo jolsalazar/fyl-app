@@ -20,6 +20,13 @@ const FUENTE_LABELS: Record<string, string> = {
   santander_x: 'Santander X',
 }
 
+// Usuarios procesados por tick. El cron corre cada 5 min en una ventana, así que
+// la cohorte se vacía en varios ticks sin pasar el tope de subrequests por
+// invocación. Más bajo que el weekly porque el diario, por usuario, además ESCRIBE
+// (notificaciones + cursor). Calibrado para Workers Paid (1000 subreq); en Workers
+// Free (50) baja a ~10.
+const BATCH_LIMIT = 120
+
 export default {
   // ── Cron trigger ─────────────────────────────────────────────────
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
@@ -42,30 +49,46 @@ export default {
 async function runDigest(env: Env) {
   const log: string[] = []
 
-  // 0. Higiene de datos: marcar como 'cerrado' lo que ya pasó su fecha de cierre.
-  // El scraper a veces tarda en reflejar el cierre; esto deja el campo `estado`
-  // alineado con la realidad para reportes, exportes y queries admin.
-  await closeExpired(env, log)
+  // Troceo + sent-log: cada tick del cron procesa el siguiente lote de usuarios
+  // NO-procesados hoy; cuando la cohorte se vació, es no-op. Mantiene el costo bajo
+  // el tope de subrequests por invocación a cualquier escala, y se auto-repara (lo
+  // que falla queda sin registrar y se reintenta en el siguiente tick).
+  const runKey = new Date().toISOString().split('T')[0]
+  const enviados = await sbGetAll<{ user_id: string }>(
+    env, `/rest/v1/digest_sent_log?digest_type=eq.daily&run_key=eq.${runKey}&select=user_id`
+  )
+  const yaProcesados = new Set(enviados.map(r => r.user_id))
+
+  // 0. Higiene de datos (una vez por día): marcar como 'cerrado' lo que ya pasó su
+  // fecha de cierre. Solo en el PRIMER tick (cuando aún no hay nadie procesado hoy),
+  // para no repetir el PATCH en cada tick de la ventana.
+  if (yaProcesados.size === 0) await closeExpired(env, log)
 
   // 1. Todos los usuarios con plan. Free entra para que la bandeja web se llene,
   //    pero adentro de processUser se omite el email (emailAlertas = false en free).
-  const profiles = await sbGet<{ id: string; plan: string }[]>(
+  const profiles = await sbGetAll<{ id: string; plan: string }>(
     env, '/rest/v1/profiles?plan=in.(free,starter,advanced,agency)&select=id,plan'
   )
-  if (!profiles?.length) return { ok: true, message: 'No users' }
+  if (!profiles.length) return { ok: true, message: 'No users', log }
 
-  log.push(`Usuarios: ${profiles.length}`)
-  let totalEmails = 0
+  const pendientes = profiles.filter(p => !yaProcesados.has(p.id))
+  log.push(`Run ${runKey}: usuarios ${profiles.length} · ya procesados ${yaProcesados.size} · pendientes ${pendientes.length}`)
+  if (!pendientes.length) return { ok: true, message: `Sin pendientes (run ${runKey})`, log }
+
+  const lote = pendientes.slice(0, BATCH_LIMIT)
+  log.push(`Lote: ${lote.length}/${pendientes.length} (BATCH_LIMIT=${BATCH_LIMIT})`)
+
+  let totalEmails  = 0
   let totalErrores = 0
+  const procesados: string[] = []   // user_id que completaron sin throw → registrar
 
-  // Aislamiento por usuario: una excepción en processUser NO debe abortar todo el
-  // digest. Antes (sin try/catch) un solo throw cortaba la corrida y dejaba sin
-  // procesar a todos los usuarios siguientes — quedaban sin email y con el cursor
-  // congelado. Acá capturamos, logueamos y seguimos con el próximo.
-  for (const profile of profiles) {
+  // Aislamiento por usuario: una excepción en processUser NO debe abortar el lote.
+  // Un throw (p. ej. tope de subrequests) NO se registra → reintento próximo tick.
+  for (const profile of lote) {
     try {
       const sent = await processUser(env, profile.id, profile.plan, log)
       if (sent) totalEmails++
+      procesados.push(profile.id)
     } catch (e) {
       totalErrores++
       const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e)
@@ -74,8 +97,15 @@ async function runDigest(env: Env) {
     }
   }
 
-  log.push(`Emails enviados: ${totalEmails}${totalErrores ? ` · Errores: ${totalErrores}` : ''}`)
-  return { ok: true, errores: totalErrores, log }
+  // Registrar los procesados de este tick (ignore-duplicates).
+  if (procesados.length) {
+    await sbInsert(env, '/rest/v1/digest_sent_log',
+      procesados.map(user_id => ({ digest_type: 'daily', run_key: runKey, user_id })))
+  }
+
+  const quedan = pendientes.length - lote.length
+  log.push(`Emails enviados: ${totalEmails}${totalErrores ? ` · Errores: ${totalErrores}` : ''} · quedan ${quedan} para el próximo tick`)
+  return { ok: true, errores: totalErrores, enviados: totalEmails, quedan, log }
 }
 
 // ── Higiene de datos ──────────────────────────────────────────────
@@ -629,6 +659,23 @@ async function sbGet<T>(env: Env, path: string): Promise<T | null> {
   const res = await fetch(`${env.SUPABASE_URL}${path}`, { headers: sbHeaders(env) })
   if (!res.ok) return null
   return res.json()
+}
+
+// Lectura paginada con header Range: PostgREST corta en 1000 filas por request,
+// así que iteramos páginas hasta agotar para no truncar la lista completa.
+async function sbGetAll<T>(env: Env, path: string, pageSize = 1000): Promise<T[]> {
+  const all: T[] = []
+  for (let from = 0; from < 100_000; from += pageSize) {
+    const to  = from + pageSize - 1
+    const res = await fetch(`${env.SUPABASE_URL}${path}`, {
+      headers: { ...sbHeaders(env), 'Range-Unit': 'items', 'Range': `${from}-${to}` },
+    })
+    if (!res.ok && res.status !== 206) break
+    const page = (await res.json()) as T[]
+    all.push(...page)
+    if (page.length < pageSize) break
+  }
+  return all
 }
 
 async function sbAdminGet<T>(env: Env, path: string): Promise<T | null> {

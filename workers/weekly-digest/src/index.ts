@@ -40,6 +40,11 @@ const SELECT_CONV = 'id,titulo,fuente,tipo,monto_rango,fecha_cierre_postulacion,
 const SCORE_MIN     = 40
 const MAX_CARDS     = 4   // tope de tarjetas de match en el email
 const DIAS_VENTANA  = 7
+// Usuarios procesados por tick. El cron corre cada 5 min en una ventana, así que
+// la cohorte se vacía en varios ticks sin pasar el tope de subrequests por
+// invocación. Calibrado para Workers Paid (1000 subreq); si estás en Workers Free
+// (50 subreq), baja a ~15.
+const BATCH_LIMIT   = 250
 
 export default {
   // ── Cron trigger ─────────────────────────────────────────────────
@@ -48,15 +53,17 @@ export default {
   },
 
   // ── HTTP (prueba manual) ──────────────────────────────────────────
-  // ?audience=admins → envía SOLO a usuarios con rol admin (prueba de cómo llega
-  // el correo, sin spamear a los free). Por defecto: la audiencia real (free).
+  // Default SEGURO: 'admins' → envía SOLO a usuarios con rol admin (prueba de
+  // cómo llega el correo, sin spamear a los free). El envío real a la audiencia
+  // free exige ?audience=free EXPLÍCITO, para que una prueba accidental no le
+  // llegue a todos los free. (El cron sí dispara la audiencia real vía scheduled.)
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.headers.get('Authorization') !== `Bearer ${env.CRON_SECRET}`) {
       return new Response('Unauthorized', { status: 401 })
     }
-    const audience = new URL(request.url).searchParams.get('audience') === 'admins'
-      ? 'admins' as const
-      : 'free' as const
+    const audience = new URL(request.url).searchParams.get('audience') === 'free'
+      ? 'free' as const
+      : 'admins' as const
     const result = await runWeekly(env, audience)
     return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' },
@@ -67,6 +74,10 @@ export default {
 type Audience = 'free' | 'admins'
 
 // ── Lógica principal ──────────────────────────────────────────────
+// Diseño consciente del límite de subrequests de Workers (50 free / 1000 paid):
+// el costo por usuario se minimiza. Lo GENERAL (resumen + upsell) se calcula una
+// sola vez; los emails se resuelven en UNA pasada (no 1 request/usuario); solo se
+// consulta por usuario a quien TIENE alerta; y el envío va en lote a Resend.
 async function runWeekly(env: Env, audience: Audience = 'free') {
   const log: string[] = []
 
@@ -80,32 +91,105 @@ async function runWeekly(env: Env, audience: Audience = 'free') {
   const query = audience === 'admins'
     ? '/rest/v1/profiles?role=eq.admin&archived_at=is.null&select=id,is_internal'
     : '/rest/v1/profiles?plan=eq.free&archived_at=is.null&select=id,is_internal'
-  const profiles = await sbGet<{ id: string; is_internal: boolean | null }[]>(env, query)
+  // Paginado: PostgREST corta en 1000 filas; sin esto se perderían los free de más.
+  const profiles = await sbGetAll<{ id: string; is_internal: boolean | null }>(env, query)
   if (!profiles?.length) return { ok: true, message: `No users for audience=${audience}`, log }
 
-  const destinatarios = audience === 'admins' ? profiles : profiles.filter(p => !p.is_internal)
-  log.push(`Audiencia: ${audience} · destinatarios: ${destinatarios.length}`)
+  const cohorte = audience === 'admins' ? profiles : profiles.filter(p => !p.is_internal)
+  log.push(`Audiencia: ${audience} · cohorte: ${cohorte.length}`)
 
-  let totalEmails  = 0
+  // Troceo + sent-log (solo audiencia real). Cada tick del cron procesa el
+  // siguiente lote de NO-enviados de esta corrida; cuando se vacía, es no-op.
+  // En 'admins' (prueba) no se usa el log: es 1 tick con pocos usuarios.
+  const runKey = new Date().toISOString().split('T')[0]
+  let pendientes = cohorte
+  if (audience === 'free') {
+    const enviados = await sbGetAll<{ user_id: string }>(
+      env, `/rest/v1/digest_sent_log?digest_type=eq.weekly&run_key=eq.${runKey}&select=user_id`
+    )
+    const yaEnviados = new Set(enviados.map(r => r.user_id))
+    pendientes = cohorte.filter(p => !yaEnviados.has(p.id))
+    log.push(`Run ${runKey}: ya enviados ${yaEnviados.size} · pendientes ${pendientes.length}`)
+  }
+  if (!pendientes.length) return { ok: true, message: `Sin pendientes (run ${runKey})`, log }
+
+  // Lote de este tick (acotado al presupuesto de subrequests). El resto queda
+  // para el siguiente tick de la ventana.
+  const lote = pendientes.slice(0, BATCH_LIMIT)
+  log.push(`Lote: ${lote.length}/${pendientes.length} (BATCH_LIMIT=${BATCH_LIMIT})`)
+
+  // Emails en UNA sola pasada (id→email), en vez de un request por usuario.
+  const emailById = await fetchEmailMap(env)
+  log.push(`Emails cargados: ${emailById.size}`)
+
+  // Alertas activas (con su proyecto) en UNA pasada, agrupadas por usuario. Evita
+  // una lectura de alert_configs por destinatario: el free sin alerta cuesta 0.
+  const alertRows = await sbGetAll<any>(
+    env,
+    '/rest/v1/alert_configs?activo=eq.true' +
+    '&select=*,proyecto:proyectos(tipo_persona,estado_proyecto,foco,alcance,monto_minimo)'
+  )
+  const alertsByUser = new Map<string, any[]>()
+  for (const a of alertRows) {
+    const arr = alertsByUser.get(a.user_id)
+    if (arr) arr.push(a); else alertsByUser.set(a.user_id, [a])
+  }
+  log.push(`Alertas activas: ${alertRows.length} (${alertsByUser.size} usuarios)`)
+
+  // Armamos los correos del lote. Solo se consulta por usuario a quien tiene
+  // alerta (bloque "Tu alerta esta semana"); el resto es 100% general → 0 lecturas.
+  const mensajes: EmailMsg[] = []
+  const sinEmail: string[] = []   // procesados pero sin email → se registran igual (terminal)
+  const stats = { conAlerta: 0 }
   let totalErrores = 0
-
-  // Aislamiento por usuario: un fallo no aborta toda la corrida (igual que el
-  // digest diario).
-  for (const profile of destinatarios) {
+  for (const profile of lote) {
     try {
-      const sent = await processUser(env, profile.id, resumen, log)
-      if (sent) totalEmails++
+      const alertas = alertsByUser.get(profile.id) ?? []
+      const msg = await buildUserEmail(env, profile.id, emailById.get(profile.id), resumen, alertas, stats, log)
+      if (msg) mensajes.push(msg)
+      else     sinEmail.push(profile.id)
     } catch (e) {
+      // Error transitorio (p. ej. tope de subrequests): NO se registra en el
+      // sent-log → se reintenta en el siguiente tick.
       totalErrores++
-      const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e)
-      log.push(`  ⚠️ ERROR procesando user ${profile.id}: ${msg}`)
+      const m = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e)
+      log.push(`  ⚠️ ERROR procesando user ${profile.id}: ${m}`)
       console.error(`[weekly] error en user ${profile.id}:`, e)
     }
   }
 
-  log.push(`Emails enviados: ${totalEmails}${totalErrores ? ` · Errores: ${totalErrores}` : ''}`)
-  return { ok: true, errores: totalErrores, log }
+  // Guard de presupuesto: estimación de subrequests usados, para ver de antemano
+  // si el crecimiento se acerca al tope (50 free / 1000 paid) antes de truncar.
+  const subreqEstimado =
+    4 +                                          // conteos del resumen
+    Math.ceil(emailById.size / 1000) +           // pasada de emails
+    Math.max(1, Math.ceil(alertRows.length / 1000)) + // pasada de alertas activas
+    stats.conAlerta * 2 +                        // ~postulaciones + matches por usuario con alerta
+    Math.ceil(mensajes.length / 100)             // envíos en lote
+  log.push(`Subrequests estimados: ~${subreqEstimado} (con alerta: ${stats.conAlerta})`)
+  if (subreqEstimado > 900) log.push(`  ⚠️ Cerca del tope de subrequests (1000). Considerar Queues o subir el plan.`)
+
+  // Envío en lote a Resend (≤100 por request) → ⌈N/100⌉ subrequests, no N.
+  // Devuelve los user_id efectivamente enviados (lotes que respondieron OK).
+  const enviadosIds = await sendBatch(env, mensajes, log)
+
+  // Registrar en el sent-log (solo audiencia real): enviados OK + sin-email
+  // (terminal). Los que fallaron en build/envío NO se registran → reintento en
+  // el próximo tick. Insert con ignore-duplicates: registrar de más es no-op.
+  if (audience === 'free') {
+    const aRegistrar = [...enviadosIds, ...sinEmail]
+    if (aRegistrar.length) {
+      await sbInsert(env, '/rest/v1/digest_sent_log',
+        aRegistrar.map(user_id => ({ digest_type: 'weekly', run_key: runKey, user_id })))
+    }
+  }
+
+  const quedan = pendientes.length - lote.length
+  log.push(`Emails enviados: ${enviadosIds.length}${totalErrores ? ` · Errores: ${totalErrores}` : ''} · quedan ${quedan} para el próximo tick`)
+  return { ok: true, errores: totalErrores, enviados: enviadosIds.length, quedan, log }
 }
+
+interface EmailMsg { userId: string; to: string; subject: string; html: string }
 
 // ── Resumen general de la semana ──────────────────────────────────
 // Conteos EXACTOS por tipo (vía Prefer: count=exact). No traemos filas, así que
@@ -141,50 +225,123 @@ async function buildResumenSemana(env: Env): Promise<Resumen> {
   return { fondosNuevos, licitacionesNuevas, fondosCierran, licitacionesCierran }
 }
 
-// ── Procesar un usuario free ──────────────────────────────────────
-async function processUser(env: Env, userId: string, resumen: Resumen, log: string[]): Promise<boolean> {
-  const authUser = await sbAdminGet<{ email: string }>(env, `/auth/v1/admin/users/${userId}`)
-  if (!authUser?.email) return false
-
-  // Alertas activas + datos del proyecto vinculado (para filtrar por compatibilidad).
-  const alertas = await sbGet<any[]>(
-    env,
-    `/rest/v1/alert_configs?user_id=eq.${userId}&activo=eq.true` +
-    `&select=*,proyecto:proyectos(tipo_persona,estado_proyecto,foco,alcance,monto_minimo)`
-  ) ?? []
-
-  // IDs donde ya postuló — no mostrarlas como novedad.
-  const postulaciones = await sbGet<{ convocatoria_id: string }[]>(
-    env, `/rest/v1/postulaciones?user_id=eq.${userId}&select=convocatoria_id`
-  ) ?? []
-  const idsPostulados = postulaciones.map(p => p.convocatoria_id)
-
-  // Matches de la semana (solo lectura: ventana fija de 7 días, NO usa
-  // last_notified_at y NO lo modifica).
-  const desde = new Date(Date.now() - DIAS_VENTANA * 86400000)
-  const vistos = new Set<string>()
-  const matches: any[] = []
-  for (const alerta of alertas) {
-    const items       = await fetchMatches(env, alerta, desde, idsPostulados)
-    const compatibles = filtrarPorCompatibilidad(items, alerta.proyecto)
-    for (const it of compatibles) {
-      if (vistos.has(it.id)) continue
-      vistos.add(it.id)
-      matches.push(it)
-    }
-  }
-  const fondosMatch       = matches.filter(m => m.tipo === 'fondo')
-  const licitacionesMatch = matches.filter(m => m.tipo === 'licitacion')
+// ── Armar el correo de un usuario free ────────────────────────────
+// Devuelve el mensaje listo para enviar (el envío real va en lote después), o
+// null si el usuario no tiene email. El email y las alertas llegan precargados
+// (mapas armados en una sola pasada), así que aquí NO se consulta ni la admin API
+// ni alert_configs. Solo se hacen lecturas si el usuario TIENE alerta (para el
+// bloque "Tu alerta esta semana"); sin alerta el correo es general y cuesta 0.
+async function buildUserEmail(
+  env: Env,
+  userId: string,
+  email: string | undefined,
+  resumen: Resumen,
+  alertas: any[],
+  stats: { conAlerta: number },
+  log: string[],
+): Promise<EmailMsg | null> {
+  if (!email) return null
 
   const tieneAlerta = alertas.length > 0
-  log.push(`  ${authUser.email} | ${tieneAlerta ? `${fondosMatch.length} fondo(s) / ${licitacionesMatch.length} licitación(es)` : 'sin alerta'}`)
 
-  const emailOk = await sendEmail(env, authUser.email, resumen, tieneAlerta, fondosMatch, licitacionesMatch)
-  if (!emailOk) {
-    log.push(`  ${authUser.email} | envío Resend falló`)
-    return false
+  let fondosMatch:       any[] = []
+  let licitacionesMatch: any[] = []
+
+  // Corte de circuito: sin alerta el correo es 100% general → nos saltamos
+  // postulaciones y matches (la mayoría de los free caen aquí).
+  if (tieneAlerta) {
+    stats.conAlerta++
+
+    // IDs donde ya postuló — no mostrarlas como novedad.
+    const postulaciones = await sbGet<{ convocatoria_id: string }[]>(
+      env, `/rest/v1/postulaciones?user_id=eq.${userId}&select=convocatoria_id`
+    ) ?? []
+    const idsPostulados = postulaciones.map(p => p.convocatoria_id)
+
+    // Matches de la semana (solo lectura: ventana fija de 7 días, NO usa
+    // last_notified_at y NO lo modifica).
+    const desde  = new Date(Date.now() - DIAS_VENTANA * 86400000)
+    const vistos = new Set<string>()
+    const matches: any[] = []
+    for (const alerta of alertas) {
+      const items       = await fetchMatches(env, alerta, desde, idsPostulados)
+      const compatibles = filtrarPorCompatibilidad(items, alerta.proyecto)
+      for (const it of compatibles) {
+        if (vistos.has(it.id)) continue
+        vistos.add(it.id)
+        matches.push(it)
+      }
+    }
+    fondosMatch       = matches.filter(m => m.tipo === 'fondo')
+    licitacionesMatch = matches.filter(m => m.tipo === 'licitacion')
   }
-  return true
+
+  log.push(`  ${email} | ${tieneAlerta ? `${fondosMatch.length} fondo(s) / ${licitacionesMatch.length} licitación(es)` : 'sin alerta'}`)
+
+  // El subject privilegia los fondos (lo escaso/valioso); si no hubo, cae a licitaciones.
+  const subject = resumen.fondosNuevos > 0
+    ? `Tu resumen semanal · ${resumen.fondosNuevos} fondo${resumen.fondosNuevos !== 1 ? 's' : ''} nuevo${resumen.fondosNuevos !== 1 ? 's' : ''}`
+    : `Tu resumen semanal · ${resumen.licitacionesNuevas} licitaciones nuevas`
+
+  return {
+    userId,
+    to:      email,
+    subject,
+    html:    buildEmail(env, email, resumen, tieneAlerta, fondosMatch, licitacionesMatch),
+  }
+}
+
+// ── Emails en una sola pasada ─────────────────────────────────────
+// Mapa id→email paginando la admin API (?page=&per_page=), en vez de un request
+// por usuario. ~1 subrequest cada 1000 usuarios.
+async function fetchEmailMap(env: Env): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  // No asumimos que per_page se respete (GoTrue puede topearlo): el tamaño de la
+  // primera página define el "lleno", y cortamos en la primera página parcial o vacía.
+  let effective = 0
+  for (let page = 1; page <= 1000; page++) {
+    const data  = await sbAdminGet<{ users: { id: string; email: string | null }[] }>(
+      env, `/auth/v1/admin/users?page=${page}&per_page=1000`
+    )
+    const users = data?.users ?? []
+    for (const u of users) if (u.email) map.set(u.id, u.email)
+    if (page === 1) effective = users.length
+    if (users.length === 0 || (effective > 0 && users.length < effective)) break
+  }
+  return map
+}
+
+// ── Envío en lote a Resend ────────────────────────────────────────
+// /emails/batch acepta hasta 100 correos por request → ⌈N/100⌉ subrequests en
+// vez de uno por usuario. El HTML sigue siendo personalizado por destinatario.
+async function sendBatch(env: Env, mensajes: EmailMsg[], log: string[]): Promise<string[]> {
+  const enviadosIds: string[] = []
+  const CHUNK = 100
+  for (let i = 0; i < mensajes.length; i += CHUNK) {
+    const lote = mensajes.slice(i, i + CHUNK)
+    const res  = await fetch('https://api.resend.com/emails/batch', {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(lote.map(m => ({
+        from:    'Fondos y Licitaciones <hola@fondosylicitaciones.cl>',
+        to:      [m.to],
+        subject: m.subject,
+        html:    m.html,
+      }))),
+    })
+    if (res.ok) {
+      for (const m of lote) enviadosIds.push(m.userId)
+    } else {
+      // Lote no enviado: sus user_id NO se devuelven → no se registran → reintento.
+      const text = await res.text().catch(() => '')
+      log.push(`  ⚠️ Lote Resend #${Math.floor(i / CHUNK) + 1} falló: ${res.status} ${text}`)
+      console.error(`[weekly] batch falló: ${res.status} ${text}`)
+    }
+  }
+  return enviadosIds
 }
 
 // ── Matching query (misma lógica que el digest diario) ────────────
@@ -242,36 +399,6 @@ function filtrarPorCompatibilidad(items: any[], proyecto: Perfil | null | undefi
     monto_minimo:    proyecto.monto_minimo    ?? null,
   }
   return items.filter(c => calcularMatch(perfil, c).score >= SCORE_MIN)
-}
-
-// ── Enviar email ──────────────────────────────────────────────────
-async function sendEmail(
-  env: Env,
-  to: string,
-  resumen: Resumen,
-  tieneAlerta: boolean,
-  fondosMatch: any[],
-  licitacionesMatch: any[],
-): Promise<boolean> {
-  // El subject privilegia los fondos (lo escaso/valioso); si no hubo, cae a licitaciones.
-  const subject = resumen.fondosNuevos > 0
-    ? `Tu resumen semanal · ${resumen.fondosNuevos} fondo${resumen.fondosNuevos !== 1 ? 's' : ''} nuevo${resumen.fondosNuevos !== 1 ? 's' : ''}`
-    : `Tu resumen semanal · ${resumen.licitacionesNuevas} licitaciones nuevas`
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method:  'POST',
-    headers: {
-      Authorization:  `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from:    'Fondos y Licitaciones <hola@fondosylicitaciones.cl>',
-      to:      [to],
-      subject,
-      html:    buildEmail(env, to, resumen, tieneAlerta, fondosMatch, licitacionesMatch),
-    }),
-  })
-  return res.ok
 }
 
 // ── HTML del email ────────────────────────────────────────────────
@@ -518,6 +645,23 @@ async function sbGet<T>(env: Env, path: string): Promise<T | null> {
   return res.json()
 }
 
+// Lectura paginada con header Range: PostgREST corta en 1000 filas por request,
+// así que iteramos páginas hasta agotar para no truncar la lista completa.
+async function sbGetAll<T>(env: Env, path: string, pageSize = 1000): Promise<T[]> {
+  const all: T[] = []
+  for (let from = 0; from < 100_000; from += pageSize) {
+    const to  = from + pageSize - 1
+    const res = await fetch(`${env.SUPABASE_URL}${path}`, {
+      headers: { ...sbHeaders(env), 'Range-Unit': 'items', 'Range': `${from}-${to}` },
+    })
+    if (!res.ok && res.status !== 206) break
+    const page = (await res.json()) as T[]
+    all.push(...page)
+    if (page.length < pageSize) break
+  }
+  return all
+}
+
 async function sbAdminGet<T>(env: Env, path: string): Promise<T | null> {
   const res = await fetch(`${env.SUPABASE_URL}${path}`, {
     headers: {
@@ -527,6 +671,21 @@ async function sbAdminGet<T>(env: Env, path: string): Promise<T | null> {
   })
   if (!res.ok) return null
   return res.json()
+}
+
+// Insert idempotente (ignore-duplicates): registrar el mismo (digest_type,run_key,
+// user_id) dos veces es un no-op gracias al índice único de digest_sent_log.
+async function sbInsert(env: Env, path: string, body: object[]) {
+  if (!body.length) return
+  const res = await fetch(`${env.SUPABASE_URL}${path}`, {
+    method:  'POST',
+    headers: { ...sbHeaders(env), 'Prefer': 'resolution=ignore-duplicates,return=minimal' },
+    body:    JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    console.error(`sbInsert ${path} failed: ${res.status} ${text}`)
+  }
 }
 
 // Conteo EXACTO sin traer filas: Prefer count=exact + Range 0-0 → el total viene
