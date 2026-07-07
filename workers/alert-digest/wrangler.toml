@@ -2,11 +2,13 @@ name = "fyl-alert-digest"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# Cron: todos los días, ventana 9:00–10:55 Chile = 13:00–14:55 UTC (UTC-4), cada 5 min.
-# Cada tick procesa el siguiente lote de usuarios no-procesados (sent-log) y para
-# solo cuando la cohorte se vació; los ticks sobrantes son no-ops baratos.
+# Cron: todos los días, ventana 9:00–12:55 Chile = 13:00–16:55 UTC (UTC-4), cada
+# 5 min. Cada tick procesa el siguiente lote de usuarios no-procesados (sent-log)
+# y para solo cuando la cohorte se vació; los ticks sobrantes son no-ops baratos.
+# Ventana amplia porque en Workers Free cada tick procesa pocos usuarios con
+# alerta (~4-12 según presupuesto): 48 ticks dan holgura para crecer.
 [triggers]
-crons = ["*/5 13-14 * * *"]
+crons = ["*/5 13-16 * * *"]
 
 # Variables no sensibles
 [vars]

@@ -1,4 +1,5 @@
 import { calcularMatch, type Perfil } from '../../../shared/match'
+import { Sb, BudgetExceeded } from '../../../shared/sb-budget'
 
 interface Env {
   SUPABASE_URL:        string
@@ -20,12 +21,13 @@ const FUENTE_LABELS: Record<string, string> = {
   santander_x: 'Santander X',
 }
 
-// Usuarios procesados por tick. El cron corre cada 5 min en una ventana, así que
-// la cohorte se vacía en varios ticks sin pasar el tope de subrequests por
-// invocación. Más bajo que el weekly porque el diario, por usuario, además ESCRIBE
-// (notificaciones + cursor). Calibrado para Workers Paid (1000 subreq); en Workers
-// Free (50) baja a ~10.
-const BATCH_LIMIT = 120
+// Usuarios CON ALERTA procesados por tick (los sin alerta cuestan 0 y se
+// registran todos de una). El cron corre cada 5 min en una ventana, así que la
+// cohorte se vacía en varios ticks sin pasar el tope de subrequests. Más bajo
+// que el weekly porque el diario, por usuario, además ESCRIBE (notificaciones +
+// cursor). Calibrado para Workers FREE (50 subreq/invocación); el presupuesto
+// (shared/sb-budget) además corta el lote con gracia cerca del tope.
+const BATCH_LIMIT = 12
 
 export default {
   // ── Cron trigger ─────────────────────────────────────────────────
@@ -46,7 +48,14 @@ export default {
 }
 
 // ── Lógica principal ──────────────────────────────────────────────
+// Diseño para Workers FREE (50 subrequests por invocación, ver shared/sb-budget):
+// las alertas activas se leen en UNA pasada global → los usuarios sin alerta
+// cuestan 0 y se registran todos de una; solo los usuarios con alerta entran al
+// lote del tick, con sus emails resueltos en 1 subrequest (RPC). Si el
+// presupuesto se acerca al tope, el lote se corta con gracia y el resto queda
+// para el siguiente tick (sent-log).
 async function runDigest(env: Env) {
+  const sb  = new Sb(env)
   const log: string[] = []
 
   // Troceo + sent-log: cada tick del cron procesa el siguiente lote de usuarios
@@ -54,20 +63,20 @@ async function runDigest(env: Env) {
   // el tope de subrequests por invocación a cualquier escala, y se auto-repara (lo
   // que falla queda sin registrar y se reintenta en el siguiente tick).
   const runKey = new Date().toISOString().split('T')[0]
-  const enviados = await sbGetAll<{ user_id: string }>(
-    env, `/rest/v1/digest_sent_log?digest_type=eq.daily&run_key=eq.${runKey}&select=user_id`
+  const enviados = await sb.getAll<{ user_id: string }>(
+    `/rest/v1/digest_sent_log?digest_type=eq.daily&run_key=eq.${runKey}&select=user_id&order=id`
   )
   const yaProcesados = new Set(enviados.map(r => r.user_id))
 
   // 0. Higiene de datos (una vez por día): marcar como 'cerrado' lo que ya pasó su
   // fecha de cierre. Solo en el PRIMER tick (cuando aún no hay nadie procesado hoy),
   // para no repetir el PATCH en cada tick de la ventana.
-  if (yaProcesados.size === 0) await closeExpired(env, log)
+  if (yaProcesados.size === 0) await closeExpired(env, sb, log)
 
   // 1. Todos los usuarios con plan. Free entra para que la bandeja web se llene,
   //    pero adentro de processUser se omite el email (emailAlertas = false en free).
-  const profiles = await sbGetAll<{ id: string; plan: string }>(
-    env, '/rest/v1/profiles?plan=in.(free,starter,advanced,agency)&select=id,plan'
+  const profiles = await sb.getAll<{ id: string; plan: string }>(
+    '/rest/v1/profiles?plan=in.(free,starter,advanced,agency)&select=id,plan&order=id'
   )
   if (!profiles.length) return { ok: true, message: 'No users', log }
 
@@ -75,21 +84,71 @@ async function runDigest(env: Env) {
   log.push(`Run ${runKey}: usuarios ${profiles.length} · ya procesados ${yaProcesados.size} · pendientes ${pendientes.length}`)
   if (!pendientes.length) return { ok: true, message: `Sin pendientes (run ${runKey})`, log }
 
-  const lote = pendientes.slice(0, BATCH_LIMIT)
-  log.push(`Lote: ${lote.length}/${pendientes.length} (BATCH_LIMIT=${BATCH_LIMIT})`)
+  // 2. Quiénes tienen alerta activa (solo user_id, payload mínimo). Quien no
+  //    tiene alerta no genera ni email ni bandeja → terminal: se registra de
+  //    inmediato (1 insert para todos) y jamás vuelve a costar. Si esta lectura
+  //    falla, getAll LANZA y el tick aborta — jamás se clasifica con una lista
+  //    parcial (registraría a toda la cohorte como procesada sin procesarla).
+  const alertUsers = await sb.getAll<{ user_id: string }>(
+    '/rest/v1/alert_configs?activo=eq.true&select=user_id&order=id'
+  )
+  const usersConAlerta = new Set(alertUsers.map(a => a.user_id))
+
+  const sinAlerta = pendientes.filter(p => !usersConAlerta.has(p.id))
+  const conAlerta = pendientes.filter(p => usersConAlerta.has(p.id))
+  log.push(`Usuarios con alerta activa: ${usersConAlerta.size} · pendientes con alerta: ${conAlerta.length} · sin alerta: ${sinAlerta.length}`)
+  if (sinAlerta.length) {
+    await sb.insert('/rest/v1/digest_sent_log',
+      sinAlerta.map(p => ({ digest_type: 'daily', run_key: runKey, user_id: p.id })))
+  }
+  if (!conAlerta.length) return { ok: true, message: `Sin pendientes con alerta (run ${runKey})`, log }
+
+  // 3. Lote de este tick: emails en 1 subrequest (RPC get_user_emails) y alertas
+  //    completas (con proyecto) SOLO del lote, también en 1 subrequest.
+  const lote = conAlerta.slice(0, BATCH_LIMIT)
+  log.push(`Lote: ${lote.length}/${conAlerta.length} (BATCH_LIMIT=${BATCH_LIMIT})`)
+  const emailById = await sb.emailsFor(lote.map(p => p.id))
+  if (!emailById) {
+    log.push('RPC get_user_emails falló — abortando el tick sin registrar el lote')
+    return { ok: false, error: 'emails_rpc_failed', log }
+  }
+
+  const alertRows = await sb.getAll<any>(
+    `/rest/v1/alert_configs?activo=eq.true&user_id=in.(${lote.map(p => p.id).join(',')})` +
+    '&select=*,proyecto:proyectos(tipo_persona,estado_proyecto,foco,alcance,monto_minimo)&order=id'
+  )
+  const alertsByUser = new Map<string, any[]>()
+  for (const a of alertRows) {
+    const arr = alertsByUser.get(a.user_id)
+    if (arr) arr.push(a); else alertsByUser.set(a.user_id, [a])
+  }
 
   let totalEmails  = 0
   let totalErrores = 0
   const procesados: string[] = []   // user_id que completaron sin throw → registrar
 
   // Aislamiento por usuario: una excepción en processUser NO debe abortar el lote.
-  // Un throw (p. ej. tope de subrequests) NO se registra → reintento próximo tick.
+  // Un throw NO se registra → reintento próximo tick.
   for (const profile of lote) {
+    const alertas = alertsByUser.get(profile.id) ?? []
+    // Corte con gracia: presupuesto estimado del usuario (lecturas + matches +
+    // recordatorios + envío + escrituras) más 1 para el registro final del tick.
+    const costo = profile.plan !== 'free'
+      ? 9 + 3 * alertas.length
+      : 2 + 2 * alertas.length
+    if (!sb.canAfford(costo + 1)) {
+      log.push(`  ✂️ Presupuesto (${sb.used}/${sb.cap}): corto el lote acá, el resto va al próximo tick`)
+      break
+    }
     try {
-      const sent = await processUser(env, profile.id, profile.plan, log)
+      const sent = await processUser(env, sb, profile.id, profile.plan, emailById.get(profile.id), alertas, log)
       if (sent) totalEmails++
       procesados.push(profile.id)
     } catch (e) {
+      if (e instanceof BudgetExceeded) {
+        log.push(`  ✂️ Presupuesto agotado (${sb.used}/${sb.cap}) — corto el lote`)
+        break
+      }
       totalErrores++
       const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e)
       log.push(`  ⚠️ ERROR procesando user ${profile.id} (plan ${profile.plan}): ${msg}`)
@@ -99,23 +158,23 @@ async function runDigest(env: Env) {
 
   // Registrar los procesados de este tick (ignore-duplicates).
   if (procesados.length) {
-    await sbInsert(env, '/rest/v1/digest_sent_log',
+    await sb.insert('/rest/v1/digest_sent_log',
       procesados.map(user_id => ({ digest_type: 'daily', run_key: runKey, user_id })))
   }
 
-  const quedan = pendientes.length - lote.length
-  log.push(`Emails enviados: ${totalEmails}${totalErrores ? ` · Errores: ${totalErrores}` : ''} · quedan ${quedan} para el próximo tick`)
+  const quedan = conAlerta.length - procesados.length
+  log.push(`Emails enviados: ${totalEmails}${totalErrores ? ` · Errores: ${totalErrores}` : ''} · subrequests ${sb.used}/${sb.cap} · quedan ${quedan} para el próximo tick`)
   return { ok: true, errores: totalErrores, enviados: totalEmails, quedan, log }
 }
 
 // ── Higiene de datos ──────────────────────────────────────────────
-async function closeExpired(env: Env, log: string[]) {
+async function closeExpired(env: Env, sb: Sb, log: string[]) {
   const hoy = new Date().toISOString().split('T')[0]
-  const res = await fetch(
+  const res = await sb.fetch(
     `${env.SUPABASE_URL}/rest/v1/convocatorias?estado=eq.abierto&fecha_cierre_postulacion=lt.${hoy}`,
     {
       method:  'PATCH',
-      headers: { ...sbHeaders(env), 'Prefer': 'return=minimal,count=exact' },
+      headers: { ...sb.headers(), 'Prefer': 'return=minimal,count=exact' },
       body:    JSON.stringify({ estado: 'cerrado' }),
     }
   )
@@ -132,27 +191,27 @@ async function closeExpired(env: Env, log: string[]) {
 }
 
 // ── Procesar un usuario ───────────────────────────────────────────
-async function processUser(env: Env, userId: string, plan: string, log: string[]): Promise<boolean> {
+// El email y las alertas (con proyecto) llegan precargados: el email se resolvió
+// en 1 subrequest para todo el lote (RPC) y las alertas en la pasada global.
+async function processUser(
+  env: Env,
+  sb: Sb,
+  userId: string,
+  plan: string,
+  email: string | undefined,
+  alertas: any[],
+  log: string[],
+): Promise<boolean> {
   // Plan free no recibe email pero igual procesamos matches para que la bandeja
   // web se llene. Cualquier plan con `emailAlertas: true` (starter+) recibe email.
   const enviaEmail = plan !== 'free'
 
-  // Email via admin API (solo lo necesitamos para enviar; en free igual lo pedimos
-  // para identificar al usuario en el log)
-  const authUser = await sbAdminGet<{ email: string }>(env, `/auth/v1/admin/users/${userId}`)
-  if (!authUser?.email) return false
-
-  // Alertas activas + datos del proyecto vinculado (para filtrar por compatibilidad real)
-  const alertas = await sbGet<any[]>(
-    env,
-    `/rest/v1/alert_configs?user_id=eq.${userId}&activo=eq.true` +
-    `&select=*,proyecto:proyectos(tipo_persona,estado_proyecto,foco,alcance,monto_minimo)`
-  )
-  if (!alertas?.length) return false
+  if (!email) return false
+  if (!alertas.length) return false
 
   // IDs donde ya postulé — no notificar
-  const postulaciones = await sbGet<{ convocatoria_id: string }[]>(
-    env, `/rest/v1/postulaciones?user_id=eq.${userId}&select=convocatoria_id`
+  const postulaciones = await sb.get<{ convocatoria_id: string }[]>(
+    `/rest/v1/postulaciones?user_id=eq.${userId}&select=convocatoria_id`
   ) ?? []
   const idsPostulados = postulaciones.map(p => p.convocatoria_id)
 
@@ -165,13 +224,13 @@ async function processUser(env: Env, userId: string, plan: string, log: string[]
       ? new Date(alerta.last_notified_at)
       : new Date(Date.now() - 25 * 60 * 60 * 1000)
 
-    const items = await fetchMatches(env, alerta, desde, idsPostulados)
+    const items = await fetchMatches(sb, alerta, desde, idsPostulados)
     const compatibles = filtrarPorCompatibilidad(items, alerta.proyecto)
 
     if (compatibles.length > 0) {
       resultados.push({ alerta, items: compatibles })
       const filtradas = items.length - compatibles.length
-      log.push(`  ${authUser.email} | "${alerta.nombre}": ${compatibles.length} compatibles${filtradas > 0 ? ` (${filtradas} filtradas por score<40)` : ''}`)
+      log.push(`  ${email} | "${alerta.nombre}": ${compatibles.length} compatibles${filtradas > 0 ? ` (${filtradas} filtradas por score<40)` : ''}`)
     } else {
       sinMatch.push(alerta)
     }
@@ -183,15 +242,15 @@ async function processUser(env: Env, userId: string, plan: string, log: string[]
   // explícitos, pasa filtros de una alerta activa, o match >= SCORE_RECORDATORIO.
   const proyectoBase = alertas.find(a => a.proyecto)?.proyecto ?? null
   const closures = enviaEmail
-    ? await findClosingReminders(env, userId, proyectoBase, alertas, idsPostulados)
+    ? await findClosingReminders(sb, userId, proyectoBase, alertas, idsPostulados)
     : []
   if (closures.length) {
-    log.push(`  ${authUser.email} | ${closures.length} cierre(s) próximo(s)`)
+    log.push(`  ${email} | ${closures.length} cierre(s) próximo(s)`)
   }
 
   // Alertas sin match: avanzar el cursor inmediatamente (no hay riesgo de pérdida).
   for (const alerta of sinMatch) {
-    await sbPatch(env, `/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
+    await sb.patch(`/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
   }
 
   if (!resultados.length && !closures.length) return false
@@ -201,14 +260,14 @@ async function processUser(env: Env, userId: string, plan: string, log: string[]
   // próximo cron (no avanzamos last_notified_at ni escribimos la bandeja).
   if (enviaEmail) {
     const total = resultados.reduce((s, r) => s + r.items.length, 0)
-    const emailOk = await sendEmail(env, authUser.email, total, resultados, closures)
+    const emailOk = await sendEmail(env, sb, email, total, resultados, closures)
 
     if (!emailOk) {
-      log.push(`  ${authUser.email} | envío Resend falló — no se actualiza last_notified_at, se reintenta en el próximo cron`)
+      log.push(`  ${email} | envío Resend falló — no se actualiza last_notified_at, se reintenta en el próximo cron`)
       return false
     }
   } else {
-    log.push(`  ${authUser.email} | plan free — sin email, guardando en bandeja web`)
+    log.push(`  ${email} | plan free — sin email, guardando en bandeja web`)
   }
 
   // Guardar en bandeja de notificaciones (idempotente: ignora duplicates)
@@ -220,12 +279,12 @@ async function processUser(env: Env, userId: string, plan: string, log: string[]
       notified_at:     ahora,
     }))
   )
-  await sbInsert(env, '/rest/v1/alert_notifications', notifs)
+  await sb.insert('/rest/v1/alert_notifications', notifs)
 
   // Marcar los cierres como ya recordados para no volver a mandar ese mismo
   // (usuario, fondo, threshold). Una entrada distinta por threshold.
   if (closures.length) {
-    await sbInsert(env, '/rest/v1/closing_reminders_sent',
+    await sb.insert('/rest/v1/closing_reminders_sent',
       closures.map(c => ({
         user_id:          userId,
         convocatoria_id:  c.conv.id,
@@ -236,7 +295,7 @@ async function processUser(env: Env, userId: string, plan: string, log: string[]
 
   // Recién acá avanzamos el cursor de las alertas que sí dispararon notificación.
   for (const { alerta } of resultados) {
-    await sbPatch(env, `/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
+    await sb.patch(`/rest/v1/alert_configs?id=eq.${alerta.id}`, { last_notified_at: ahora })
   }
 
   return true
@@ -280,15 +339,15 @@ function pasaFiltrosAlerta(conv: any, alerta: any): boolean {
 }
 
 async function findClosingReminders(
-  env: Env,
+  sb: Sb,
   userId: string,
   proyecto: Perfil | null,
   alertas: any[],
   idsPostulados: string[],
 ): Promise<Array<{ conv: any; threshold: number }>> {
   // 1) Preferencias del usuario
-  const profile = await sbGet<{ closing_reminder_days: number[] | null }[]>(
-    env, `/rest/v1/profiles?id=eq.${userId}&select=closing_reminder_days`
+  const profile = await sb.get<{ closing_reminder_days: number[] | null }[]>(
+    `/rest/v1/profiles?id=eq.${userId}&select=closing_reminder_days`
   )
   const thresholds = (profile?.[0]?.closing_reminder_days ?? DEFAULT_THRESHOLDS)
     .filter((d): d is number => typeof d === 'number' && d > 0)
@@ -310,14 +369,14 @@ async function findClosingReminders(
   params.set('limit',  '200')
   if (idsPostulados.length) params.set('id', `not.in.(${idsPostulados.join(',')})`)
 
-  const candidatos = await sbGet<any[]>(env, `/rest/v1/convocatorias?${params.toString()}`) ?? []
+  const candidatos = await sb.get<any[]>(`/rest/v1/convocatorias?${params.toString()}`) ?? []
   if (!candidatos.length) return []
 
   // 3) Ya enviados (con threshold) y guardados
   const [guardados, recordados] = await Promise.all([
-    sbGet<{ convocatoria_id: string }[]>(env, `/rest/v1/guardados?user_id=eq.${userId}&select=convocatoria_id`),
-    sbGet<{ convocatoria_id: string; dias_anticipados: number }[]>(
-      env, `/rest/v1/closing_reminders_sent?user_id=eq.${userId}&select=convocatoria_id,dias_anticipados`
+    sb.get<{ convocatoria_id: string }[]>(`/rest/v1/guardados?user_id=eq.${userId}&select=convocatoria_id`),
+    sb.get<{ convocatoria_id: string; dias_anticipados: number }[]>(
+      `/rest/v1/closing_reminders_sent?user_id=eq.${userId}&select=convocatoria_id,dias_anticipados`
     ),
   ])
   if (recordados === null) {
@@ -356,7 +415,7 @@ async function findClosingReminders(
 }
 
 // ── Matching query ────────────────────────────────────────────────
-async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: string[] = []) {
+async function fetchMatches(sb: Sb, alerta: any, desde: Date, idsPostulados: string[] = []) {
   const foco     = (alerta.foco ?? []) as string[]
   const keywords = (alerta.palabras_clave ?? []) as string[]
 
@@ -400,7 +459,7 @@ async function fetchMatches(env: Env, alerta: any, desde: Date, idsPostulados: s
   if (idsPostulados.length)
     params.set('id', `not.in.(${idsPostulados.join(',')})`)
 
-  const data = await sbGet<any[]>(env, `/rest/v1/convocatorias?${params.toString()}`)
+  const data = await sb.get<any[]>(`/rest/v1/convocatorias?${params.toString()}`)
   return data ?? []
 }
 
@@ -428,13 +487,14 @@ function filtrarPorCompatibilidad(items: any[], proyecto: Perfil | null | undefi
 // ── Enviar email ──────────────────────────────────────────────────
 async function sendEmail(
   env: Env,
+  sb: Sb,
   to: string,
   total: number,
   resultados: Array<{ alerta: any; items: any[] }>,
   closures: Array<{ conv: any; threshold: number }>,
 ): Promise<boolean> {
   const subject = buildSubject(total, closures.length)
-  const res = await fetch('https://api.resend.com/emails', {
+  const res = await sb.fetch('https://api.resend.com/emails', {
     method:  'POST',
     headers: {
       Authorization:  `Bearer ${env.RESEND_API_KEY}`,
@@ -644,75 +704,6 @@ function buildCard(env: Env, item: any, alerta: any): string {
     </td></tr>
   </table>
 </td></tr>`
-}
-
-// ── Helpers Supabase REST ─────────────────────────────────────────
-function sbHeaders(env: Env) {
-  return {
-    'apikey':        env.SUPABASE_SERVICE_KEY,
-    'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-    'Content-Type':  'application/json',
-  }
-}
-
-async function sbGet<T>(env: Env, path: string): Promise<T | null> {
-  const res = await fetch(`${env.SUPABASE_URL}${path}`, { headers: sbHeaders(env) })
-  if (!res.ok) return null
-  return res.json()
-}
-
-// Lectura paginada con header Range: PostgREST corta en 1000 filas por request,
-// así que iteramos páginas hasta agotar para no truncar la lista completa.
-async function sbGetAll<T>(env: Env, path: string, pageSize = 1000): Promise<T[]> {
-  const all: T[] = []
-  for (let from = 0; from < 100_000; from += pageSize) {
-    const to  = from + pageSize - 1
-    const res = await fetch(`${env.SUPABASE_URL}${path}`, {
-      headers: { ...sbHeaders(env), 'Range-Unit': 'items', 'Range': `${from}-${to}` },
-    })
-    if (!res.ok && res.status !== 206) break
-    const page = (await res.json()) as T[]
-    all.push(...page)
-    if (page.length < pageSize) break
-  }
-  return all
-}
-
-async function sbAdminGet<T>(env: Env, path: string): Promise<T | null> {
-  const res = await fetch(`${env.SUPABASE_URL}${path}`, {
-    headers: {
-      'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      'apikey':        env.SUPABASE_SERVICE_KEY,
-    },
-  })
-  if (!res.ok) return null
-  return res.json()
-}
-
-async function sbPatch(env: Env, path: string, body: object): Promise<boolean> {
-  const res = await fetch(`${env.SUPABASE_URL}${path}`, {
-    method:  'PATCH',
-    headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' },
-    body:    JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    console.error(`sbPatch ${path} failed: ${res.status} ${text}`)
-  }
-  return res.ok
-}
-
-async function sbInsert(env: Env, path: string, body: object[]) {
-  if (!body.length) return
-  const res = await fetch(`${env.SUPABASE_URL}${path}`, {
-    method:  'POST',
-    headers: { ...sbHeaders(env), 'Prefer': 'resolution=ignore-duplicates,return=minimal' },
-    body:    JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    console.error(`sbInsert ${path} failed: ${res.status} ${text}`)
-  }
 }
 
 // ── Utilidades ────────────────────────────────────────────────────

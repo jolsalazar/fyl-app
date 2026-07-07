@@ -2,11 +2,13 @@ name = "fyl-weekly-digest"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# Cron: viernes, ventana 9:00–10:55 Chile = 13:00–14:55 UTC (UTC-4), cada 5 min.
+# Cron: VIERNES, ventana 9:00–10:55 Chile = 13:00–14:55 UTC (UTC-4), cada 5 min.
 # Cada tick procesa el siguiente lote de free no-enviados (sent-log) y para solo
 # cuando la cohorte se vació; los ticks sobrantes son no-ops baratos.
+# OJO: día con NOMBRE (FRI). Cloudflare numera los días 1=domingo…7=sábado,
+# así que un "5" acá corría los JUEVES (en prod se parchó a mano a "6" el 19-jun).
 [triggers]
-crons = ["*/5 13-14 * * 5"]
+crons = ["*/5 13-14 * * FRI"]
 
 # Variables no sensibles
 [vars]

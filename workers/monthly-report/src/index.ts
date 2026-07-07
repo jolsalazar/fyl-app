@@ -13,6 +13,8 @@
 //
 // Modelado sobre workers/weekly-digest (mismos helpers, labels y estilo HTML).
 
+import { Sb, sendResendBatch, type EmailMsg } from '../../../shared/sb-budget'
+
 interface Env {
   SUPABASE_URL:         string
   SUPABASE_SERVICE_KEY: string
@@ -38,6 +40,13 @@ const MESES_ES = [
 ]
 
 const MAX_CARDS = 4 // tope de tarjetas de destacados en el email
+
+// Destinatarios por tick. El correo es igual para todos (solo cambia la variante
+// free/pagado), así que el costo por usuario es SOLO el envío: ⌈N/100⌉ chunks a
+// Resend + 1 registro de sent-log por chunk. Con el trabajo fijo (~6 subreq) y
+// el tope de Workers FREE (50/invocación, ver shared/sb-budget), 300 usuarios
+// por tick usa ~14. El cron corre en ventana cada 5 min hasta drenar la cohorte.
+const BATCH_LIMIT = 300
 
 export default {
   // ── Cron trigger ─────────────────────────────────────────────────
@@ -83,25 +92,32 @@ interface Panorama {
 }
 
 // ── Lógica principal ──────────────────────────────────────────────
+// Diseño para Workers FREE (50 subrequests por invocación, ver shared/sb-budget):
+// el contenido se calcula UNA vez (endpoint público cacheado); los emails del
+// lote se resuelven en 1 subrequest (RPC get_user_emails); el envío va en lote a
+// Resend (⌈N/100⌉ requests, no N); y la cohorte se drena por ticks con sent-log
+// (digest_type='monthly', run_key='YYYY-MM').
 async function runMonthly(env: Env, audience: Audience = 'all') {
+  const sb  = new Sb(env)
   const log: string[] = []
 
   // Mes en curso (el cron corre el día 1: reporta el mes que empieza).
   const hoy = new Date()
   const mesParam = `${hoy.getUTCFullYear()}-${String(hoy.getUTCMonth() + 1).padStart(2, '0')}`
+  const runKey = mesParam
 
   // El contenido es igual para todos: una sola llamada al endpoint público
   // (cacheado 6h en edge) en vez de repetir las consultas acá.
-  const res = await fetch(`${env.APP_URL}/api/public/panorama/${mesParam}`, {
+  const res = await sb.fetch(`${env.APP_URL}/api/public/panorama/${mesParam}`, {
     headers: { Accept: 'application/json' },
   })
   if (!res.ok) {
-    log.push(`Panorama HTTP ${res.status} — abortando`)
-    return { ok: false, error: 'panorama_fetch_failed', log }
+    log.push(`Panorama ${mesParam} respondió HTTP ${res.status} — abortando sin enviar`)
+    return { ok: false, error: 'panorama_fetch_failed', status: res.status, log }
   }
   const panorama = await res.json<Panorama>()
   if (!panorama.ok || panorama.total === 0) {
-    log.push(`Panorama sin datos para ${mesParam} (total=${panorama.total ?? '?'}) — no se envía`)
+    log.push(`Panorama sin datos para ${mesParam} (ok=${panorama.ok} · total=${panorama.total ?? '?'}) — no se envía`)
     return { ok: true, message: 'no_data', log }
   }
   log.push(`Panorama ${panorama.mes_label}: ${panorama.fondos.total} fondos / ${panorama.licitaciones.total} licitaciones`)
@@ -114,63 +130,75 @@ async function runMonthly(env: Env, audience: Audience = 'all') {
   //   · 'all'    (real): todos los planes, no archivados, no internos.
   //   · 'admins' (prueba): solo rol admin — para previsualizar.
   const query = audience === 'admins'
-    ? '/rest/v1/profiles?role=eq.admin&archived_at=is.null&select=id,plan,is_internal'
-    : '/rest/v1/profiles?archived_at=is.null&select=id,plan,is_internal'
-  const profiles = await sbGet<{ id: string; plan: string | null; is_internal: boolean | null }[]>(env, query)
-  if (!profiles?.length) return { ok: true, message: `No users for audience=${audience}`, log }
+    ? '/rest/v1/profiles?role=eq.admin&archived_at=is.null&select=id,plan,is_internal&order=id'
+    : '/rest/v1/profiles?archived_at=is.null&select=id,plan,is_internal&order=id'
+  // Paginado: PostgREST corta en 1000 filas; sin esto se perderían usuarios.
+  const profiles = await sb.getAll<{ id: string; plan: string | null; is_internal: boolean | null }>(query)
+  if (!profiles.length) {
+    log.push(`Sin perfiles para audience=${audience} — ¿falló la query de profiles?`)
+    return { ok: true, message: `No users for audience=${audience}`, log }
+  }
 
-  const destinatarios = audience === 'admins' ? profiles : profiles.filter(p => !p.is_internal)
-  log.push(`Audiencia: ${audience} · destinatarios: ${destinatarios.length}`)
+  const cohorte = audience === 'admins' ? profiles : profiles.filter(p => !p.is_internal)
+  log.push(`Audiencia: ${audience} · cohorte: ${cohorte.length}`)
+
+  // Troceo + sent-log (solo audiencia real). Cada tick de la ventana procesa el
+  // siguiente lote de NO-enviados del mes; cuando se vacía, es no-op.
+  let pendientes = cohorte
+  if (audience === 'all') {
+    const enviadosLog = await sb.getAll<{ user_id: string }>(
+      `/rest/v1/digest_sent_log?digest_type=eq.monthly&run_key=eq.${runKey}&select=user_id&order=id`
+    )
+    const yaEnviados = new Set(enviadosLog.map(r => r.user_id))
+    pendientes = cohorte.filter(p => !yaEnviados.has(p.id))
+    log.push(`Run ${runKey}: ya enviados ${yaEnviados.size} · pendientes ${pendientes.length}`)
+  }
+  if (!pendientes.length) return { ok: true, message: `Sin pendientes (run ${runKey})`, log }
+
+  const lote = pendientes.slice(0, BATCH_LIMIT)
+  log.push(`Lote: ${lote.length}/${pendientes.length} (BATCH_LIMIT=${BATCH_LIMIT})`)
+
+  // Emails SOLO del lote, en 1 subrequest (RPC get_user_emails).
+  const emailById = await sb.emailsFor(lote.map(p => p.id))
+  if (!emailById) {
+    log.push('RPC get_user_emails falló — abortando el tick sin registrar nada')
+    return { ok: false, error: 'emails_rpc_failed', log }
+  }
+  log.push(`Emails cargados: ${emailById.size}`)
 
   // El HTML solo varía según free/pagado: lo armamos una vez por variante.
   const htmlFree = buildEmail(env, panorama, blogUrl, false)
   const htmlPaid = buildEmail(env, panorama, blogUrl, true)
+  const subject  = `Panorama de ${panorama.mes_label}: ${panorama.fondos.total} fondos y ${panorama.licitaciones.total} licitaciones abiertas`
 
-  const subject = `Panorama de ${panorama.mes_label}: ${panorama.fondos.total} fondos y ${panorama.licitaciones.total} licitaciones abiertas`
-
-  let totalEmails  = 0
-  let totalErrores = 0
-
-  // Aislamiento por usuario: un fallo no aborta toda la corrida.
-  for (const profile of destinatarios) {
-    try {
-      const authUser = await sbAdminGet<{ email: string }>(env, `/auth/v1/admin/users/${profile.id}`)
-      if (!authUser?.email) continue
-      const esPagado = !!profile.plan && profile.plan !== 'free'
-      const ok = await sendEmail(env, authUser.email, subject, esPagado ? htmlPaid : htmlFree)
-      if (ok) totalEmails++
-      else {
-        totalErrores++
-        log.push(`  ${authUser.email} | envío Resend falló`)
-      }
-    } catch (e) {
-      totalErrores++
-      const msg = e instanceof Error ? `${e.message}\n${e.stack ?? ''}` : String(e)
-      log.push(`  ⚠️ ERROR procesando user ${profile.id}: ${msg}`)
-      console.error(`[monthly] error en user ${profile.id}:`, e)
-    }
+  const mensajes: EmailMsg[] = []
+  const sinEmail: string[] = []   // terminal: se registran igual para no reintentarlos
+  for (const p of lote) {
+    const email = emailById.get(p.id)
+    if (!email) { sinEmail.push(p.id); continue }
+    const esPagado = !!p.plan && p.plan !== 'free'
+    mensajes.push({ userId: p.id, to: email, subject, html: esPagado ? htmlPaid : htmlFree })
   }
 
-  log.push(`Emails enviados: ${totalEmails}${totalErrores ? ` · Errores: ${totalErrores}` : ''}`)
-  return { ok: true, errores: totalErrores, log }
-}
+  // Registro en sent-log (solo audiencia real), inmediatamente después de cada
+  // chunk OK de Resend: si algo lanza a mitad de camino, lo ya enviado quedó
+  // anotado y no se reenvía en el próximo tick. Insert con ignore-duplicates.
+  const registrar = audience === 'all'
+    ? (ids: string[]) => sb.insert('/rest/v1/digest_sent_log',
+        ids.map(user_id => ({ digest_type: 'monthly', run_key: runKey, user_id })))
+    : null
 
-// ── Enviar email ──────────────────────────────────────────────────
-async function sendEmail(env: Env, to: string, subject: string, html: string): Promise<boolean> {
-  const res = await fetch('https://api.resend.com/emails', {
-    method:  'POST',
-    headers: {
-      Authorization:  `Bearer ${env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from:    'Fondos y Licitaciones <hola@fondosylicitaciones.cl>',
-      to:      [to],
-      subject,
-      html,
-    }),
-  })
-  return res.ok
+  const enviadosIds = await sendResendBatch(
+    sb, env.RESEND_API_KEY, 'Fondos y Licitaciones <hola@fondosylicitaciones.cl>',
+    mensajes, log, registrar)
+
+  // Sin-email es terminal: registrar para no reintentarlos cada tick. Si el
+  // presupuesto no alcanza, quedan para el próximo tick (solo cuesta el insert).
+  if (registrar && sinEmail.length && sb.canAfford(1)) await registrar(sinEmail)
+
+  const quedan = pendientes.length - enviadosIds.length - sinEmail.length
+  log.push(`Emails enviados: ${enviadosIds.length} · subrequests ${sb.used}/${sb.cap} · quedan ${quedan} para el próximo tick`)
+  return { ok: true, enviados: enviadosIds.length, quedan, log }
 }
 
 // ── HTML del email ────────────────────────────────────────────────
@@ -355,32 +383,6 @@ function buildCard(env: Env, item: Destacado): string {
     </td></tr>
   </table>
 </td></tr>`
-}
-
-// ── Helpers Supabase REST ─────────────────────────────────────────
-function sbHeaders(env: Env) {
-  return {
-    'apikey':        env.SUPABASE_SERVICE_KEY,
-    'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-    'Content-Type':  'application/json',
-  }
-}
-
-async function sbGet<T>(env: Env, path: string): Promise<T | null> {
-  const res = await fetch(`${env.SUPABASE_URL}${path}`, { headers: sbHeaders(env) })
-  if (!res.ok) return null
-  return res.json()
-}
-
-async function sbAdminGet<T>(env: Env, path: string): Promise<T | null> {
-  const res = await fetch(`${env.SUPABASE_URL}${path}`, {
-    headers: {
-      'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      'apikey':        env.SUPABASE_SERVICE_KEY,
-    },
-  })
-  if (!res.ok) return null
-  return res.json()
 }
 
 // ── Utilidades ────────────────────────────────────────────────────
