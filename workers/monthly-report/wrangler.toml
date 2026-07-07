@@ -6,10 +6,7 @@ compatibility_date = "2024-11-01"
 # cada 5 min. Cada tick procesa el siguiente lote de no-enviados del mes
 # (sent-log) y para cuando la cohorte se vació; los ticks sobrantes son no-ops.
 [triggers]
-# TEMPORAL: el envío de julio 2026 nunca salió (el worker viejo abortaba); este
-# segundo cron lo despacha hoy 7-jul en la misma ventana. Quitar tras el envío
-# (si se olvida es inofensivo: cada 7-jul futuro el sent-log lo vuelve no-op).
-crons = ["*/5 13-14 1 * *", "*/5 13-14 7 7 *"]
+crons = ["*/5 13-14 1 * *"]
 
 # Variables no sensibles
 [vars]
