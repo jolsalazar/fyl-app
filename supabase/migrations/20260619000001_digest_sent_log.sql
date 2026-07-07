@@ -4,8 +4,10 @@
 -- registrar el mismo usuario dos veces es un no-op (insert con ignore-duplicates).
 --
 --   · digest_type: 'weekly' (resumen semanal free) | 'daily' (alert-digest diario)
---   · run_key:     fecha de la corrida en formato YYYY-MM-DD (UTC = fecha Chile
---                  dentro de la ventana 13:00–14:55 UTC en que corren los crons)
+--                  | 'monthly' (panorama mensual)
+--   · run_key:     fecha de la corrida: YYYY-MM-DD (daily/weekly, UTC = fecha
+--                  Chile dentro de la ventana 13:00–14:55 UTC de los crons) o
+--                  YYYY-MM (monthly)
 --
 -- Los workers usan el service role (RLS no aplica); no se exponen políticas.
 
