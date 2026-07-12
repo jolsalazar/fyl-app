@@ -60,8 +60,6 @@
             <tr>
               <th>Email</th>
               <th>Plan</th>
-              <th>Estado</th>
-              <th>Rol</th>
               <th>Registro</th>
               <th>Último ingreso</th>
               <th>Ingresos (30d / total)</th>
@@ -72,15 +70,15 @@
             <tr v-for="u in usuariosFiltrados" :key="u.id" :class="{ 'row-archived': u.archived_at }">
               <td class="email-cell">
                 <NuxtLink :to="`/dashboard/admin/usuarios/${u.id}`" class="email-link">{{ u.email }}</NuxtLink>
+                <span v-if="u.role === 'admin'" class="tag-admin">admin</span>
                 <span v-if="u.archived_at" class="tag-archived">archivada</span>
                 <span v-else-if="u.is_internal" class="tag-internal">interna</span>
+                <span v-if="u.plan_status === 'inactive'" class="tag-inactive">desactivada</span>
               </td>
               <td>
                 <span v-if="u.role === 'admin'" class="plan-na">—</span>
                 <span v-else :class="['badge', `badge-${u.plan}`]">{{ u.plan }}</span>
               </td>
-              <td><span :class="['badge', u.plan_status === 'active' ? 'badge-active' : 'badge-inactive']">{{ u.plan_status }}</span></td>
-              <td><span :class="['badge', u.role === 'admin' ? 'badge-admin' : 'badge-user']">{{ u.role }}</span></td>
               <td class="date-cell">{{ formatDate(u.created_at) }}</td>
               <td class="date-cell">{{ u.last_sign_in_at ? formatDate(u.last_sign_in_at) : '—' }}</td>
               <td>
@@ -114,6 +112,13 @@
                         <div v-if="u.id !== currentUserId" class="menu-divider"></div>
                       </template>
                       <button
+                        v-if="puedeDesactivar(u)"
+                        :class="['menu-item', u.plan_status === 'inactive' ? 'menu-restore' : 'menu-deactivate']"
+                        @click="pickActive(u)"
+                      >
+                        {{ u.plan_status === 'inactive' ? 'Reactivar' : 'Desactivar' }}
+                      </button>
+                      <button
                         v-if="u.id !== currentUserId"
                         :class="['menu-item', u.archived_at ? 'menu-restore' : 'menu-archive']"
                         @click="pickArchive(u)"
@@ -140,6 +145,22 @@
       :busy="!!changingPlan"
       @confirm="confirmChangePlan"
       @cancel="cancelChangePlan"
+    />
+
+    <!-- Confirmación desactivar / reactivar -->
+    <ConfirmDialog
+      :open="!!pendingActive"
+      :tone="pendingActive?.plan_status === 'inactive' ? 'primary' : 'warning'"
+      :title="pendingActive?.plan_status === 'inactive' ? 'Reactivar cuenta' : 'Desactivar cuenta'"
+      :message="pendingActive
+        ? (pendingActive.plan_status === 'inactive'
+            ? `${pendingActive.email} podrá volver a iniciar sesión normalmente.`
+            : `${pendingActive.email} no podrá iniciar sesión hasta que la reactives (su sesión actual expira en máximo una hora). No se elimina nada.`)
+        : ''"
+      :confirm-text="pendingActive?.plan_status === 'inactive' ? 'Reactivar' : 'Desactivar'"
+      :busy="!!togglingActiveId"
+      @confirm="confirmActive"
+      @cancel="pendingActive = null"
     />
 
     <!-- Confirmación archivar / restaurar -->
@@ -196,6 +217,8 @@ const soloLeads = ref(false)
 
 const pendingPlan = ref<{ user: UserRow; email: string; oldPlan: string; newPlan: string } | null>(null)
 const pendingArchive = ref<UserRow | null>(null)
+const pendingActive = ref<UserRow | null>(null)
+const togglingActiveId = ref('')
 
 const visibles = computed(() =>
   showArchived.value ? users.value : users.value.filter(u => !u.archived_at)
@@ -253,8 +276,12 @@ function puedeCambiarPlan(u: UserRow) {
 function otrosPlanes(u: UserRow) {
   return PLANES.filter(p => p !== u.plan)
 }
+// Desactivar bloquea el login de verdad: solo cuentas no-admin y nunca la propia.
+function puedeDesactivar(u: UserRow) {
+  return u.role !== 'admin' && u.id !== currentUserId.value
+}
 function tieneAcciones(u: UserRow) {
-  return puedeCambiarPlan(u) || u.id !== currentUserId.value
+  return puedeCambiarPlan(u) || puedeDesactivar(u) || u.id !== currentUserId.value
 }
 function pickPlan(u: UserRow, newPlan: string) {
   openMenuId.value = ''
@@ -263,6 +290,10 @@ function pickPlan(u: UserRow, newPlan: string) {
 function pickArchive(u: UserRow) {
   openMenuId.value = ''
   askArchive(u)
+}
+function pickActive(u: UserRow) {
+  openMenuId.value = ''
+  pendingActive.value = u
 }
 
 // Directive para cerrar el menú al clickear afuera (mismo patrón del layout).
@@ -301,6 +332,23 @@ async function confirmChangePlan() {
   }
   changingPlan.value = ''
   pendingPlan.value = null
+}
+
+// ── Desactivar / reactivar con confirmación ──────────────────────────────────
+async function confirmActive() {
+  if (!pendingActive.value) return
+  const u = pendingActive.value
+  const activar = u.plan_status === 'inactive'
+  togglingActiveId.value = u.id
+  const { error: err } = await supabase.rpc('admin_set_user_active', { target_id: u.id, active: activar })
+  if (err) {
+    show('No se pudo actualizar la cuenta', 'error')
+  } else {
+    u.plan_status = activar ? 'active' : 'inactive'
+    show(activar ? 'Cuenta reactivada' : 'Cuenta desactivada', 'ok')
+  }
+  togglingActiveId.value = ''
+  pendingActive.value = null
 }
 
 // ── Archivar / restaurar con confirmación ────────────────────────────────────
@@ -455,13 +503,15 @@ td {
 .email-cell { color: #0f172a; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; }
 .email-link { color: #2563eb; text-decoration: none; }
 .email-link:hover { text-decoration: underline; }
-.tag-archived, .tag-internal {
+.tag-archived, .tag-internal, .tag-admin, .tag-inactive {
   font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.03em; padding: 0.1rem 0.4rem; border-radius: 5px;
   white-space: nowrap;
 }
 .tag-archived { background: #f1f5f9; color: #94a3b8; }
 .tag-internal { background: #f0fdf4; color: #15803d; }
+.tag-admin    { background: #fef3c7; color: #b45309; }
+.tag-inactive { background: #fef2f2; color: #b91c1c; }
 
 .date-cell { color: #64748b; font-size: 0.8125rem; white-space: nowrap; }
 .plan-na { color: #cbd5e1; font-weight: 600; }
@@ -487,10 +537,6 @@ td {
 .badge-starter  { background: #eff6ff; color: #2563eb; }
 .badge-advanced { background: #ede9fe; color: #6d28d9; }
 .badge-agency   { background: #e0f2fe; color: #0369a1; }
-.badge-active  { background: #dcfce7; color: #15803d; }
-.badge-inactive{ background: #fef2f2; color: #b91c1c; }
-.badge-admin   { background: #fef3c7; color: #b45309; }
-.badge-user    { background: #f1f5f9; color: #475569; }
 
 .action-cell { text-align: right; }
 
@@ -530,6 +576,8 @@ td {
 .menu-item:hover { background: #f8fafc; color: #0f172a; }
 .menu-archive { color: #c2410c; }
 .menu-archive:hover { background: #fff7ed; color: #9a3412; }
+.menu-deactivate { color: #b91c1c; }
+.menu-deactivate:hover { background: #fef2f2; color: #991b1b; }
 .menu-restore { color: #1d4ed8; }
 .menu-restore:hover { background: #eff6ff; color: #1e40af; }
 .menu-divider { height: 1px; background: #f1f5f9; margin: 0.25rem 0; }
