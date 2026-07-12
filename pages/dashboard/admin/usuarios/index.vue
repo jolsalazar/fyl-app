@@ -64,7 +64,7 @@
               <th>Rol</th>
               <th>Registro</th>
               <th>Último ingreso</th>
-              <th>Ingresos (30d)</th>
+              <th>Ingresos (30d / total)</th>
               <th></th>
             </tr>
           </thead>
@@ -74,40 +74,55 @@
                 <NuxtLink :to="`/dashboard/admin/usuarios/${u.id}`" class="email-link">{{ u.email }}</NuxtLink>
                 <span v-if="u.archived_at" class="tag-archived">archivada</span>
                 <span v-else-if="u.is_internal" class="tag-internal">interna</span>
-                <span v-if="esLead(u)" class="tag-lead">quiso {{ nombrePlanIntencion(u) }}</span>
               </td>
               <td>
                 <span v-if="u.role === 'admin'" class="plan-na">—</span>
-                <select
-                  v-else
-                  v-model="u.plan"
-                  :disabled="changingPlan === u.id || !!u.archived_at"
-                  class="plan-select"
-                  :class="u.plan"
-                  @change="askChangePlan(u, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="free">Free</option>
-                  <option value="starter">Starter</option>
-                  <option value="advanced">Advanced</option>
-                  <option value="agency">Agency</option>
-                </select>
+                <span v-else :class="['badge', `badge-${u.plan}`]">{{ u.plan }}</span>
               </td>
               <td><span :class="['badge', u.plan_status === 'active' ? 'badge-active' : 'badge-inactive']">{{ u.plan_status }}</span></td>
               <td><span :class="['badge', u.role === 'admin' ? 'badge-admin' : 'badge-user']">{{ u.role }}</span></td>
               <td class="date-cell">{{ formatDate(u.created_at) }}</td>
               <td class="date-cell">{{ u.last_sign_in_at ? formatDate(u.last_sign_in_at) : '—' }}</td>
               <td>
-                <span :class="['logins-pill', u.logins_30d > 0 ? 'logins-on' : 'logins-off']">{{ u.logins_30d }}</span>
+                <span :class="['logins-pill', u.logins_30d > 0 ? 'logins-on' : 'logins-off']">{{ u.logins_30d }} / {{ u.logins_total }}</span>
               </td>
               <td class="action-cell">
-                <button
-                  v-if="u.id !== currentUserId"
-                  :class="['arch-btn', u.archived_at ? 'arch-btn-restore' : 'arch-btn-archive']"
-                  :disabled="archivingId === u.id"
-                  @click="askArchive(u)"
+                <div
+                  v-if="tieneAcciones(u)"
+                  class="kebab-wrap"
+                  v-click-outside="() => { if (openMenuId === u.id) openMenuId = '' }"
                 >
-                  {{ archivingId === u.id ? '…' : u.archived_at ? 'Restaurar' : 'Archivar' }}
-                </button>
+                  <button
+                    class="kebab-btn"
+                    :class="{ active: openMenuId === u.id }"
+                    aria-label="Acciones"
+                    @click="toggleMenu(u.id)"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                  </button>
+                  <Transition name="dropdown">
+                    <div v-if="openMenuId === u.id" class="row-menu">
+                      <template v-if="puedeCambiarPlan(u)">
+                        <button
+                          v-for="p in otrosPlanes(u)"
+                          :key="p"
+                          class="menu-item"
+                          @click="pickPlan(u, p)"
+                        >
+                          Cambiar a {{ getNombrePlan(p) }}
+                        </button>
+                        <div v-if="u.id !== currentUserId" class="menu-divider"></div>
+                      </template>
+                      <button
+                        v-if="u.id !== currentUserId"
+                        :class="['menu-item', u.archived_at ? 'menu-restore' : 'menu-archive']"
+                        @click="pickArchive(u)"
+                      >
+                        {{ u.archived_at ? 'Restaurar' : 'Archivar' }}
+                      </button>
+                    </div>
+                  </Transition>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -146,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { getNombrePlan, esPlanValido } from '~~/utils/planes'
+import { getNombrePlan } from '~~/utils/planes'
 
 definePageMeta({ middleware: ['auth', 'admin'], layout: false })
 
@@ -163,6 +178,7 @@ interface UserRow {
   archived_at: string | null
   is_internal: boolean
   logins_30d: number
+  logins_total: number
   intended_plan: string | null
 }
 
@@ -177,9 +193,6 @@ const currentUserId = ref('')
 const busqueda = ref('')
 const showArchived = ref(false)
 const soloLeads = ref(false)
-
-// Plan original por id, para revertir el select si se cancela la confirmación.
-const originalPlans = new Map<string, string>()
 
 const pendingPlan = ref<{ user: UserRow; email: string; oldPlan: string; newPlan: string } | null>(null)
 const pendingArchive = ref<UserRow | null>(null)
@@ -205,9 +218,6 @@ const archivadasCount = computed(() => users.value.filter(u => u.archived_at).le
 function esLead(u: UserRow) {
   return !!u.intended_plan && u.intended_plan !== u.plan && u.role !== 'admin'
 }
-function nombrePlanIntencion(u: UserRow) {
-  return esPlanValido(u.intended_plan) ? getNombrePlan(u.intended_plan) : u.intended_plan ?? ''
-}
 const leadsCount = computed(() => visibles.value.filter(esLead).length)
 
 // Contadores: excluyen admins y archivadas (no son clientes contabilizables).
@@ -229,32 +239,64 @@ function formatDate(iso: string) {
   })
 }
 
+// ── Menú de acciones por fila (kebab) ─────────────────────────────────────────
+const PLANES = ['free', 'starter', 'advanced', 'agency']
+
+const openMenuId = ref('')
+function toggleMenu(id: string) {
+  openMenuId.value = openMenuId.value === id ? '' : id
+}
+// Misma regla que tenía el select: sin cambio de plan para admins ni archivadas.
+function puedeCambiarPlan(u: UserRow) {
+  return u.role !== 'admin' && !u.archived_at
+}
+function otrosPlanes(u: UserRow) {
+  return PLANES.filter(p => p !== u.plan)
+}
+function tieneAcciones(u: UserRow) {
+  return puedeCambiarPlan(u) || u.id !== currentUserId.value
+}
+function pickPlan(u: UserRow, newPlan: string) {
+  openMenuId.value = ''
+  askChangePlan(u, newPlan)
+}
+function pickArchive(u: UserRow) {
+  openMenuId.value = ''
+  askArchive(u)
+}
+
+// Directive para cerrar el menú al clickear afuera (mismo patrón del layout).
+const vClickOutside = {
+  mounted(el: any, binding: any) {
+    el._clickOutside = (e: MouseEvent) => {
+      if (!el.contains(e.target as Node)) binding.value(e)
+    }
+    document.addEventListener('click', el._clickOutside)
+  },
+  unmounted(el: any) {
+    document.removeEventListener('click', el._clickOutside)
+  },
+}
+
 // ── Cambio de plan con confirmación ──────────────────────────────────────────
 function askChangePlan(u: UserRow, newPlan: string) {
-  const oldPlan = originalPlans.get(u.id) ?? u.plan
-  if (oldPlan === newPlan) return
-  pendingPlan.value = { user: u, email: u.email, oldPlan, newPlan }
+  if (u.plan === newPlan) return
+  pendingPlan.value = { user: u, email: u.email, oldPlan: u.plan, newPlan }
 }
 
 function cancelChangePlan() {
-  if (pendingPlan.value) {
-    // revertir el select al valor original
-    pendingPlan.value.user.plan = pendingPlan.value.oldPlan
-  }
   pendingPlan.value = null
 }
 
 async function confirmChangePlan() {
   if (!pendingPlan.value) return
-  const { user: u, newPlan, oldPlan } = pendingPlan.value
+  const { user: u, newPlan } = pendingPlan.value
   changingPlan.value = u.id
   const { error: err } = await supabase.rpc('admin_set_user_plan', { target_id: u.id, new_plan: newPlan })
   if (err) {
-    u.plan = oldPlan
     show('No se pudo cambiar el plan', 'error')
   } else {
     u.plan = newPlan
-    originalPlans.set(u.id, newPlan)
     show('Plan actualizado', 'ok')
   }
   changingPlan.value = ''
@@ -291,7 +333,6 @@ onMounted(async () => {
     loadError.value = true
   } else {
     users.value = (data ?? []) as UserRow[]
-    for (const u of users.value) originalPlans.set(u.id, u.plan)
   }
   loading.value = false
 })
@@ -374,16 +415,18 @@ h1 { font-size: 1.625rem; font-weight: 700; color: #0f172a; letter-spacing: -0.0
   padding: 0.05rem 0.5rem; font-size: 0.72rem; font-weight: 600;
 }
 
+/* overflow visible para que el menú kebab no quede recortado; el redondeo
+   de esquinas se hace en las celdas (border-collapse: separate). */
 .table-wrap {
   background: white;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
 }
 
-table { width: 100%; border-collapse: collapse; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; }
 
-thead tr { background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+thead tr { background: #f8fafc; }
 th {
   text-align: left;
   padding: 0.75rem 1rem;
@@ -391,10 +434,15 @@ th {
   font-weight: 600;
   color: #475569;
   white-space: nowrap;
+  border-bottom: 1px solid #e2e8f0;
 }
+thead th:first-child { border-top-left-radius: 12px; }
+thead th:last-child  { border-top-right-radius: 12px; }
 
-tbody tr { border-bottom: 1px solid #f1f5f9; }
-tbody tr:last-child { border-bottom: none; }
+tbody td { border-bottom: 1px solid #f1f5f9; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:last-child td:first-child { border-bottom-left-radius: 12px; }
+tbody tr:last-child td:last-child  { border-bottom-right-radius: 12px; }
 tbody tr:hover { background: #f8fafc; }
 tbody tr.row-archived { opacity: 0.6; background: #fafafa; }
 
@@ -407,14 +455,13 @@ td {
 .email-cell { color: #0f172a; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; }
 .email-link { color: #2563eb; text-decoration: none; }
 .email-link:hover { text-decoration: underline; }
-.tag-archived, .tag-internal, .tag-lead {
+.tag-archived, .tag-internal {
   font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.03em; padding: 0.1rem 0.4rem; border-radius: 5px;
   white-space: nowrap;
 }
 .tag-archived { background: #f1f5f9; color: #94a3b8; }
 .tag-internal { background: #f0fdf4; color: #15803d; }
-.tag-lead { background: #fef3c7; color: #b45309; }
 
 .date-cell { color: #64748b; font-size: 0.8125rem; white-space: nowrap; }
 .plan-na { color: #cbd5e1; font-weight: 600; }
@@ -445,44 +492,51 @@ td {
 .badge-admin   { background: #fef3c7; color: #b45309; }
 .badge-user    { background: #f1f5f9; color: #475569; }
 
-.plan-select {
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: 1.5px solid #e2e8f0;
-  cursor: pointer;
-  font-family: 'Inter', sans-serif;
-  outline: none;
-  transition: border-color 0.15s;
-}
-.plan-select:disabled { opacity: 0.5; cursor: not-allowed; }
-.plan-select.free     { background: #f1f5f9; color: #475569; }
-.plan-select.starter  { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
-.plan-select.advanced { background: #ede9fe; color: #6d28d9; border-color: #c4b5fd; }
-.plan-select.agency   { background: #e0f2fe; color: #0369a1; border-color: #7dd3fc; }
-
 .action-cell { text-align: right; }
 
-.arch-btn {
-  padding: 0.3rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1.5px solid;
-  transition: all 0.15s;
-  font-family: 'Inter', sans-serif;
+/* Menú kebab por fila */
+.kebab-wrap { position: relative; display: inline-block; }
+.kebab-btn {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 6px;
+  color: #64748b; cursor: pointer;
+  transition: background 0.1s, color 0.1s;
 }
-.arch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.arch-btn-archive {
-  background: #fff7ed; border-color: #fdba74; color: #c2410c;
+.kebab-btn:hover, .kebab-btn.active { background: #e2e8f0; color: #0f172a; }
+
+.row-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 190px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+  z-index: 50;
+  overflow: hidden;
+  padding: 0.25rem 0;
+  text-align: left;
 }
-.arch-btn-archive:hover:not(:disabled) { background: #ffedd5; }
-.arch-btn-restore {
-  background: #eff6ff; border-color: #93c5fd; color: #1d4ed8;
+.menu-item {
+  display: block; width: 100%;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8125rem; font-weight: 500; color: #475569;
+  background: none; border: none; cursor: pointer;
+  font-family: 'Inter', sans-serif; text-align: left;
+  transition: background 0.1s;
 }
-.arch-btn-restore:hover:not(:disabled) { background: #dbeafe; }
+.menu-item:hover { background: #f8fafc; color: #0f172a; }
+.menu-archive { color: #c2410c; }
+.menu-archive:hover { background: #fff7ed; color: #9a3412; }
+.menu-restore { color: #1d4ed8; }
+.menu-restore:hover { background: #eff6ff; color: #1e40af; }
+.menu-divider { height: 1px; background: #f1f5f9; margin: 0.25rem 0; }
+
+.dropdown-enter-active { animation: drop-in 0.15s ease; }
+.dropdown-leave-active { animation: drop-in 0.1s ease reverse; }
+@keyframes drop-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 
 .loading, .error {
   padding: 3rem;

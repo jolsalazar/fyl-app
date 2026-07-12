@@ -36,7 +36,6 @@
               <span class="fact-k">Lead</span>
               <span class="fact-v">
                 <span class="badge badge-warn">Interesado sin pagar</span>
-                <span :class="['badge', `badge-${detail.intended_plan}`]" style="margin-left:6px">quiso {{ nombrePlanIntencion }}</span>
               </span>
             </div>
             <div v-if="detail.plan_expires_at" class="fact">
@@ -243,7 +242,6 @@
 </template>
 
 <script setup lang="ts">
-import { getNombrePlan, esPlanValido } from '~~/utils/planes'
 
 definePageMeta({ middleware: ['auth', 'admin'], layout: false })
 
@@ -327,10 +325,6 @@ const emailCorregidoValido = computed(() => {
 const esLead = computed(() =>
   !!detail.value?.intended_plan && detail.value.intended_plan !== detail.value.plan,
 )
-const nombrePlanIntencion = computed(() => {
-  const ip = detail.value?.intended_plan
-  return esPlanValido(ip) ? getNombrePlan(ip) : ip ?? ''
-})
 
 const templates = computed(() => {
   const base = [
