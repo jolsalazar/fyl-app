@@ -214,7 +214,7 @@ function buildQuery() {
   if (orden.value === 'cierre') {
     q = q.order('fecha_cierre_postulacion', { ascending: true, nullsFirst: false })
   } else {
-    q = q.order('fecha_scrapeado', { ascending: false })
+    q = q.order('created_at', { ascending: false })
   }
   return q
 }
@@ -340,7 +340,7 @@ onMounted(async () => {
     supabase.from('convocatorias')
       .select('id', { count: 'exact', head: true })
       .eq('fuente', FUENTE)
-      .gte('fecha_scrapeado', semanaAtras),
+      .gte('created_at', semanaAtras),
   ])
   guardadosSet.value = new Set((guardados ?? []).map((g: any) => g.convocatoria_id))
   nuevosEstaSemana.value = cNuevos ?? 0
