@@ -15,8 +15,8 @@
         <div class="upgrade-wrap">
           <div class="upgrade-card">
             <span class="upgrade-plan-actual">Estás en el Plan Free</span>
-            <h2 class="upgrade-title">Hacé seguimiento de tu progreso</h2>
-            <p class="upgrade-desc">Mirá cuántos fondos guardás, cuántos postulás, y tu tasa real de aprobación — todo en un dashboard personal.</p>
+            <h2 class="upgrade-title">Haz seguimiento de tu progreso</h2>
+            <p class="upgrade-desc">Mira cuántos fondos guardas, cuántos postulas, y tu tasa real de aprobación — todo en un dashboard personal.</p>
             <NuxtLink to="/planes" class="btn-upgrade">Mejorar a Plan Starter →</NuxtLink>
           </div>
         </div>
@@ -43,7 +43,7 @@
         <div class="empty">
           <div class="empty-icon">📊</div>
           <p class="empty-title">Aún no hay datos para mostrar</p>
-          <p class="empty-desc">Cuando empieces a guardar fondos y a marcarlos como postulados, vas a ver tu progreso acá.</p>
+          <p class="empty-desc">Cuando empieces a guardar fondos y a marcarlos como postulados, vas a ver tu progreso aquí.</p>
           <NuxtLink to="/dashboard" class="btn-primary">Ver oportunidades</NuxtLink>
         </div>
       </template>
@@ -78,7 +78,7 @@
           <div class="section">
             <h2>Estado de tu pipeline</h2>
             <div v-if="totalPostulaciones === 0" class="section-empty">
-              <p>Nada en tu pipeline todavía. Marcá un fondo como postulado para empezar.</p>
+              <p>Nada en tu pipeline todavía. Marca un fondo como postulado para empezar.</p>
             </div>
             <div v-else class="funnel">
               <div v-for="e in ESTADOS_FUNNEL" :key="e.value" class="funnel-row">
@@ -134,7 +134,7 @@
         <!-- Match promedio de mis postulaciones -->
         <div class="section full" v-if="conMatch.total > 0">
           <h2>Compatibilidad de tus postulaciones</h2>
-          <p class="section-hint">De los fondos que tenés en pipeline, este es su nivel de match con tu proyecto</p>
+          <p class="section-hint">De los fondos que tienes en pipeline, este es su nivel de match con tu proyecto</p>
           <div class="match-bars">
             <div class="match-row">
               <span class="match-label match-alto">Alto match (≥70%)</span>
@@ -153,7 +153,7 @@
             </div>
           </div>
           <p class="section-tip" v-if="conMatch.bajo / conMatch.total > 0.4">
-            💡 Más del 40% de tu pipeline tiene bajo match. Revisá los criterios de tu proyecto en
+            💡 Más del 40% de tu pipeline tiene bajo match. Revisa los criterios de tu proyecto en
             <NuxtLink to="/dashboard/mi-perfil">Mi Perfil</NuxtLink> para mejorar el filtro.
           </p>
         </div>

@@ -21,7 +21,7 @@
       <div v-if="!loading && !canUseKanban" class="upgrade-bar">
         <div class="upgrade-bar-text">
           <strong>El tablero kanban está en Advanced</strong>
-          <span>Mover tarjetas entre etapas y vista en columnas. Mientras tanto, podés ver y administrar tus postulaciones acá abajo.</span>
+          <span>Mover tarjetas entre etapas y vista en columnas. Mientras tanto, puedes ver y administrar tus postulaciones aquí abajo.</span>
         </div>
         <NuxtLink to="/planes" class="btn-upgrade">Mejorar a Advanced →</NuxtLink>
       </div>
@@ -40,7 +40,7 @@
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
         </div>
         <p class="empty-title">Sin postulaciones registradas</p>
-        <p class="empty-desc">Cuando marques un fondo como postulado, va a aparecer acá. Después podés moverlo entre estados según avance.</p>
+        <p class="empty-desc">Cuando marques un fondo como postulado, va a aparecer aquí. Después puedes moverlo entre estados según avance.</p>
         <NuxtLink to="/dashboard" class="btn-primary">Ver oportunidades</NuxtLink>
       </div>
 
@@ -114,7 +114,7 @@
           </div>
 
           <div class="col-cards">
-            <div v-if="!itemsPorEstado[col.value]?.length" class="col-empty">Arrastrá aquí</div>
+            <div v-if="!itemsPorEstado[col.value]?.length" class="col-empty">Arrastra aquí</div>
 
             <div
               v-for="item in itemsPorEstado[col.value] ?? []"

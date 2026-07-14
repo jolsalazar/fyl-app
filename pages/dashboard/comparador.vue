@@ -15,8 +15,8 @@
           <div class="upgrade-card">
             <div class="upgrade-top">
               <span class="upgrade-plan-actual">Estás en el Plan Free</span>
-              <h2 class="upgrade-title">Compará fondos antes de elegir</h2>
-              <p class="upgrade-desc">Seleccionás 2 o 3 oportunidades y las ves lado a lado: requisitos, monto, foco, cierre. Ideal para priorizar tu tiempo.</p>
+              <h2 class="upgrade-title">Compara fondos antes de elegir</h2>
+              <p class="upgrade-desc">Seleccionas 2 o 3 oportunidades y las ves lado a lado: requisitos, monto, foco, cierre. Ideal para priorizar tu tiempo.</p>
             </div>
             <div class="upgrade-actions">
               <NuxtLink to="/planes" class="btn-upgrade">Mejorar a Plan Starter →</NuxtLink>
@@ -57,7 +57,7 @@
             <span class="result-fuente">{{ fuenteLabel(r.fuente) }}</span>
             <span class="result-titulo">{{ r.titulo }}</span>
             <span v-if="isSelected(r.id)" class="result-check">✓</span>
-            <span v-else-if="selected.length >= MAX" class="result-disabled-text">Quitá uno para agregar</span>
+            <span v-else-if="selected.length >= MAX" class="result-disabled-text">Quita uno para agregar</span>
           </div>
         </div>
         <div v-else-if="search.trim().length >= 2 && !searching && !results.length" class="results-empty">
@@ -67,8 +67,8 @@
         <!-- Empty state -->
         <div v-if="!selected.length" class="empty">
           <div class="empty-icon">⚖️</div>
-          <p class="empty-title">Buscá hasta 3 fondos para compararlos</p>
-          <p class="empty-desc">Usá el buscador de arriba. Después los vas a ver lado a lado con todos sus datos relevantes.</p>
+          <p class="empty-title">Busca hasta 3 fondos para compararlos</p>
+          <p class="empty-desc">Usa el buscador de arriba. Después los vas a ver lado a lado con todos sus datos relevantes.</p>
         </div>
 
         <!-- Comparación -->
