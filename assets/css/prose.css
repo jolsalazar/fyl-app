@@ -1,0 +1,22 @@
+/**
+ * Prosa de los artículos del blog.
+ *
+ * COPIA ESPEJO de .prose en ../fyl/src/styles/global.css. Existe acá para que
+ * el editor y la vista previa del admin se vean exactamente como el sitio
+ * público. Si cambias una regla, cámbiala en ambos lados.
+ *
+ * Se importa solo desde las páginas del admin del blog, no globalmente.
+ */
+.prose img         { max-width: 100%; height: auto; border-radius: var(--radius); }
+.prose h2          { font-size: 1.4rem; font-weight: 700; margin: 48px 0 16px; padding-top: 8px; border-top: 1px solid var(--border); }
+.prose h3          { font-size: 1.1rem; font-weight: 700; margin: 32px 0 12px; }
+.prose p           { font-size: 1rem; line-height: 1.8; color: #334155; margin: 0 0 20px; }
+.prose ul,
+.prose ol          { padding-left: 24px; margin: 0 0 20px; }
+.prose li          { font-size: 1rem; line-height: 1.75; color: #334155; margin-bottom: 8px; }
+.prose strong      { color: var(--text); font-weight: 600; }
+.prose hr          { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+.prose table       { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 0.9rem; }
+.prose th          { background: var(--surface); padding: 10px 14px; text-align: left; font-weight: 600; border-bottom: 2px solid var(--border); }
+.prose td          { padding: 10px 14px; border-bottom: 1px solid var(--border); color: #334155; }
+.prose blockquote  { border-left: 3px solid var(--brand); padding-left: 20px; margin: 24px 0; color: var(--muted); font-style: italic; }
